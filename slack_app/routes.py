@@ -8,7 +8,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Request, status
 
 from slack_app.config import slack_settings
-from slack_app.handlers import handle_app_mention, handle_message_event
+from slack_app.handlers import handle_message_event
 
 router = APIRouter()
 
@@ -84,9 +84,6 @@ async def slack_events(request: Request) -> dict[str, Any]:
         # Handle different event types
         if event_type == "message":
             await handle_message_event(event)
-            return {"status": "ok"}
-        elif event_type == "app_mention":
-            await handle_app_mention(event)
             return {"status": "ok"}
 
     return {"status": "ok"}

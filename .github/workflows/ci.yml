@@ -50,7 +50,7 @@ jobs:
         run: uv sync --all-packages
 
       - name: Type check with ty
-        run: uv run ty check libs/aegra-api/src/ libs/aegra-cli/src/
+        run: uv run ty check libs/aegra-api/src/
         continue-on-error: true
 
       - name: Security check with bandit
@@ -74,39 +74,4 @@ jobs:
           files: coverage.xml
           flags: aegra-api
           name: aegra-api
-          fail_ci_if_error: false
-
-  test-cli:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      contents: read
-      pull-requests: write
-
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v4
-        with:
-          enable-cache: true
-
-      - name: Set up Python
-        run: uv python install 3.12
-
-      - name: Install workspace dependencies
-        run: uv sync --all-packages
-
-      - name: Run tests with pytest
-        run: uv run --package aegra-cli pytest libs/aegra-cli/tests/ --cov=libs/aegra-cli/src --cov-report=xml --cov-report=term
-
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v5
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          files: coverage.xml
-          flags: aegra-cli
-          name: aegra-cli
           fail_ci_if_error: false

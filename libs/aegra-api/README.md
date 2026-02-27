@@ -21,44 +21,28 @@ pip install aegra-api
 
 ## Quick Start
 
-The easiest way to get started is with the [aegra-cli](../aegra-cli/README.md):
+### Local Development Setup
 
 ```bash
-# Install the CLI
-pip install aegra-cli
-
-# Initialize a new project (interactive)
-aegra init
-cd <your-project>
+# Clone the repository
+git clone https://github.com/ibbybuilds/aegra.git
+cd aegra
 
 # Configure environment
 cp .env.example .env
 # Add your OPENAI_API_KEY to .env
 
-# Install dependencies and start developing
-uv sync
-uv run aegra dev
-```
-
-### Manual Setup
-
-If you prefer manual setup:
-
-```bash
 # Install dependencies
-pip install aegra-api
+uv sync --all-packages
 
-# Set environment variables
-export POSTGRES_USER=aegra
-export POSTGRES_PASSWORD=aegra_secret
-export POSTGRES_HOST=localhost
-export POSTGRES_DB=aegra
+# Start PostgreSQL (if not running)
+docker compose up -d
 
 # Run migrations
-alembic upgrade head
+uv run --package aegra-api alembic upgrade head
 
 # Start server
-uvicorn aegra_api.main:app --reload
+uv run --package aegra-api uvicorn aegra_api.main:app --reload
 ```
 
 ## Configuration
@@ -191,10 +175,6 @@ libs/aegra-api/
 ├── alembic/              # Database migrations
 └── pyproject.toml
 ```
-
-## Related Packages
-
-- **aegra-cli**: Command-line interface for project management
 
 ## Documentation
 

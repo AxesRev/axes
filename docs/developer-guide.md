@@ -36,28 +36,16 @@ git clone https://github.com/ibbybuilds/aegra.git
 cd aegra
 uv sync --all-packages
 
-# 2. Start the development server (starts PostgreSQL + auto-migrates + hot reload)
-uv run aegra dev
+# 2. Start PostgreSQL
+docker compose up -d
+
+# 3. Start the development server (auto-migrates + hot reload)
+uv run --package aegra-api uvicorn aegra_api.main:app --reload
 ```
 
 You're ready to develop! Visit http://localhost:8000/docs to see the API.
 
-> **Note:** `aegra dev` automatically starts PostgreSQL, applies any pending database migrations, and launches the server with hot reload. No manual migration step needed.
-
-### Using the CLI
-
-```bash
-# Install the CLI
-pip install aegra-cli  # or: uv pip install aegra-cli
-
-# Initialize a new project — prompts for location, template, and name
-aegra init
-cd <your-project>
-
-# Install dependencies and start development server
-uv sync
-uv run aegra dev
-```
+> **Note:** The server automatically applies any pending database migrations during startup. No manual migration step needed.
 
 ## Code Quality & Standards
 
@@ -151,7 +139,7 @@ Think of migrations as **version control for your database structure**. Instead 
 **As of v0.3.0, Aegra automatically applies pending migrations when the server starts.** You do not need to run migrations manually for normal development. The server runs `alembic upgrade head` during startup before initializing the database.
 
 This means:
-- `aegra dev` applies migrations automatically
+- Starting the server with `uv run --package aegra-api uvicorn aegra_api.main:app --reload` applies migrations automatically
 - Docker deployments apply migrations automatically
 - You only need manual migration commands when **creating new migrations** or **troubleshooting**
 
@@ -164,7 +152,7 @@ This means:
 
 ## Database Migration Commands
 
-Migrations run automatically on server startup (`aegra dev`, `aegra serve`, `aegra up`). You only need these commands when creating new migrations or troubleshooting.
+Migrations run automatically on server startup. You only need these commands when creating new migrations or troubleshooting.
 
 ```bash
 # Create a new migration (from repo root)
@@ -185,19 +173,21 @@ uv run --package aegra-api alembic current
 
 ## Development Workflow
 
-### Option 1: CLI Development (Recommended)
+### Option 1: Local Development (Recommended)
 
 ```bash
-# Start everything (database + auto-migrations + server with hot reload)
-aegra dev
+# 1. Start database
+docker compose up postgres -d
+
+# 2. Start development server (migrations run automatically on startup)
+uv run --package aegra-api uvicorn aegra_api.main:app --reload
 ```
 
 **Benefits:**
 
-- One command to start everything
-- Migrations run automatically on startup
-- Hot reload on code changes
-- Docker PostgreSQL managed for you
+- Full control over each component
+- Easier debugging
+- Direct access to logs
 
 ### Option 2: Docker Compose Development
 
@@ -211,25 +201,6 @@ docker compose up aegra
 - Fully containerized
 - Consistent environment
 - Production-like setup
-
-### Option 3: Manual Development
-
-```bash
-# 1. Start database
-docker compose up postgres -d
-
-# 2. Apply any new migrations (if not relying on auto-migration at startup)
-uv run --package aegra-api alembic upgrade head
-
-# 3. Start development server (migrations also run automatically on startup)
-uv run --package aegra-api uvicorn aegra_api.main:app --reload
-```
-
-**Benefits:**
-
-- Full control over each component
-- Easier debugging
-- Direct access to logs
 
 ### Making Database Changes
 
@@ -245,7 +216,7 @@ uv run --package aegra-api alembic revision --autogenerate -m "Add new feature"
 # Check: libs/aegra-api/alembic/versions/XXXX_add_new_feature.py
 
 # 4. Restart the server (migrations apply automatically on startup)
-aegra dev
+uv run --package aegra-api uvicorn aegra_api.main:app --reload
 ```
 
 ### Testing Migrations
@@ -285,12 +256,6 @@ aegra/
 │   │   ├── alembic/                  # Database migrations
 │   │   └── pyproject.toml
 │   │
-│   └── aegra-cli/                    # CLI package
-│       └── src/aegra_cli/
-│           ├── cli.py                # Main CLI entry point
-│           └── commands/             # Command implementations
-│               └── init.py           # Project initialization
-│
 ├── examples/                         # Example agents and configs
 │   ├── react_agent/                  # Basic ReAct agent
 │   ├── react_agent_hitl/             # ReAct with human-in-loop
@@ -463,7 +428,6 @@ uv run --package aegra-api alembic upgrade head
 ```bash
 # Run all tests (or use: make test)
 uv run --package aegra-api pytest libs/aegra-api/tests/
-uv run --package aegra-cli pytest libs/aegra-cli/tests/
 
 # Run specific test file
 uv run --package aegra-api pytest libs/aegra-api/tests/unit/test_api/test_assistants.py
@@ -479,7 +443,7 @@ uv run --package aegra-api pytest libs/aegra-api/tests/ --cov=libs/aegra-api/src
 uv run --package aegra-api alembic revision --autogenerate -m "Test feature"
 
 # 2. Test your application (migrations apply automatically on startup)
-aegra dev
+uv run --package aegra-api uvicorn aegra_api.main:app --reload
 
 # 3. If something breaks, rollback
 uv run --package aegra-api alembic downgrade -1
@@ -576,7 +540,7 @@ uv run --package aegra-api alembic history
 ### Common Questions
 
 **Q: Do I need to run migrations every time I start development?**
-A: No. As of v0.3.0, migrations run automatically when the server starts via `aegra dev` or Docker.
+A: No. As of v0.3.0, migrations run automatically when the server starts.
 
 **Q: What if I accidentally break the database?**
 A: Use `uv run --package aegra-api alembic downgrade base` to rollback all migrations, then restart the server to reapply (this loses all data).
@@ -617,13 +581,6 @@ uv run --package aegra-api alembic current
 ```
 
 ### Daily Development Workflow
-
-**CLI (Recommended):**
-
-```bash
-# Start everything (postgres + auto-migrations + hot reload)
-aegra dev
-```
 
 **Local Development:**
 
@@ -674,7 +631,4 @@ uv run --package aegra-api alembic upgrade head
 ```bash
 # Install all workspace dependencies
 uv sync --all-packages
-
-# Start development server
-uv run aegra dev
 ```

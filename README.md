@@ -10,7 +10,6 @@
 
 <p align="center">
   <a href="https://pypi.org/project/aegra-api/"><img src="https://img.shields.io/pypi/v/aegra-api?label=aegra-api&color=blue" alt="PyPI API"></a>
-  <a href="https://pypi.org/project/aegra-cli/"><img src="https://img.shields.io/pypi/v/aegra-cli?label=aegra-cli&color=blue" alt="PyPI CLI"></a>
   <a href="https://github.com/ibbybuilds/aegra/actions/workflows/ci.yml"><img src="https://github.com/ibbybuilds/aegra/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="https://app.codecov.io/gh/ibbybuilds/aegra"><img src="https://codecov.io/gh/ibbybuilds/aegra/graph/badge.svg" alt="Codecov"></a>
 </p>
@@ -30,26 +29,9 @@ Aegra is a drop-in replacement for LangGraph Platform. Use the same LangGraph SD
 
 ## 🚀 Quick Start
 
-### Using the CLI (Recommended)
+### From Source (Recommended)
 
-**Prerequisites:** Python 3.11+, Docker (for PostgreSQL)
-
-```bash
-pip install aegra-cli
-
-# Initialize a new project — prompts for location, template, and name
-aegra init
-
-# Follow the printed next steps:
-cd <your-project>
-cp .env.example .env     # Add your OPENAI_API_KEY to .env
-uv sync                  # Install dependencies
-uv run aegra dev         # Start PostgreSQL + dev server
-```
-
-> **Note:** Always install `aegra-cli` directly — not the `aegra` meta-package. The `aegra` package on PyPI is a convenience wrapper that does not support version pinning.
-
-### From Source
+**Prerequisites:** Python 3.12+, Docker (for PostgreSQL)
 
 ```bash
 git clone https://github.com/ibbybuilds/aegra.git
@@ -57,7 +39,11 @@ cd aegra
 cp .env.example .env
 # Add your OPENAI_API_KEY to .env
 
-docker compose up
+uv sync --all-packages
+docker compose up -d
+
+# Start the dev server
+uv run --package aegra-api uvicorn aegra_api.main:app --reload
 ```
 
 Open [http://localhost:8000/docs](http://localhost:8000/docs) to explore the API.
@@ -102,20 +88,6 @@ async for chunk in client.runs.stream(
 - **[Unified Observability](docs/observability.md)** - Fan-out tracing support via OpenTelemetry
 - **[Semantic store](docs/semantic-store.md)** - Vector embeddings with pgvector
 - **[Custom routes](docs/custom-routes.md)** - Add your own FastAPI endpoints
-
-## 🛠️ CLI Commands
-
-```bash
-aegra init              # Interactive — asks for location, template, and name
-aegra init ./my-agent   # Create at path (still prompts for template)
-
-aegra dev               # Start development server (hot reload + auto PostgreSQL)
-aegra serve             # Start production server (no reload)
-aegra up                # Build and start all Docker services
-aegra down              # Stop Docker services
-
-aegra version           # Show version info
-```
 
 ## 📚 Documentation
 

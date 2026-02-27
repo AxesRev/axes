@@ -8,6 +8,6 @@
     "salesforce_permissions": "./examples/salesforce_permissions/graph.py:graph"
   },
   "http": {
-    "app": "./examples/custom_routes_example.py:app"
+    "app": "./slack_app/app.py:app"
   }
 }

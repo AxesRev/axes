@@ -1,5 +1,5 @@
 # Root pyproject.toml - Workspace configuration + dev tools
-# The actual packages are in libs/aegra-api and libs/aegra-cli
+# The actual packages are in libs/aegra-api
 
 [project]
 name = "aegra-workspace"
@@ -47,10 +47,10 @@ ignore = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["aegra_api", "aegra_cli"]
+known-first-party = ["aegra_api"]
 
 # Note: pytest config is in each package's pyproject.toml
-# Run tests from: libs/aegra-api or libs/aegra-cli
+# Run tests from: libs/aegra-api
 
 # ty replaces mypy for type checking. It uses its own rule system rather than
 # mypy-style strictness flags. Severity and per-rule overrides go in

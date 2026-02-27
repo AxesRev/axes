@@ -3,114 +3,75 @@
 import logging
 from typing import Any
 
-from app.agents.runner import run_permission_request_graph
+from langgraph_sdk import get_client
 
 from slack_app.client import post_message
+from slack_app.config import slack_settings
 
 logger = logging.getLogger(__name__)
+
+# Map Slack user IDs to LangGraph thread IDs
+# In production, this should be stored in a database
+USER_THREADS: dict[str, str] = {}
 
 
 async def handle_message_event(event: dict[str, Any]) -> None:
     """
-    Handle incoming Slack message events.
+    Handle incoming Slack message events by invoking the Salesforce permissions agent.
 
     Args:
         event: The Slack event payload
     """
-    user = event.get("user", "Unknown user")
-    text = event.get("text", "")
-    channel = event.get("channel", "")
-    ts = event.get("ts", "")
-
-    print(f"Received message from {user} in channel {channel}: {text}")
-
-    # Check for permission request keyword
-    if "request permission" in text.lower():
-        await handle_permission_request(event)
+    user_id = event.get("user")
+    if not user_id:
         return
 
-    # Send "hello world" response back to Slack
-    await post_message(
-        channel=channel,
-        text="hello world",
-        thread_ts=ts,
-    )
-
-
-async def handle_permission_request(event: dict[str, Any]) -> None:
-    """
-    Handle permission request workflow trigger.
-
-    Triggered when user sends a message containing "request permission".
-
-    Args:
-        event: The Slack event payload
-    """
-    user_id = event.get("user", "")
-    channel = event.get("channel", "")
-    ts = event.get("ts", "")
-
-    logger.info(f"[Handler] Permission request from user {user_id} in channel {channel}")
-
-    # Send acknowledgment
-    await post_message(
-        channel=channel,
-        text="🔄 Processing your permission request...",
-        thread_ts=ts,
-    )
-
-    try:
-        # Execute permission request graph
-        final_state = await run_permission_request_graph(
-            slack_user_id=user_id,
-            slack_channel=channel,
-            slack_thread_ts=ts,
-        )
-
-        # Send completion message
-        if final_state.get("error"):
-            await post_message(
-                channel=channel,
-                text=f"❌ Error processing request: {final_state['error']}",
-                thread_ts=ts,
-            )
-        else:
-            request_id = final_state.get("request_id", "unknown")
-            permission_name = final_state.get("permission_set_name", "unknown")
-            owner_id = final_state.get("app_owner_slack_id", "unknown")
-
-            await post_message(
-                channel=channel,
-                text=f"✅ Your request for `{permission_name}` has been sent to <@{owner_id}> for approval.\n\nRequest ID: `{request_id}`",
-                thread_ts=ts,
-            )
-
-    except Exception as e:
-        logger.error(f"[Handler] Error in permission request: {e}")
-        await post_message(
-            channel=channel,
-            text=f"❌ An error occurred while processing your request: {str(e)}",
-            thread_ts=ts,
-        )
-
-
-async def handle_app_mention(event: dict[str, Any]) -> None:
-    """
-    Handle app mention events.
-
-    Args:
-        event: The Slack event payload
-    """
-    user = event.get("user", "Unknown user")
     text = event.get("text", "")
     channel = event.get("channel", "")
     ts = event.get("ts", "")
 
-    print(f"App mentioned by {user} in channel {channel}: {text}")
+    # Skip bot messages
+    if event.get("bot_id"):
+        return
 
-    # Send "hello world" response back to Slack
-    await post_message(
-        channel=channel,
-        text="hello world",
-        thread_ts=ts,
-    )
+    print(f"Received message from {user_id} in channel {channel}: {text}")
+
+    # Initialize LangGraph client
+    client = get_client(url=slack_settings.LANGGRAPH_API_URL)
+
+    # Get or create thread for this user
+    thread_id = USER_THREADS.get(user_id)
+    if not thread_id:
+        thread = await client.threads.create()
+        thread_id = thread["thread_id"]
+        USER_THREADS[user_id] = thread_id
+        logger.info(f"Created new thread {thread_id} for user {user_id}")
+
+    # Invoke the agent
+    # Using the salesforce_permissions graph configured in aegra.json
+    try:
+        # We use client.runs.create_and_wait for simplicity as Slack bot doesn't stream chunks
+        result = await client.runs.create_and_wait(
+            thread_id=thread_id,
+            assistant_id="salesforce_permissions",
+            input={"messages": [{"type": "human", "content": text}]},
+        )
+
+        # The final result is in the state of the thread
+        # For a ReAct agent, the last message is usually the AI response
+        if result and "messages" in result:
+            messages = result["messages"]
+            if messages and messages[-1]["type"] == "ai":
+                response_text = messages[-1]["content"]
+                await post_message(
+                    channel=channel,
+                    text=response_text,
+                    thread_ts=ts,
+                )
+    except Exception as e:
+        logger.error(f"Error invoking LangGraph agent: {e}")
+        await post_message(
+            channel=channel,
+            text=f"Sorry, I encountered an error: {e}",
+            thread_ts=ts,
+        )

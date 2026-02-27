@@ -15,11 +15,6 @@ coverage:
           - aegra-api
         target: auto
         threshold: 2%
-      aegra-cli:
-        flags:
-          - aegra-cli
-        target: auto
-        threshold: 2%
     patch:
       default:
         informational: true
@@ -29,10 +24,6 @@ flags:
   aegra-api:
     paths:
       - libs/aegra-api/src/
-    carryforward: true
-  aegra-cli:
-    paths:
-      - libs/aegra-cli/src/
     carryforward: true
 
 comment:
