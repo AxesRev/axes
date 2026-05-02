@@ -9,5 +9,8 @@
   },
   "http": {
     "app": "./slack_app/app.py:app"
+  },
+  "auth": {
+    "path": "./slack_app/auth.py:auth"
   }
 }

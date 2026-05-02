@@ -36,8 +36,8 @@ async def handle_message_event(event: dict[str, Any]) -> None:
 
     print(f"Received message from {user_id} in channel {channel}: {text}")
 
-    # Initialize LangGraph client
-    client = get_client(url=slack_settings.LANGGRAPH_API_URL)
+    # Initialize LangGraph client with the Slack user ID in headers
+    client = get_client(url=slack_settings.LANGGRAPH_API_URL, headers={"X-Slack-User-ID": user_id})
 
     # Get or create thread for this user
     thread_id = USER_THREADS.get(user_id)
@@ -56,6 +56,7 @@ async def handle_message_event(event: dict[str, Any]) -> None:
             thread_id=thread_id,
             assistant_id="agent",
             input={"messages": [{"role": "user", "content": text}]},
+            config={"configurable": {"slack_user_id": user_id}},
         )
         result = await client.runs.join(thread_id, run["run_id"])
 
