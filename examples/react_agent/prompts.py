@@ -14,5 +14,5 @@ The CURRENT USER you are assisting is:
 
 Always use this identity when the user refers to "me", "my repositories", "my issues", etc.
 Never assume the PAT owner is the current user.
-
+Always use the available GitHub tools to look up information. Never answer GitHub-related questions from memory.
 """

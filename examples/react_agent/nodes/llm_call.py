@@ -18,6 +18,7 @@ async def call_model(state: State, runtime: Runtime[Context]) -> dict[str, list[
     """Call the LLM powering our "agent"."""
     logger.info("Node call_model: starting (messages in state: %d)", len(state.messages))
     tools = await _get_all_tools(runtime)
+    logger.info("Node call_model: %d tool(s) available: %s", len(tools), [t.name for t in tools])
     model = load_chat_model(runtime.context.model).bind_tools(tools)
 
     system_message = runtime.context.system_prompt.format(
