@@ -1,38 +1,50 @@
 """FastAPI application for Aegra (Agent Protocol Server)"""
 
 import asyncio
+import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any
 
-import structlog
-from asgi_correlation_id import CorrelationIdMiddleware
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+# Load .env file into os.environ so libraries like openai can read it directly.
+# pydantic-settings loads vars into Settings objects but does not populate os.environ.
+_env_path = Path(".env")
+if _env_path.exists():
+    for _line in _env_path.read_text(encoding="utf-8").splitlines():
+        _line = _line.strip()
+        if _line and not _line.startswith("#") and "=" in _line:
+            _key, _, _val = _line.partition("=")
+            os.environ.setdefault(_key.strip(), _val.strip())
 
-from aegra_api.api.assistants import router as assistants_router
-from aegra_api.api.runs import router as runs_router
-from aegra_api.api.stateless_runs import router as stateless_runs_router
-from aegra_api.api.store import router as store_router
-from aegra_api.api.threads import router as threads_router
-from aegra_api.config import HttpConfig, get_config_dir, load_http_config
-from aegra_api.core.app_loader import load_custom_app
-from aegra_api.core.auth_deps import auth_dependency
-from aegra_api.core.database import db_manager
-from aegra_api.core.health import router as health_router
-from aegra_api.core.migrations import run_migrations_async
-from aegra_api.core.route_merger import (
+import structlog  # noqa: E402
+from asgi_correlation_id import CorrelationIdMiddleware  # noqa: E402
+from fastapi import FastAPI, HTTPException, Request  # noqa: E402
+from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
+from fastapi.responses import JSONResponse  # noqa: E402
+
+from aegra_api.api.assistants import router as assistants_router  # noqa: E402
+from aegra_api.api.runs import router as runs_router  # noqa: E402
+from aegra_api.api.stateless_runs import router as stateless_runs_router  # noqa: E402
+from aegra_api.api.store import router as store_router  # noqa: E402
+from aegra_api.api.threads import router as threads_router  # noqa: E402
+from aegra_api.config import HttpConfig, get_config_dir, load_http_config  # noqa: E402
+from aegra_api.core.app_loader import load_custom_app  # noqa: E402
+from aegra_api.core.auth_deps import auth_dependency  # noqa: E402
+from aegra_api.core.database import db_manager  # noqa: E402
+from aegra_api.core.health import router as health_router  # noqa: E402
+from aegra_api.core.migrations import run_migrations_async  # noqa: E402
+from aegra_api.core.route_merger import (  # noqa: E402
     merge_exception_handlers,
     merge_lifespans,
 )
-from aegra_api.middleware import ContentTypeFixMiddleware, StructLogMiddleware
-from aegra_api.models.errors import AgentProtocolError, get_error_type
-from aegra_api.observability.setup import setup_observability
-from aegra_api.services.event_store import event_store
-from aegra_api.services.langgraph_service import get_langgraph_service
-from aegra_api.settings import settings
-from aegra_api.utils.setup_logging import setup_logging
+from aegra_api.middleware import ContentTypeFixMiddleware, StructLogMiddleware  # noqa: E402
+from aegra_api.models.errors import AgentProtocolError, get_error_type  # noqa: E402
+from aegra_api.observability.setup import setup_observability  # noqa: E402
+from aegra_api.services.event_store import event_store  # noqa: E402
+from aegra_api.services.langgraph_service import get_langgraph_service  # noqa: E402
+from aegra_api.settings import settings  # noqa: E402
+from aegra_api.utils.setup_logging import setup_logging  # noqa: E402
 
 # Task management for run cancellation
 active_runs: dict[str, asyncio.Task] = {}

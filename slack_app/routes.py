@@ -1,5 +1,6 @@
 """Slack app API routes."""
 
+import asyncio
 import hashlib
 import hmac
 import time
@@ -83,7 +84,8 @@ async def slack_events(request: Request) -> dict[str, Any]:
 
         # Handle different event types
         if event_type == "message":
-            await handle_message_event(event)
+            # Fire and forget — must return 200 to Slack within 3 seconds
+            asyncio.create_task(handle_message_event(event))
             return {"status": "ok"}
 
     return {"status": "ok"}

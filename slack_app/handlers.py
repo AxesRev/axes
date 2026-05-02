@@ -48,14 +48,16 @@ async def handle_message_event(event: dict[str, Any]) -> None:
         logger.info(f"Created new thread {thread_id} for user {user_id}")
 
     # Invoke the agent
-    # Using the salesforce_permissions graph configured in aegra.json
+    # Using the agent graph configured in aegra.json
     try:
-        # We use client.runs.create_and_wait for simplicity as Slack bot doesn't stream chunks
-        result = await client.runs.create_and_wait(
+        # We use client.runs.create and wait for simplicity as Slack bot doesn't stream chunks
+        # Note: langgraph-sdk 0.3.4 does not have create_and_wait
+        run = await client.runs.create(
             thread_id=thread_id,
-            assistant_id="salesforce_permissions",
-            input={"messages": [{"type": "human", "content": text}]},
+            assistant_id="agent",
+            input={"messages": [{"role": "user", "content": text}]},
         )
+        result = await client.runs.join(thread_id, run["run_id"])
 
         # The final result is in the state of the thread
         # For a ReAct agent, the last message is usually the AI response

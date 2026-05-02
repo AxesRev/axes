@@ -24,6 +24,8 @@ UpperStr = Annotated[str, BeforeValidator(parse_upper)]
 
 class EnvBase(BaseSettings):
     model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
         extra="ignore",
     )
 
@@ -63,7 +65,7 @@ class DatabaseSettings(EnvBase):
     POSTGRES_USER: str = "postgres"
     POSTGRES_PASSWORD: str = "postgres"
     POSTGRES_HOST: str = "localhost"
-    POSTGRES_PORT: str = "5432"
+    POSTGRES_PORT: str = "5433"
     POSTGRES_DB: str = "aegra"
     DB_ECHO_LOG: bool = False
 
