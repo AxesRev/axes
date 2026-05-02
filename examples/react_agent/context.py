@@ -41,6 +41,20 @@ class Context:
         },
     )
 
+    github_username: str = field(
+        default="",
+        metadata={
+            "description": "GitHub username of the authenticated user. Used to distinguish the current user from the PAT owner."
+        },
+    )
+
+    github_user_id: str = field(
+        default="",
+        metadata={
+            "description": "GitHub user ID of the authenticated user. Used to distinguish the current user from the PAT owner."
+        },
+    )
+
     def __post_init__(self) -> None:
         """Fetch env vars for attributes that were not passed as args."""
         for f in fields(self):

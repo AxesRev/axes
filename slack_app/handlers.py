@@ -74,9 +74,10 @@ async def handle_message_event(event: dict[str, Any]) -> None:
         )
         return
 
-    # Identity is confirmed — use only the stored github_username.
+    # Identity is confirmed — use only the stored values from the database.
     assert access_result.identity is not None
     github_username: str = access_result.identity.github_username
+    github_user_id: str = access_result.identity.github_user_id
 
     # --- Agent invocation ------------------------------------------------------
     # Initialize LangGraph client with the Slack user ID in headers for authentication
@@ -93,13 +94,16 @@ async def handle_message_event(event: dict[str, Any]) -> None:
         run = await client.runs.create(
             thread_id=thread_id,
             assistant_id="agent",
-            input={
-                "messages": [{"role": "user", "content": text}],
-                # Pass the verified GitHub username so the agent never reads it
-                # from the message text or any client-controlled field.
-                "github_username": github_username,
+            input={"messages": [{"role": "user", "content": text}]},
+            # Pass the verified GitHub identity via configurable so the agent's
+            # Context picks it up and includes it in the system prompt.
+            config={
+                "configurable": {
+                    "slack_user_id": user_id,
+                    "github_username": github_username,
+                    "github_user_id": github_user_id,
+                }
             },
-            config={"configurable": {"slack_user_id": user_id}},
         )
         result = await client.runs.join(thread_id, run["run_id"])
 

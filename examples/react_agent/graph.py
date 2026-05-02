@@ -13,6 +13,7 @@ from langgraph.prebuilt import ToolNode
 from langgraph.runtime import Runtime
 
 from react_agent.context import Context
+from react_agent.prompts import GITHUB_USER_CONTEXT
 from react_agent.state import InputState, State
 from react_agent.tools import TOOLS
 from react_agent.utils import load_chat_model
@@ -49,7 +50,17 @@ async def call_model(state: State, runtime: Runtime[Context]) -> dict[str, list[
     tools = await _get_all_tools(runtime)
     model = load_chat_model(runtime.context.model).bind_tools(tools)
 
-    system_message = runtime.context.system_prompt.format(system_time=datetime.now(tz=UTC).isoformat())
+    system_message = runtime.context.system_prompt.format(
+        system_time=datetime.now(tz=UTC).isoformat(),
+        github_user_context=(
+            GITHUB_USER_CONTEXT.format(
+                github_username=runtime.context.github_username,
+                github_user_id=runtime.context.github_user_id,
+            )
+            if runtime.context.github_username
+            else ""
+        ),
+    )
 
     response = cast(
         "AIMessage",
