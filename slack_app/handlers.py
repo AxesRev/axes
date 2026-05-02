@@ -79,7 +79,8 @@ async def handle_message_event(event: dict[str, Any]) -> None:
     github_username: str = access_result.identity.github_username
 
     # --- Agent invocation ------------------------------------------------------
-    client = get_client(url=slack_settings.LANGGRAPH_API_URL)
+    # Initialize LangGraph client with the Slack user ID in headers for authentication
+    client = get_client(url=slack_settings.LANGGRAPH_API_URL, headers={"X-Slack-User-ID": user_id})
 
     thread_id: str | None = USER_THREADS.get(user_id)
     if not thread_id:
@@ -98,6 +99,7 @@ async def handle_message_event(event: dict[str, Any]) -> None:
                 # from the message text or any client-controlled field.
                 "github_username": github_username,
             },
+            config={"configurable": {"slack_user_id": user_id}},
         )
         result = await client.runs.join(thread_id, run["run_id"])
 
