@@ -1,3 +1,4 @@
+import logging
 from datetime import UTC, datetime
 from typing import cast
 
@@ -10,9 +11,12 @@ from examples.react_agent.prompts import GITHUB_USER_CONTEXT
 from examples.react_agent.state import State
 from examples.react_agent.utils import load_chat_model
 
+logger = logging.getLogger(__name__)
+
 
 async def call_model(state: State, runtime: Runtime[Context]) -> dict[str, list[AIMessage]]:
     """Call the LLM powering our "agent"."""
+    logger.info("Node call_model: starting (messages in state: %d)", len(state.messages))
     tools = await _get_all_tools(runtime)
     model = load_chat_model(runtime.context.model).bind_tools(tools)
 
@@ -34,6 +38,7 @@ async def call_model(state: State, runtime: Runtime[Context]) -> dict[str, list[
     )
 
     if state.is_last_step and response.tool_calls:
+        logger.warning("Node call_model: reached last step with pending tool calls — aborting")
         return {
             "messages": [
                 AIMessage(
@@ -43,4 +48,12 @@ async def call_model(state: State, runtime: Runtime[Context]) -> dict[str, list[
             ]
         }
 
+    if response.tool_calls:
+        logger.info(
+            "Node call_model: done — LLM requested %d tool call(s): %s",
+            len(response.tool_calls),
+            [tc["name"] for tc in response.tool_calls],
+        )
+    else:
+        logger.info("Node call_model: done — LLM produced final response")
     return {"messages": [response]}

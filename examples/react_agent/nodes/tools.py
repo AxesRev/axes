@@ -1,3 +1,4 @@
+import logging
 from typing import Any
 
 from langchain_mcp_adapters.client import MultiServerMCPClient
@@ -7,14 +8,21 @@ from langgraph.runtime import Runtime
 from examples.react_agent.context import Context
 from examples.react_agent.state import State
 
+logger = logging.getLogger(__name__)
+
 TOOLS: list[Any] = []
 
 
 async def execute_tools(state: State, runtime: Runtime[Context]) -> dict[str, list[Any]]:
     """Execute tools, including GitHub MCP tools if a PAT is configured."""
+    last_message = state.messages[-1]
+    tool_names = [tc["name"] for tc in getattr(last_message, "tool_calls", [])]
+    logger.info("Node tools: executing %d tool(s): %s", len(tool_names), tool_names)
     tools = await _get_all_tools(runtime)
     tool_node = ToolNode(tools)
-    return await tool_node.ainvoke(state)  # type: ignore[return-value]
+    result = await tool_node.ainvoke(state)  # type: ignore[return-value]
+    logger.info("Node tools: done")
+    return result
 
 
 async def _get_all_tools(runtime: Runtime[Context]) -> list[Any]:

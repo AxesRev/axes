@@ -16,7 +16,7 @@ builder.add_node("tools", execute_tools)
 
 builder.add_edge("__start__", "call_model")
 
-builder.add_conditional_edges("call_model", route_model_output)
+builder.add_conditional_edges("call_model", route_model_output, {"tools": "tools", "__end__": "permission_detection"})
 builder.add_edge("tools", "call_model")
-
+builder.add_edge("permission_detection", "__end__")
 graph = builder.compile(name="ReAct Agent")
