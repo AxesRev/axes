@@ -34,6 +34,13 @@ class Context:
         metadata={"description": "The maximum number of search results to return for each search query."},
     )
 
+    github_pat: str = field(
+        default="",
+        metadata={
+            "description": "GitHub Personal Access Token for GitHub MCP server. Leave empty to disable GitHub tools."
+        },
+    )
+
     def __post_init__(self) -> None:
         """Fetch env vars for attributes that were not passed as args."""
         for f in fields(self):
