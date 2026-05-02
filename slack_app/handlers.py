@@ -12,14 +12,22 @@ from slack_app.config import slack_settings
 
 logger = logging.getLogger(__name__)
 
-# Map Slack user IDs to LangGraph thread IDs.
+# Map Slack thread root timestamps to LangGraph thread IDs.
+# Key: Slack channel + ":" + root message ts  →  LangGraph thread_id.
 # In production this should be persisted in a database.
-USER_THREADS: dict[str, str] = {}
+SLACK_THREAD_MAP: dict[str, str] = {}
 
 
 async def handle_message_event(event: dict[str, Any]) -> None:
     """Handle an incoming Slack message by resolving the sender's GitHub identity
     and then invoking the LangGraph agent.
+
+    Threading behaviour:
+    - A **top-level message** (no ``thread_ts`` in the event) always starts a
+      brand-new LangGraph thread and opens a new Slack reply-thread.
+    - A **thread reply** (``thread_ts`` present) continues the LangGraph thread
+      that was created when the parent Slack message arrived.  If no mapping
+      exists (e.g. the thread pre-dates this bot), the reply is silently ignored.
 
     Flow:
     1. Extract the Slack ``user_id`` from the event.
@@ -38,10 +46,27 @@ async def handle_message_event(event: dict[str, Any]) -> None:
     text: str = event.get("text", "")
     channel: str = event.get("channel", "")
     ts: str = event.get("ts", "")
+    thread_ts: str | None = event.get("thread_ts")
 
     # Skip bot messages to prevent feedback loops.
     if event.get("bot_id"):
         return
+
+    # Determine whether this is a top-level message or a thread reply.
+    is_thread_reply: bool = thread_ts is not None and thread_ts != ts
+
+    if is_thread_reply:
+        # Only continue if this thread was started by our bot.
+        map_key = f"{channel}:{thread_ts}"
+        if map_key not in SLACK_THREAD_MAP:
+            logger.debug("Ignoring reply in untracked thread %s (channel %s)", thread_ts, channel)
+            return
+        # Replies are posted back into the same thread.
+        reply_thread_ts: str = thread_ts  # type: ignore[assignment]
+    else:
+        # Top-level message — a new Slack thread will be opened by replying with
+        # thread_ts=ts, so the root message becomes the thread parent.
+        reply_thread_ts = ts
 
     logger.info("Received message from %s in channel %s: %s", user_id, channel, text)
 
@@ -70,7 +95,7 @@ async def handle_message_event(event: dict[str, Any]) -> None:
                 f"Before I can act on your behalf, I need to know your GitHub account. "
                 f"Please connect it here: {connect_url}"
             ),
-            thread_ts=ts,
+            thread_ts=reply_thread_ts,
         )
         return
 
@@ -80,15 +105,25 @@ async def handle_message_event(event: dict[str, Any]) -> None:
     github_user_id: str = access_result.identity.github_user_id
 
     # --- Agent invocation ------------------------------------------------------
-    # Initialize LangGraph client with the Slack user ID in headers for authentication
     client = get_client(url=slack_settings.LANGGRAPH_API_URL, headers={"X-Slack-User-ID": user_id})
 
-    thread_id: str | None = USER_THREADS.get(user_id)
-    if not thread_id:
+    map_key = f"{channel}:{reply_thread_ts}"
+
+    if is_thread_reply:
+        # The mapping was already confirmed to exist above.
+        thread_id: str = SLACK_THREAD_MAP[map_key]
+        logger.info("Continuing thread %s for Slack thread %s", thread_id, reply_thread_ts)
+    else:
+        # New top-level message — always create a fresh LangGraph thread.
         thread = await client.threads.create()
         thread_id = thread["thread_id"]
-        USER_THREADS[user_id] = thread_id
-        logger.info("Created new thread %s for user %s", thread_id, user_id)
+        SLACK_THREAD_MAP[map_key] = thread_id
+        logger.info(
+            "Created new LangGraph thread %s for Slack thread %s (user %s)",
+            thread_id,
+            reply_thread_ts,
+            user_id,
+        )
 
     try:
         run = await client.runs.create(
@@ -114,12 +149,12 @@ async def handle_message_event(event: dict[str, Any]) -> None:
                 await post_message(
                     channel=channel,
                     text=response_text,
-                    thread_ts=ts,
+                    thread_ts=reply_thread_ts,
                 )
     except Exception:
         logger.exception("Error invoking LangGraph agent for user %s", user_id)
         await post_message(
             channel=channel,
             text="Sorry, I encountered an error processing your request. Please try again.",
-            thread_ts=ts,
+            thread_ts=reply_thread_ts,
         )

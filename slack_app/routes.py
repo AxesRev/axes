@@ -84,6 +84,12 @@ async def slack_events(request: Request) -> dict[str, Any]:
 
         # Handle different event types
         if event_type == "message":
+            # Skip subtypes that are not human messages (edits, joins, thread
+            # broadcast copies, etc.).  A plain human message has no subtype;
+            # a thread reply also has no subtype (or subtype == None).
+            subtype = event.get("subtype")
+            if subtype is not None:
+                return {"status": "ok"}
             # Fire and forget — must return 200 to Slack within 3 seconds
             asyncio.create_task(handle_message_event(event))
             return {"status": "ok"}
