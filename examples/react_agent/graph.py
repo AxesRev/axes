@@ -1,8 +1,3 @@
-"""Define a custom Reasoning and Action agent.
-
-Works with a chat model with tool calling support.
-"""
-
 from langgraph.graph import StateGraph
 
 from examples.react_agent.context import Context
