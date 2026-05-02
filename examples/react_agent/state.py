@@ -9,13 +9,13 @@ from typing import Annotated
 from langchain_core.messages import AnyMessage
 from langgraph.graph import add_messages
 from langgraph.managed import IsLastStep
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class Permission(BaseModel):
-    domain: str
-    resource: str | None = None
-    permission: str
+    domain: Annotated[str, Field(description="The type of resource to gain access to")]
+    resource: Annotated[str | None, Field(description="The name or identifier of the specific resource")] = None
+    permission: Annotated[str, Field(description="The name or type of the permission being requested.")]
 
 
 @dataclass
