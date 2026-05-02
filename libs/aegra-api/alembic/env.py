@@ -4,6 +4,8 @@ import asyncio
 import threading
 from logging.config import fileConfig
 
+# Register app_integrations models so autogenerate detects them.
+import app_integrations.github.models  # noqa: F401, E402
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config

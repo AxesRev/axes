@@ -90,6 +90,7 @@ name = "aegra-workspace"
 version = "0.0.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "httpx" },
     { name = "langchain-mcp-adapters" },
 ]
 
@@ -99,7 +100,10 @@ dev = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "langchain-mcp-adapters", specifier = ">=0.2.1" }]
+requires-dist = [
+    { name = "httpx", specifier = ">=0.27.0" },
+    { name = "langchain-mcp-adapters", specifier = ">=0.2.1" },
+]
 
 [package.metadata.requires-dev]
 dev = [{ name = "pre-commit", specifier = ">=4.0.1" }]
