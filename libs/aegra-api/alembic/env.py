@@ -1,6 +1,7 @@
 """Alembic environment configuration for Aegra database migrations."""
 
 import asyncio
+import sys
 import threading
 from logging.config import fileConfig
 
@@ -17,6 +18,9 @@ from alembic import context
 
 # This is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
 config = context.config
 
 # Override the URL from settings — this respects DATABASE_URL, individual
