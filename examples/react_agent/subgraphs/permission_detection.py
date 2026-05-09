@@ -115,6 +115,7 @@ async def _detect(
     hint: str | None,
     feedback: str | None,
     result_key: str,
+    model: str | None = None,
 ) -> dict[str, Any]:
     sub_input = FieldDetectionState(
         messages=[_seed(state, field_name, hint, feedback)],
@@ -122,7 +123,11 @@ async def _detect(
         github_repos=state.github_repos,
         github_orgs=state.github_orgs,
     )
-    field_context = dataclasses.replace(runtime.context, system_prompt=_partial_system_prompt(field_name))
+    field_context = dataclasses.replace(
+        runtime.context,
+        model=model or runtime.context.model,
+        system_prompt=_partial_system_prompt(field_name),
+    )
     output = await _field_detection_graph.ainvoke(sub_input, context=field_context)
     return {result_key: output["result"]}
 
@@ -140,6 +145,7 @@ async def detect_domain(state: State, runtime: Runtime[Context]) -> dict[str, An
         hint=state.domain_hint,
         feedback=state.domain_feedback,
         result_key="domain_result",
+        model="openai/gpt-5.4-nano",
     )
 
 
