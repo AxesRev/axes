@@ -66,4 +66,4 @@ clean:
 	rm -rf .pytest_cache .ty_cache .ruff_cache htmlcov 2>/dev/null || true
 
 run:
-	uv run --package aegra-api uvicorn aegra_api.main:app --reload --loop selector
+	uv run --package aegra-api uvicorn aegra_api.main:app --reload --loop asyncio

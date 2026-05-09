@@ -1,8 +1,15 @@
 """FastAPI application for Aegra (Agent Protocol Server)"""
 
+import sys
+
+if sys.platform == "win32":
+    import asyncio
+    import selectors
+
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
 import asyncio
 import os
-import sys
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -10,9 +17,6 @@ from typing import Any
 
 # Load .env file into os.environ so libraries like openai can read it directly.
 # pydantic-settings loads vars into Settings objects but does not populate os.environ.
-if sys.platform == "win32":
-    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-
 _env_path = Path(".env")
 if _env_path.exists():
     for _line in _env_path.read_text(encoding="utf-8").splitlines():
@@ -332,6 +336,15 @@ if __name__ == "__main__":
     import uvicorn
 
     port = int(settings.app.PORT)
-    # On Windows, we must use the selector loop for psycopg compatibility
-    loop = "selector" if sys.platform == "win32" else "auto"
-    uvicorn.run(app, host=settings.app.HOST, port=port, loop=loop)  # nosec B104
+    host = settings.app.HOST
+
+    if sys.platform == "win32":
+        import selectors
+
+        # Use the loop_factory approach as suggested by the error message
+        # to force the SelectorEventLoop on Windows.
+        config = uvicorn.Config(app, host=host, port=port, loop="asyncio")
+        server = uvicorn.Server(config)
+        asyncio.run(server.serve(), loop_factory=lambda: asyncio.SelectorEventLoop(selectors.SelectSelector()))
+    else:
+        uvicorn.run(app, host=host, port=port)
