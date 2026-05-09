@@ -549,7 +549,7 @@ async def join_run(
     # wait_for() cancels the underlying task on timeout, which would kill the run.
     task = active_runs.get(run_id)
     if task:
-        await asyncio.wait({task}, timeout=30.0)
+        await asyncio.wait({task}, timeout=300.0)
 
     # Return final output from database
     run_orm = await session.scalar(select(RunORM).where(RunORM.run_id == run_id))
