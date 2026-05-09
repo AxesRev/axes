@@ -61,7 +61,7 @@ Your job:
   - Determine the value of the `{field_name}` field for this request.
   - Use the available tools to look up real information whenever the answer depends on the user's environment.
   - When you are confident, stop calling tools and return your conclusion as a final assistant message.
-  - The orchestrator will then ask you for a structured `{{value, justification}}` answer in a separate step.
+  - The orchestrator will then ask you for a structured answer with `value` and `justification` fields in a separate step.
 
 The `{field_name}` field describes:
 {field_description}
