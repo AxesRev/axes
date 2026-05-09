@@ -143,15 +143,6 @@ class State(InputState):
     permission_hint: str | None = field(default=None)
     """Hint describing what the `permission` field should capture (produced by the intent parser)."""
 
-    domain_messages: list[AnyMessage] = field(default_factory=list)
-    """Private message thread used by the domain detector loop."""
-
-    resource_messages: list[AnyMessage] = field(default_factory=list)
-    """Private message thread used by the resource detector loop."""
-
-    permission_messages: list[AnyMessage] = field(default_factory=list)
-    """Private message thread used by the permission detector loop."""
-
     domain_result: FieldResult | None = field(default=None)
     """Result produced by the domain detector."""
 

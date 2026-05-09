@@ -87,17 +87,9 @@ async def validate_results(state: State, runtime: Runtime[Context]) -> dict[str,
         bool(verdict.resource_feedback),
         bool(verdict.permission_feedback),
     )
-    update: dict[str, Any] = {
+    return {
         "domain_feedback": verdict.domain_feedback,
         "resource_feedback": verdict.resource_feedback,
         "permission_feedback": verdict.permission_feedback,
         "revision_count": state.revision_count + 1,
     }
-    # Clear the message thread for every field that needs a fresh re-run.
-    if verdict.domain_feedback:
-        update["domain_messages"] = []
-    if verdict.resource_feedback:
-        update["resource_messages"] = []
-    if verdict.permission_feedback:
-        update["permission_messages"] = []
-    return update

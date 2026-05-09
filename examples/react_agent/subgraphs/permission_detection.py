@@ -2,18 +2,20 @@
 
 from __future__ import annotations
 
+import dataclasses
 import logging
-from datetime import UTC, datetime
+from dataclasses import dataclass, field
 from typing import Any, Literal, cast
 
-from langchain_core.messages import AIMessage, AnyMessage, HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.graph import StateGraph
-from langgraph.prebuilt import ToolNode
 from langgraph.runtime import Runtime
 
 from examples.react_agent.context import Context
+from examples.react_agent.edges.end import route_model_output
 from examples.react_agent.nodes.intent_parser import parse_intent
-from examples.react_agent.nodes.tools import _get_all_tools
+from examples.react_agent.nodes.llm_call import call_model
+from examples.react_agent.nodes.tools import execute_tools
 from examples.react_agent.nodes.validator import validate_results
 from examples.react_agent.prompts import (
     FIELD_DESCRIPTIONS,
@@ -21,7 +23,6 @@ from examples.react_agent.prompts import (
     FIELD_DETECTOR_FEEDBACK_TEMPLATE,
     FIELD_DETECTOR_TASK_TEMPLATE,
     FIELD_EXTRACTOR_PROMPT,
-    GITHUB_USER_CONTEXT,
 )
 from examples.react_agent.state import FieldResult, InputState, Permission, State
 from examples.react_agent.utils import get_message_text, load_chat_model
@@ -33,23 +34,62 @@ MAX_REVISIONS: int = 3
 _FieldName = Literal["domain", "resource", "permission"]
 
 
-def _system_prompt(field_name: _FieldName, state: State, runtime: Runtime[Context]) -> str:
-    github_user_context = (
-        GITHUB_USER_CONTEXT.format(
-            github_username=runtime.context.github_username,
-            github_user_id=runtime.context.github_user_id,
-            github_repos=", ".join(state.github_repos) if state.github_repos else "none",
-            github_orgs=", ".join(state.github_orgs) if state.github_orgs else "none",
-        )
-        if runtime.context.github_username
-        else ""
+# ---------------------------------------------------------------------------
+# Per-field subgraph — reuses call_model, execute_tools, route_model_output
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class FieldDetectionState(State):
+    """Extends State with the two fields needed by the per-field subgraph."""
+
+    field_name: _FieldName = "domain"
+    result: FieldResult | None = field(default=None)
+
+
+def _partial_system_prompt(field_name: _FieldName) -> str:
+    """Pre-fill {field_name}/{field_description}; leave {github_user_context}/{system_time} for call_model."""
+
+    class _Keep(dict):
+        def __missing__(self, key: str) -> str:
+            return "{" + key + "}"
+
+    return FIELD_DETECTOR_BASE_PROMPT.format_map(
+        _Keep(field_name=field_name, field_description=FIELD_DESCRIPTIONS[field_name])
     )
-    return FIELD_DETECTOR_BASE_PROMPT.format(
-        field_name=field_name,
-        field_description=FIELD_DESCRIPTIONS[field_name],
-        github_user_context=github_user_context,
-        system_time=datetime.now(tz=UTC).isoformat(),
+
+
+async def _extract_result(state: FieldDetectionState, runtime: Runtime[Context]) -> dict[str, Any]:
+    model = load_chat_model(runtime.context.model).with_structured_output(FieldResult)
+    result = cast(
+        FieldResult,
+        await model.ainvoke(
+            [*state.messages, {"role": "user", "content": FIELD_EXTRACTOR_PROMPT.format(field_name=state.field_name)}]
+        ),
     )
+    logger.info("extract_result[%s]: value=%r", state.field_name, result.value)
+    return {"result": result}
+
+
+_field_builder = StateGraph(FieldDetectionState, context_schema=Context)
+_field_builder.add_node("call_model", call_model)
+_field_builder.add_node("tools", execute_tools)
+_field_builder.add_node("extract_result", _extract_result)
+_field_builder.add_edge("__start__", "call_model")
+_field_builder.add_conditional_edges(
+    "call_model",
+    route_model_output,
+    {"tools": "tools", "__end__": "extract_result"},
+)
+_field_builder.add_edge("tools", "call_model")
+_field_builder.add_edge("extract_result", "__end__")
+
+_field_detection_graph = _field_builder.compile()
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
 
 
 def _seed(state: State, field_name: _FieldName, hint: str | None, feedback: str | None) -> HumanMessage:
@@ -67,152 +107,62 @@ def _seed(state: State, field_name: _FieldName, hint: str | None, feedback: str 
     )
 
 
-# ---------------------------------------------------------------------------
-# Domain
-# ---------------------------------------------------------------------------
-
-
-async def call_domain_model(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
-    messages: list[AnyMessage] = list(state.domain_messages) or [
-        _seed(state, "domain", state.domain_hint, state.domain_feedback)
-    ]
-    tools = await _get_all_tools(runtime)
-    model = load_chat_model(
-        runtime.context.model,
-        thinking_budget_tokens=runtime.context.thinking_budget_tokens,
-        reasoning_effort=runtime.context.reasoning_effort,
-    ).bind_tools(tools)
-    response = await model.ainvoke([{"role": "system", "content": _system_prompt("domain", state, runtime)}, *messages])
-    if not isinstance(response, AIMessage):
-        raise TypeError(f"Expected AIMessage, got {type(response).__name__}")
-    return {"domain_messages": [*messages, response]}
-
-
-async def domain_tools(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
-    tools = await _get_all_tools(runtime)
-    result = await ToolNode(tools, handle_tool_errors=True).ainvoke({"messages": list(state.domain_messages)})
-    return {"domain_messages": [*state.domain_messages, *result["messages"]]}
-
-
-def route_domain_output(state: State) -> Literal["domain_tools", "extract_domain"]:
-    last = state.domain_messages[-1]
-    if not isinstance(last, AIMessage):
-        raise ValueError(f"Expected AIMessage, got {type(last).__name__}")
-    return "domain_tools" if last.tool_calls else "extract_domain"
-
-
-async def extract_domain(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
-    model = load_chat_model(runtime.context.model).with_structured_output(FieldResult)
-    result = cast(
-        FieldResult,
-        await model.ainvoke(
-            [*state.domain_messages, {"role": "user", "content": FIELD_EXTRACTOR_PROMPT.format(field_name="domain")}]
-        ),
+async def _detect(
+    state: State,
+    runtime: Runtime[Context],
+    *,
+    field_name: _FieldName,
+    hint: str | None,
+    feedback: str | None,
+    result_key: str,
+) -> dict[str, Any]:
+    sub_input = FieldDetectionState(
+        messages=[_seed(state, field_name, hint, feedback)],
+        field_name=field_name,
+        github_repos=state.github_repos,
+        github_orgs=state.github_orgs,
     )
-    logger.info("extract_domain: value=%r", result.value)
-    return {"domain_result": result}
+    field_context = dataclasses.replace(runtime.context, system_prompt=_partial_system_prompt(field_name))
+    output = await _field_detection_graph.ainvoke(sub_input, context=field_context)
+    return {result_key: output["result"]}
 
 
 # ---------------------------------------------------------------------------
-# Resource
+# Detector nodes
 # ---------------------------------------------------------------------------
 
 
-async def call_resource_model(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
-    messages: list[AnyMessage] = list(state.resource_messages) or [
-        _seed(state, "resource", state.resource_hint, state.resource_feedback)
-    ]
-    tools = await _get_all_tools(runtime)
-    model = load_chat_model(
-        runtime.context.model,
-        thinking_budget_tokens=runtime.context.thinking_budget_tokens,
-        reasoning_effort=runtime.context.reasoning_effort,
-    ).bind_tools(tools)
-    response = await model.ainvoke(
-        [{"role": "system", "content": _system_prompt("resource", state, runtime)}, *messages]
+async def detect_domain(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
+    return await _detect(
+        state,
+        runtime,
+        field_name="domain",
+        hint=state.domain_hint,
+        feedback=state.domain_feedback,
+        result_key="domain_result",
     )
-    if not isinstance(response, AIMessage):
-        raise TypeError(f"Expected AIMessage, got {type(response).__name__}")
-    return {"resource_messages": [*messages, response]}
 
 
-async def resource_tools(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
-    tools = await _get_all_tools(runtime)
-    result = await ToolNode(tools, handle_tool_errors=True).ainvoke({"messages": list(state.resource_messages)})
-    return {"resource_messages": [*state.resource_messages, *result["messages"]]}
-
-
-def route_resource_output(state: State) -> Literal["resource_tools", "extract_resource"]:
-    last = state.resource_messages[-1]
-    if not isinstance(last, AIMessage):
-        raise ValueError(f"Expected AIMessage, got {type(last).__name__}")
-    return "resource_tools" if last.tool_calls else "extract_resource"
-
-
-async def extract_resource(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
-    model = load_chat_model(runtime.context.model).with_structured_output(FieldResult)
-    result = cast(
-        FieldResult,
-        await model.ainvoke(
-            [
-                *state.resource_messages,
-                {"role": "user", "content": FIELD_EXTRACTOR_PROMPT.format(field_name="resource")},
-            ]
-        ),
+async def detect_resource(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
+    return await _detect(
+        state,
+        runtime,
+        field_name="resource",
+        hint=state.resource_hint,
+        feedback=state.resource_feedback,
+        result_key="resource_result",
     )
-    logger.info("extract_resource: value=%r", result.value)
-    return {"resource_result": result}
 
 
-# ---------------------------------------------------------------------------
-# Permission
-# ---------------------------------------------------------------------------
-
-
-async def call_permission_model(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
-    messages: list[AnyMessage] = list(state.permission_messages) or [
-        _seed(state, "permission", state.permission_hint, state.permission_feedback)
-    ]
-    tools = await _get_all_tools(runtime)
-    model = load_chat_model(
-        runtime.context.model,
-        thinking_budget_tokens=runtime.context.thinking_budget_tokens,
-        reasoning_effort=runtime.context.reasoning_effort,
-    ).bind_tools(tools)
-    response = await model.ainvoke(
-        [{"role": "system", "content": _system_prompt("permission", state, runtime)}, *messages]
+async def detect_permission(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
+    return await _detect(
+        state,
+        runtime,
+        field_name="permission",
+        hint=state.permission_hint,
+        feedback=state.permission_feedback,
+        result_key="permission_result",
     )
-    if not isinstance(response, AIMessage):
-        raise TypeError(f"Expected AIMessage, got {type(response).__name__}")
-    return {"permission_messages": [*messages, response]}
-
-
-async def permission_tools(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
-    tools = await _get_all_tools(runtime)
-    result = await ToolNode(tools, handle_tool_errors=True).ainvoke({"messages": list(state.permission_messages)})
-    return {"permission_messages": [*state.permission_messages, *result["messages"]]}
-
-
-def route_permission_output(state: State) -> Literal["permission_tools", "extract_permission"]:
-    last = state.permission_messages[-1]
-    if not isinstance(last, AIMessage):
-        raise ValueError(f"Expected AIMessage, got {type(last).__name__}")
-    return "permission_tools" if last.tool_calls else "extract_permission"
-
-
-async def extract_permission(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
-    model = load_chat_model(runtime.context.model).with_structured_output(FieldResult)
-    result = cast(
-        FieldResult,
-        await model.ainvoke(
-            [
-                *state.permission_messages,
-                {"role": "user", "content": FIELD_EXTRACTOR_PROMPT.format(field_name="permission")},
-            ]
-        ),
-    )
-    logger.info("extract_permission: value=%r", result.value)
-    return {"permission_result": result}
 
 
 # ---------------------------------------------------------------------------
@@ -227,11 +177,11 @@ def route_validator(state: State) -> list[str]:
 
     rerun: list[str] = []
     if state.domain_feedback:
-        rerun.append("call_domain_model")
+        rerun.append("detect_domain")
     if state.resource_feedback:
-        rerun.append("call_resource_model")
+        rerun.append("detect_resource")
     if state.permission_feedback:
-        rerun.append("call_permission_model")
+        rerun.append("detect_permission")
 
     if not rerun:
         logger.info("route_validator: passed — finalize")
@@ -273,46 +223,26 @@ async def finalize(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
 builder = StateGraph(State, input_schema=InputState, context_schema=Context)
 
 builder.add_node("parse_intent", parse_intent)
-
-builder.add_node("call_domain_model", call_domain_model)
-builder.add_node("domain_tools", domain_tools)
-builder.add_node("extract_domain", extract_domain)
-
-builder.add_node("call_resource_model", call_resource_model)
-builder.add_node("resource_tools", resource_tools)
-builder.add_node("extract_resource", extract_resource)
-
-builder.add_node("call_permission_model", call_permission_model)
-builder.add_node("permission_tools", permission_tools)
-builder.add_node("extract_permission", extract_permission)
-
+builder.add_node("detect_domain", detect_domain)
+builder.add_node("detect_resource", detect_resource)
+builder.add_node("detect_permission", detect_permission)
 builder.add_node("validator", validate_results)
 builder.add_node("finalize", finalize)
 
 builder.add_edge("__start__", "parse_intent")
 
-builder.add_edge("parse_intent", "call_domain_model")
-builder.add_edge("parse_intent", "call_resource_model")
-builder.add_edge("parse_intent", "call_permission_model")
+builder.add_edge("parse_intent", "detect_domain")
+builder.add_edge("parse_intent", "detect_resource")
+builder.add_edge("parse_intent", "detect_permission")
 
-builder.add_conditional_edges("call_domain_model", route_domain_output, ["domain_tools", "extract_domain"])
-builder.add_edge("domain_tools", "call_domain_model")
-builder.add_edge("extract_domain", "validator")
-
-builder.add_conditional_edges("call_resource_model", route_resource_output, ["resource_tools", "extract_resource"])
-builder.add_edge("resource_tools", "call_resource_model")
-builder.add_edge("extract_resource", "validator")
-
-builder.add_conditional_edges(
-    "call_permission_model", route_permission_output, ["permission_tools", "extract_permission"]
-)
-builder.add_edge("permission_tools", "call_permission_model")
-builder.add_edge("extract_permission", "validator")
+builder.add_edge("detect_domain", "validator")
+builder.add_edge("detect_resource", "validator")
+builder.add_edge("detect_permission", "validator")
 
 builder.add_conditional_edges(
     "validator",
     route_validator,
-    ["call_domain_model", "call_resource_model", "call_permission_model", "finalize"],
+    ["detect_domain", "detect_resource", "detect_permission", "finalize"],
 )
 
 builder.add_edge("finalize", "__end__")
