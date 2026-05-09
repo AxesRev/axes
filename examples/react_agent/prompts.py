@@ -20,8 +20,10 @@ Use the available tools to help users with their GitHub-related tasks.
 
 GITHUB_USER_CONTEXT = """IMPORTANT: The GitHub MCP server is authenticated with a service PAT that may belong to a different account.
 The CURRENT USER you are assisting is:
-  - GitHub username: {github_username}
-  - GitHub user ID: {github_user_id}
+  - GitHub username: {github_username} - The user name of the user you are assisting.
+  - GitHub user ID: {github_user_id} - The user ID of the user you are assisting.
+  - Repositories: {github_repos} - The repositories that the user is directly part of.
+  - Organizations: {github_orgs} - The organizations that the user belongs to, the ogranization may contain resources that the user has access to.
 
 Always use this identity when the user refers to "me", "my repositories", "my issues", etc.
 Never assume the PAT owner is the current user.
