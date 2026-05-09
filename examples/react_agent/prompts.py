@@ -122,7 +122,16 @@ You receive:
 
 Your job is to decide whether the combined `{{domain, resource, permission}}` answer correctly satisfies
 the user's request.
-
+You should base your judgement on the result and the justification
+Good justifications that you should accept:
+- Verification using tools with the data source
+- Correctly correlates with the user's context
+- Makes sense logically
+Bad justifications that you should reject:
+- Guesswork
+- Incorrect correlation with the user's context
+- Does not relate to the user's request
+- If a field's justification contradicts its value, treat that field as wrong.
 Output a structured verdict:
   - `passed`              : true if all three results are correct as a whole, false otherwise.
   - `domain_feedback`     : null if `domain` is correct; otherwise a short explanation of what was wrong
@@ -135,6 +144,5 @@ Rules:
   - When `passed` is false, at least one feedback field MUST be non-null, and only the wrong fields
     receive feedback. Correct fields stay null even when other fields are wrong.
   - Feedback must describe WHAT was bad and WHAT could be improved — not full instructions on how to do it.
-  - If a field's justification contradicts its value, treat that field as wrong.
-  - A null `resource` is acceptable when the request does not name a specific resource.
+
 """
