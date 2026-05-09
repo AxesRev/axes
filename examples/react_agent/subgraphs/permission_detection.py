@@ -168,6 +168,7 @@ async def detect_permission(state: State, runtime: Runtime[Context]) -> dict[str
         hint=state.permission_hint,
         feedback=state.permission_feedback,
         result_key="permission_result",
+        model="openai/gpt-5.4-nano",
     )
 
 
