@@ -59,8 +59,9 @@ class Context:
         default="",
         metadata={
             "description": (
-                "Reasoning effort for OpenAI o-series models: 'low', 'medium', or 'high'. "
-                "Leave empty to disable (default). Only applies to openai/o4-mini, openai/o3, etc."
+                "Reasoning effort for OpenAI reasoning-capable models: 'low', 'medium', or 'high'. "
+                "Leave empty to disable (default). Applies to o-series models (openai/o3, openai/o4-mini) "
+                "and GPT-5-class models (openai/gpt-5.4-mini, etc.) via the Responses API."
             )
         },
     )

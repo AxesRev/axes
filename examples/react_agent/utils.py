@@ -50,6 +50,10 @@ def load_chat_model(
         kwargs["thinking_budget"] = thinking_budget_tokens
 
     elif provider in ("openai", "azure_openai") and reasoning_effort:
-        kwargs["reasoning_effort"] = reasoning_effort
+        # Use the Responses API semantics (`/v1/responses`) so that reasoning +
+        # function tools work together on GPT-5-class models.  Setting `reasoning`
+        # instead of `reasoning_effort` causes langchain-openai to route the call
+        # through `/v1/responses` automatically.
+        kwargs["reasoning"] = {"effort": reasoning_effort}
 
     return init_chat_model(model, model_provider=provider, **kwargs)
