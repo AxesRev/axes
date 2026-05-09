@@ -10,7 +10,7 @@ import asyncio
 import logging
 from typing import Any
 
-from github import Auth, Github
+from github import Auth, Github, GithubException
 from langgraph.runtime import Runtime
 
 from examples.react_agent.context import Context
@@ -20,12 +20,39 @@ logger = logging.getLogger(__name__)
 
 
 def _fetch_github_context(pat: str, github_username: str) -> dict[str, list[str]]:
-    """Fetch repo full names and org logins for *github_username* using the service PAT."""
+    """Fetch repo full names and org logins for *github_username* using the service PAT.
+
+    Because the target user's org memberships may be private (hidden from the public
+    ``/users/{username}/orgs`` endpoint), we take a two-pronged approach:
+
+    1. Collect the user's own public repos directly from their profile.
+    2. Walk through every org the *service PAT* belongs to and check whether the
+       target user is also a member.  For each shared org we include the org itself
+       and all its repos that the service PAT can see.
+    """
     auth = Auth.Token(pat)
     with Github(auth=auth) as gh:
-        user = gh.get_user(github_username)
-        repos = [repo.full_name for repo in user.get_repos()]
-        orgs = [org.login for org in user.get_orgs()]
+        named_user = gh.get_user(github_username)
+
+        # Own public repos (may be empty for users with no public activity)
+        repos: list[str] = [repo.full_name for repo in named_user.get_repos()]
+        orgs: list[str] = []
+
+        # Discover shared orgs via the service account
+        service_user = gh.get_user()
+        for svc_org in service_user.get_orgs():
+            try:
+                org_obj = gh.get_organization(svc_org.login)
+                if not org_obj.has_in_members(named_user):
+                    continue
+                orgs.append(svc_org.login)
+                for org_repo in org_obj.get_repos():
+                    if org_repo.full_name not in repos:
+                        repos.append(org_repo.full_name)
+            except GithubException as exc:
+                logger.warning("load_github_context: skipping org %s — %s", svc_org.login, exc)
+                continue
+
     return {"github_repos": repos, "github_orgs": orgs}
 
 
