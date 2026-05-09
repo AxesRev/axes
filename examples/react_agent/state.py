@@ -60,3 +60,9 @@ class State(InputState):
 
     permission: Permission | None = field(default=None)
     """The structured permission model extracted from the conversation."""
+
+    github_repos: list[str] = field(default_factory=list)
+    """Full names (owner/repo) of GitHub repositories accessible to the authenticated user."""
+
+    github_orgs: list[str] = field(default_factory=list)
+    """Logins of GitHub organizations the authenticated user belongs to."""
