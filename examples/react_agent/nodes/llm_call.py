@@ -19,7 +19,11 @@ async def call_model(state: State, runtime: Runtime[Context]) -> dict[str, list[
     logger.info("Node call_model: starting (messages in state: %d)", len(state.messages))
     tools = await _get_all_tools(runtime)
     logger.info("Node call_model: %d tool(s) available: %s", len(tools), [t.name for t in tools])
-    model = load_chat_model(runtime.context.model).bind_tools(tools)
+    model = load_chat_model(
+        runtime.context.model,
+        thinking_budget_tokens=runtime.context.thinking_budget_tokens,
+        reasoning_effort=runtime.context.reasoning_effort,
+    ).bind_tools(tools)
 
     system_message = runtime.context.system_prompt.format(
         system_time=datetime.now(tz=UTC).isoformat(),

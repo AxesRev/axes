@@ -544,17 +544,12 @@ async def join_run(
         output = getattr(run_orm, "output", None) or {}
         return output
 
-    # Wait for background task to complete
+    # Wait for background task to complete.
+    # asyncio.wait() is used intentionally instead of asyncio.wait_for() because
+    # wait_for() cancels the underlying task on timeout, which would kill the run.
     task = active_runs.get(run_id)
     if task:
-        try:
-            await asyncio.wait_for(task, timeout=30.0)
-        except TimeoutError:
-            # Task is taking too long, but that's okay - we'll check DB status
-            pass
-        except asyncio.CancelledError:
-            # Task was cancelled, that's also okay
-            pass
+        await asyncio.wait({task}, timeout=30.0)
 
     # Return final output from database
     run_orm = await session.scalar(select(RunORM).where(RunORM.run_id == run_id))

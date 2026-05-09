@@ -19,7 +19,7 @@ async def execute_tools(state: State, runtime: Runtime[Context]) -> dict[str, li
     tool_names = [tc["name"] for tc in getattr(last_message, "tool_calls", [])]
     logger.info("Node tools: executing %d tool(s): %s", len(tool_names), tool_names)
     tools = await _get_all_tools(runtime)
-    tool_node = ToolNode(tools)
+    tool_node = ToolNode(tools, handle_tool_errors=True)
     result = await tool_node.ainvoke(state)  # type: ignore[return-value]
     logger.info("Node tools: done")
     return result

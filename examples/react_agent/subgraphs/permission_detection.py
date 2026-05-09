@@ -4,6 +4,7 @@ from typing import Any, cast
 from langchain_core.messages import AIMessage
 from langgraph.graph import StateGraph
 from langgraph.runtime import Runtime
+from pydantic import ValidationError
 
 from examples.react_agent.context import Context
 from examples.react_agent.edges.end import route_model_output
@@ -21,10 +22,22 @@ async def extract_permission(state: State, runtime: Runtime[Context]) -> dict[st
     Stores the Permission in state.permission and also appends its JSON
     representation as an AI message so callers (e.g. Slack handler) can
     read it from state.messages[-1].content as usual.
+
+    If the conversation did not reach a definitive permission conclusion
+    (e.g. the agent asked a clarifying question), the extraction is skipped
+    and state is returned unchanged so the agent's last message is preserved.
     """
     logger.info("Node extract_permission: starting structured output extraction")
     model = load_chat_model(runtime.context.model).with_structured_output(Permission)
-    response = cast(Permission, await model.ainvoke(state.messages))
+    try:
+        response = cast(Permission, await model.ainvoke(state.messages))
+    except (ValidationError, ValueError) as exc:
+        logger.info(
+            "Node extract_permission: skipped — conversation is not a resolved permission (%s)",
+            exc,
+        )
+        return {}
+
     logger.info(
         "Node extract_permission: done — domain=%r resource=%r permission=%r",
         response.domain,

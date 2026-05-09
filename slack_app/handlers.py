@@ -142,15 +142,31 @@ async def handle_message_event(event: dict[str, Any]) -> None:
         )
         result = await client.runs.join(thread_id, run["run_id"])
 
+        response_text: str | None = None
         if result and "messages" in result:
             messages = result["messages"]
             if messages and messages[-1]["type"] == "ai":
                 response_text = messages[-1]["content"]
-                await post_message(
-                    channel=channel,
-                    text=response_text,
-                    thread_ts=reply_thread_ts,
-                )
+
+        if response_text:
+            await post_message(
+                channel=channel,
+                text=response_text,
+                thread_ts=reply_thread_ts,
+            )
+        else:
+            # Run failed or produced no AI message (e.g. tool error, empty output).
+            logger.warning(
+                "Run %s produced no AI response for user %s (result keys: %s)",
+                run["run_id"],
+                user_id,
+                list(result.keys()) if result else [],
+            )
+            await post_message(
+                channel=channel,
+                text="Sorry, I encountered an error processing your request. Please try again.",
+                thread_ts=reply_thread_ts,
+            )
     except Exception:
         logger.exception("Error invoking LangGraph agent for user %s", user_id)
         await post_message(

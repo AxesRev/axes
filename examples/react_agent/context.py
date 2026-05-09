@@ -55,6 +55,28 @@ class Context:
         },
     )
 
+    reasoning_effort: str = field(
+        default="",
+        metadata={
+            "description": (
+                "Reasoning effort for OpenAI o-series models: 'low', 'medium', or 'high'. "
+                "Leave empty to disable (default). Only applies to openai/o4-mini, openai/o3, etc."
+            )
+        },
+    )
+
+    thinking_budget_tokens: int = field(
+        default=0,
+        metadata={
+            "description": (
+                "Token budget for extended thinking. "
+                "Applies to Anthropic (claude-3-7-sonnet and newer) and Google Gemini 2.5+. "
+                "Set to 0 to disable (default). Anthropic requires the model to be invoked "
+                "with max_tokens greater than this value."
+            )
+        },
+    )
+
     def __post_init__(self) -> None:
         """Fetch env vars for attributes that were not passed as args."""
         for f in fields(self):
@@ -62,4 +84,6 @@ class Context:
                 continue
 
             if getattr(self, f.name) == f.default:
-                setattr(self, f.name, os.environ.get(f.name.upper(), f.default))
+                raw = os.environ.get(f.name.upper())
+                if raw is not None:
+                    setattr(self, f.name, type(f.default)(raw))
