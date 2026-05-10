@@ -9,7 +9,7 @@ from typing import Annotated
 from langchain_core.messages import AnyMessage
 from langgraph.graph import add_messages
 from langgraph.managed import IsLastStep
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class Permission(BaseModel):
@@ -23,11 +23,21 @@ class FieldResult(BaseModel):
 
     value: Annotated[
         str | None,
-        Field(description="The detected value for the field. May be null when the field is not applicable."),
+        Field(
+            description=(
+                "Canonical value for this field. For `resource`, use null only when the request truly does not "
+                "name a specific resource; otherwise use an exact identifier (e.g. owner/repo)."
+            ),
+        ),
     ] = None
     justification: Annotated[
         str,
-        Field(description="A short explanation of why this value correctly answers the request."),
+        Field(
+            description=(
+                "1–3 sentences explaining why `value` is correct, grounded in tool results when tools were used; "
+                "reject guesswork."
+            ),
+        ),
     ]
 
 
@@ -55,13 +65,22 @@ class IntentHints(BaseModel):
 class ValidationVerdict(BaseModel):
     """Validator's assessment of the per-field results."""
 
-    passed: Annotated[bool, Field(description="True if all three results correctly answer the request.")]
+    passed: Annotated[
+        bool,
+        Field(
+            description=(
+                "True only if domain, resource, and permission together correctly satisfy the user request. "
+                "Accept: tool-backed or context-aligned justifications that are logically sound. "
+                "Reject: guesswork, mismatch with user context, irrelevance, or justification contradicting value."
+            ),
+        ),
+    ]
     domain_feedback: Annotated[
         str | None,
         Field(
             description=(
-                "Feedback for the domain detector if its result is wrong, explaining what was bad and how "
-                "to improve. Must be null when the domain result is correct."
+                "If `passed` is false and `domain` is wrong: short note on what was wrong and how to improve "
+                "(WHAT, not full how-to). Otherwise null."
             )
         ),
     ] = None
@@ -69,8 +88,7 @@ class ValidationVerdict(BaseModel):
         str | None,
         Field(
             description=(
-                "Feedback for the resource detector if its result is wrong. "
-                "Must be null when the resource result is correct."
+                "If `passed` is false and `resource` is wrong: same convention as domain_feedback. Otherwise null."
             )
         ),
     ] = None
@@ -78,11 +96,31 @@ class ValidationVerdict(BaseModel):
         str | None,
         Field(
             description=(
-                "Feedback for the permission detector if its result is wrong. "
-                "Must be null when the permission result is correct."
+                "If `passed` is false and `permission` is wrong: same convention as domain_feedback. Otherwise null."
             )
         ),
     ] = None
+
+    @model_validator(mode="after")
+    def _feedback_consistent_with_passed(self) -> ValidationVerdict:
+        """Enforce invariants that prompts used to spell out; `with_structured_output` still returns this type."""
+        if self.passed:
+            if (
+                self.domain_feedback is not None
+                or self.resource_feedback is not None
+                or self.permission_feedback is not None
+            ):
+                msg = "When passed is true, domain_feedback, resource_feedback, and permission_feedback must be null."
+                raise ValueError(msg)
+            return self
+        if not any(
+            (self.domain_feedback or "").strip(),
+            (self.resource_feedback or "").strip(),
+            (self.permission_feedback or "").strip(),
+        ):
+            msg = "When passed is false, at least one feedback field must be a non-empty string."
+            raise ValueError(msg)
+        return self
 
 
 @dataclass

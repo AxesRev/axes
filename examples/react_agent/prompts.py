@@ -62,7 +62,6 @@ Your job:
   - Determine the value of the `{field_name}` field for this request.
   - Use the available tools to look up real information whenever the answer depends on the user's environment.
   - When you are confident, stop calling tools and return your conclusion as a final assistant message.
-  - The orchestrator will then ask you for a structured answer with `value` and `justification` fields in a separate step.
 
 The `{field_name}` field describes:
 {field_description}
@@ -106,44 +105,11 @@ Validator feedback (what was wrong and how to improve):
 {feedback}
 """
 
-FIELD_EXTRACTOR_PROMPT = """Based on the conversation above, output the final `{field_name}` field as
-a structured `{{value, justification}}` answer.
+FIELD_EXTRACTOR_PROMPT = """From the conversation above, produce the structured `FieldResult` for `{field_name}`.
+Use the model's structured-output schema (value + justification); do not emit free-form prose outside it."""
 
-  - `value`         : the canonical value of the `{field_name}` field.
-  - `justification` : 1–3 sentences explaining why this value correctly answers the user's request,
-                      grounded in the tool results when available.
-"""
+VALIDATOR_PROMPT = """You validate three field results (`domain`, `resource`, `permission`) against the original user request.
 
-VALIDATOR_PROMPT = """You are the validator for an access-request permission detection system.
-
-You receive:
-  - The original user request.
-  - Three independently produced field results: `domain`, `resource`, `permission`, each with a `value`
-    and a `justification`.
-
-Your job is to decide whether the combined `{{domain, resource, permission}}` answer correctly satisfies
-the user's request.
-You should base your judgement on the result and the justification
-Good justifications that you should accept:
-- Verification using tools with the data source
-- Correctly correlates with the user's context
-- Makes sense logically
-Bad justifications that you should reject:
-- Guesswork
-- Incorrect correlation with the user's context
-- Does not relate to the user's request
-- If a field's justification contradicts its value, treat that field as wrong.
-Output a structured verdict:
-  - `passed`              : true if all three results are correct as a whole, false otherwise.
-  - `domain_feedback`     : null if `domain` is correct; otherwise a short explanation of what was wrong
-                            and how to improve, addressed to the agent that produced it.
-  - `resource_feedback`   : same convention for `resource`.
-  - `permission_feedback` : same convention for `permission`.
-
-Rules:
-  - When `passed` is true, ALL three feedback fields MUST be null.
-  - When `passed` is false, at least one feedback field MUST be non-null, and only the wrong fields
-    receive feedback. Correct fields stay null even when other fields are wrong.
-  - Feedback must describe WHAT was bad and WHAT could be improved — not full instructions on how to do it.
-
-"""
+Return a `ValidationVerdict` only (no extra text). Field descriptions on that schema define acceptance criteria and
+feedback rules. Only mark `passed` true when all three fields are correct together; wrong fields get non-null
+feedback, correct fields stay null."""
