@@ -31,8 +31,8 @@ async def call_model(state: State, runtime: Runtime[Context]) -> dict[str, list[
             GITHUB_USER_CONTEXT.format(
                 github_username=runtime.context.github_username,
                 github_user_id=runtime.context.github_user_id,
-                github_repos=", ".join(state.github_repos) if state.github_repos else "none",
-                github_orgs=", ".join(state.github_orgs) if state.github_orgs else "none",
+                github_repos=", ".join(state.github_repos[:50]) if state.github_repos else "none",
+                github_orgs=", ".join(state.github_orgs[:20]) if state.github_orgs else "none",
             )
             if runtime.context.github_username
             else ""
