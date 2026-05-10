@@ -46,9 +46,8 @@ async def parse_intent(state: State, runtime: Runtime[Context]) -> dict[str, str
     logger.info("Node parse_intent: starting intent parsing (messages in state: %d)", len(state.messages))
 
     model = load_chat_model(
-        runtime.context.model,
-        thinking_budget_tokens=runtime.context.thinking_budget_tokens,
-        reasoning_effort=runtime.context.reasoning_effort,
+        "openai/gpt-5.4-mini",
+        reasoning_effort="medium",
     ).with_structured_output(IntentHints)
 
     system_message = INTENT_PARSER_PROMPT.format(

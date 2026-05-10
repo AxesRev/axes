@@ -47,6 +47,7 @@ If a field is implied but not explicit, capture the implication in the hint
 (e.g. "the only repository in the user's organization, identified by exact name").
 If a field is genuinely absent (e.g. no specific resource), say so explicitly.
 
+additional context about the user you should consider for extra information
 {github_user_context}"""
 
 FIELD_DETECTOR_BASE_PROMPT = """You are a permission-detection specialist focused on a SINGLE field of an access request.
@@ -65,8 +66,9 @@ Your job:
 
 The `{field_name}` field describes:
 {field_description}
-
-{github_user_context}System time: {system_time}"""
+additional context you should consider to narrow down the search for the information, but do not rely solely on it.
+{github_user_context}
+System time: {system_time}"""
 
 FIELD_DESCRIPTIONS: dict[str, str] = {
     "domain": (
@@ -107,8 +109,7 @@ Validator feedback (what was wrong and how to improve):
 FIELD_EXTRACTOR_PROMPT = """Based on the conversation above, output the final `{field_name}` field as
 a structured `{{value, justification}}` answer.
 
-  - `value`         : the canonical value of the `{field_name}` field. Use null only when the field is
-                      genuinely not applicable (this is realistic only for `resource`).
+  - `value`         : the canonical value of the `{field_name}` field.
   - `justification` : 1–3 sentences explaining why this value correctly answers the user's request,
                       grounded in the tool results when available.
 """
