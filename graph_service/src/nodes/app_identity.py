@@ -34,8 +34,14 @@ class AppIdentity(BaseNode):
         "ASSIGNED_PROFILE",
         cardinality=AsyncZeroOrMore,
     )
-    resources = AsyncRelationshipTo(
+    permitted_resources = AsyncRelationshipTo(
         "nodes.resource.Resource",
+        "HAS_PERMISSION",
+        model=HasPermissionRel,
+        cardinality=AsyncZeroOrMore,
+    )
+    permitted_groups = AsyncRelationshipTo(
+        "nodes.group.Group",
         "HAS_PERMISSION",
         model=HasPermissionRel,
         cardinality=AsyncZeroOrMore,

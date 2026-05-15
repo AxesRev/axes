@@ -17,8 +17,14 @@ class Profile(BaseNode):
     name = StringProperty(required=True)
     description = StringProperty()
 
-    resources = AsyncRelationshipTo(
+    permitted_resources = AsyncRelationshipTo(
         "nodes.resource.Resource",
+        "HAS_PERMISSION",
+        model=HasPermissionRel,
+        cardinality=AsyncZeroOrMore,
+    )
+    permitted_groups = AsyncRelationshipTo(
+        "nodes.group.Group",
         "HAS_PERMISSION",
         model=HasPermissionRel,
         cardinality=AsyncZeroOrMore,

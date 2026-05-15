@@ -9,9 +9,9 @@ from nodes.relationships import HasPermissionRel
 class Group(BaseNode):
     """A named container of AppIdentity nodes and/or other Groups.
 
-    Membership is expressed as an inbound MEMBER_OF edge from either an
-    AppIdentity or a nested Group. Two separate relationship properties are
-    required because neomodel does not support union target types.
+    Group acts as both a subject (can hold HAS_PERMISSION edges to Resource
+    and other Group nodes) and a target (subjects can hold HAS_PERMISSION
+    edges pointing at this Group).
     """
 
     name = StringProperty(required=True)
@@ -32,8 +32,36 @@ class Group(BaseNode):
         "ASSIGNED_PROFILE",
         cardinality=AsyncZeroOrMore,
     )
-    resources = AsyncRelationshipTo(
+
+    # Subject side — permissions this group holds
+    permitted_resources = AsyncRelationshipTo(
         "nodes.resource.Resource",
+        "HAS_PERMISSION",
+        model=HasPermissionRel,
+        cardinality=AsyncZeroOrMore,
+    )
+    permitted_groups = AsyncRelationshipTo(
+        "nodes.group.Group",
+        "HAS_PERMISSION",
+        model=HasPermissionRel,
+        cardinality=AsyncZeroOrMore,
+    )
+
+    # Target side — who holds permissions on this group
+    app_identity_permissions = AsyncRelationshipFrom(
+        "nodes.app_identity.AppIdentity",
+        "HAS_PERMISSION",
+        model=HasPermissionRel,
+        cardinality=AsyncZeroOrMore,
+    )
+    group_permissions = AsyncRelationshipFrom(
+        "nodes.group.Group",
+        "HAS_PERMISSION",
+        model=HasPermissionRel,
+        cardinality=AsyncZeroOrMore,
+    )
+    profile_permissions = AsyncRelationshipFrom(
+        "nodes.profile.Profile",
         "HAS_PERMISSION",
         model=HasPermissionRel,
         cardinality=AsyncZeroOrMore,
