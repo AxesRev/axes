@@ -3,6 +3,7 @@ from __future__ import annotations
 from neomodel import AsyncOne, AsyncRelationshipFrom, AsyncRelationshipTo, AsyncZeroOrMore, JSONProperty, StringProperty
 
 from nodes.base import BaseNode
+from nodes.relationships import HasPermissionRel
 
 
 class AppIdentity(BaseNode):
@@ -28,25 +29,14 @@ class AppIdentity(BaseNode):
         "MEMBER_OF",
         cardinality=AsyncZeroOrMore,
     )
-
-    read_only_resources = AsyncRelationshipTo(
-        "nodes.resource.Resource",
-        "READ_ONLY",
-        cardinality=AsyncZeroOrMore,
-    )
-    read_write_resources = AsyncRelationshipTo(
-        "nodes.resource.Resource",
-        "READ_WRITE",
-        cardinality=AsyncZeroOrMore,
-    )
-    admin_resources = AsyncRelationshipTo(
-        "nodes.resource.Resource",
-        "ADMIN",
-        cardinality=AsyncZeroOrMore,
-    )
-
     profiles = AsyncRelationshipTo(
         "nodes.profile.Profile",
         "ASSIGNED_PROFILE",
+        cardinality=AsyncZeroOrMore,
+    )
+    resources = AsyncRelationshipTo(
+        "nodes.resource.Resource",
+        "HAS_PERMISSION",
+        model=HasPermissionRel,
         cardinality=AsyncZeroOrMore,
     )

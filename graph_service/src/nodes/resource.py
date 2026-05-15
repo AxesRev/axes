@@ -3,70 +3,40 @@ from __future__ import annotations
 from neomodel import AsyncRelationshipFrom, AsyncZeroOrMore, StringProperty
 
 from nodes.base import BaseNode
+from nodes.relationships import HasPermissionRel
 
 
 class Resource(BaseNode):
     """An object that access control applies to.
 
-    ``kind`` describes the type of resource (e.g. "repository", "branch",
-    "endpoint") without coupling the schema to any specific integration.
-    ``uri`` is an optional stable locator that uniquely identifies the resource
-    within its kind.
+    ``kind`` describes the type of resource without coupling the schema to any
+    specific integration. ``uri`` is an optional stable locator that uniquely
+    identifies the resource within its kind.
 
-    Access is expressed as a typed edge from the subject to this node:
-        (AppIdentity)-[:READ_ONLY | :READ_WRITE | :ADMIN]->(Resource)
-    Each access level is a separate relationship type so that permission checks
-    reduce to a single edge lookup with no property filtering.
+    Access is expressed as a HAS_PERMISSION edge from the subject to this node.
+    The permission type is carried as a property on the edge itself so that new
+    permission types require no schema change.
     """
 
     name = StringProperty(required=True)
     kind = StringProperty(required=True)
     uri = StringProperty(unique_index=True)
 
-    read_only_subjects = AsyncRelationshipFrom(
+    app_identity_permissions = AsyncRelationshipFrom(
         "nodes.app_identity.AppIdentity",
-        "READ_ONLY",
+        "HAS_PERMISSION",
+        model=HasPermissionRel,
         cardinality=AsyncZeroOrMore,
     )
-    read_write_subjects = AsyncRelationshipFrom(
-        "nodes.app_identity.AppIdentity",
-        "READ_WRITE",
-        cardinality=AsyncZeroOrMore,
-    )
-    admin_subjects = AsyncRelationshipFrom(
-        "nodes.app_identity.AppIdentity",
-        "ADMIN",
-        cardinality=AsyncZeroOrMore,
-    )
-
-    read_only_profiles = AsyncRelationshipFrom(
-        "nodes.profile.Profile",
-        "READ_ONLY",
-        cardinality=AsyncZeroOrMore,
-    )
-    read_write_profiles = AsyncRelationshipFrom(
-        "nodes.profile.Profile",
-        "READ_WRITE",
-        cardinality=AsyncZeroOrMore,
-    )
-    admin_profiles = AsyncRelationshipFrom(
-        "nodes.profile.Profile",
-        "ADMIN",
-        cardinality=AsyncZeroOrMore,
-    )
-
-    read_only_groups = AsyncRelationshipFrom(
+    group_permissions = AsyncRelationshipFrom(
         "nodes.group.Group",
-        "READ_ONLY",
+        "HAS_PERMISSION",
+        model=HasPermissionRel,
         cardinality=AsyncZeroOrMore,
     )
-    read_write_groups = AsyncRelationshipFrom(
-        "nodes.group.Group",
-        "READ_WRITE",
-        cardinality=AsyncZeroOrMore,
-    )
-    admin_groups = AsyncRelationshipFrom(
-        "nodes.group.Group",
-        "ADMIN",
+    profile_permissions = AsyncRelationshipFrom(
+        "nodes.profile.Profile",
+        "HAS_PERMISSION",
+        model=HasPermissionRel,
         cardinality=AsyncZeroOrMore,
     )

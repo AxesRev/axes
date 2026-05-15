@@ -3,6 +3,7 @@ from __future__ import annotations
 from neomodel import AsyncRelationshipFrom, AsyncRelationshipTo, AsyncZeroOrMore, StringProperty
 
 from nodes.base import BaseNode
+from nodes.relationships import HasPermissionRel
 
 
 class Group(BaseNode):
@@ -26,25 +27,14 @@ class Group(BaseNode):
         "MEMBER_OF",
         cardinality=AsyncZeroOrMore,
     )
-
     profiles = AsyncRelationshipTo(
         "nodes.profile.Profile",
         "ASSIGNED_PROFILE",
         cardinality=AsyncZeroOrMore,
     )
-
-    read_only_resources = AsyncRelationshipTo(
+    resources = AsyncRelationshipTo(
         "nodes.resource.Resource",
-        "READ_ONLY",
-        cardinality=AsyncZeroOrMore,
-    )
-    read_write_resources = AsyncRelationshipTo(
-        "nodes.resource.Resource",
-        "READ_WRITE",
-        cardinality=AsyncZeroOrMore,
-    )
-    admin_resources = AsyncRelationshipTo(
-        "nodes.resource.Resource",
-        "ADMIN",
+        "HAS_PERMISSION",
+        model=HasPermissionRel,
         cardinality=AsyncZeroOrMore,
     )
