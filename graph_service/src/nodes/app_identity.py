@@ -1,6 +1,14 @@
 from __future__ import annotations
 
-from neomodel import AsyncOne, AsyncRelationshipFrom, AsyncRelationshipTo, AsyncZeroOrMore, JSONProperty, StringProperty
+from neomodel import (
+    AsyncOne,
+    AsyncRelationshipFrom,
+    AsyncRelationshipTo,
+    AsyncZeroOrMore,
+    AsyncZeroOrOne,
+    JSONProperty,
+    StringProperty,
+)
 
 from nodes.base import BaseNode
 from nodes.relationships import HasPermissionRel
@@ -45,4 +53,9 @@ class AppIdentity(BaseNode):
         "HAS_PERMISSION",
         model=HasPermissionRel,
         cardinality=AsyncZeroOrMore,
+    )
+    connection = AsyncRelationshipTo(
+        "nodes.app_connection.AppConnection",
+        "BELONGS_TO",
+        cardinality=AsyncZeroOrOne,
     )

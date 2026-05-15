@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from neomodel import AsyncRelationshipFrom, AsyncZeroOrMore, StringProperty
+from neomodel import AsyncRelationshipFrom, AsyncRelationshipTo, AsyncZeroOrMore, AsyncZeroOrOne, StringProperty
 
 from nodes.base import BaseNode
 from nodes.relationships import HasPermissionRel
@@ -39,4 +39,9 @@ class Resource(BaseNode):
         "HAS_PERMISSION",
         model=HasPermissionRel,
         cardinality=AsyncZeroOrMore,
+    )
+    connection = AsyncRelationshipTo(
+        "nodes.app_connection.AppConnection",
+        "BELONGS_TO",
+        cardinality=AsyncZeroOrOne,
     )
