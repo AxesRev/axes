@@ -44,3 +44,9 @@ class AppIdentity(BaseNode):
         "ADMIN",
         cardinality=AsyncZeroOrMore,
     )
+
+    profiles = AsyncRelationshipTo(
+        "nodes.profile.Profile",
+        "ASSIGNED_PROFILE",
+        cardinality=AsyncZeroOrMore,
+    )

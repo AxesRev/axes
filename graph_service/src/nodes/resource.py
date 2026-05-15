@@ -38,3 +38,19 @@ class Resource(BaseNode):
         "ADMIN",
         cardinality=AsyncZeroOrMore,
     )
+
+    read_only_profiles = AsyncRelationshipFrom(
+        "nodes.profile.Profile",
+        "READ_ONLY",
+        cardinality=AsyncZeroOrMore,
+    )
+    read_write_profiles = AsyncRelationshipFrom(
+        "nodes.profile.Profile",
+        "READ_WRITE",
+        cardinality=AsyncZeroOrMore,
+    )
+    admin_profiles = AsyncRelationshipFrom(
+        "nodes.profile.Profile",
+        "ADMIN",
+        cardinality=AsyncZeroOrMore,
+    )

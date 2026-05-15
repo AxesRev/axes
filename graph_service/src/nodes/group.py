@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from neomodel import AsyncRelationshipFrom, AsyncZeroOrMore, StringProperty
+from neomodel import AsyncRelationshipFrom, AsyncRelationshipTo, AsyncZeroOrMore, StringProperty
 
 from nodes.base import BaseNode
 
@@ -24,5 +24,11 @@ class Group(BaseNode):
     group_members = AsyncRelationshipFrom(
         "nodes.group.Group",
         "MEMBER_OF",
+        cardinality=AsyncZeroOrMore,
+    )
+
+    profiles = AsyncRelationshipTo(
+        "nodes.profile.Profile",
+        "ASSIGNED_PROFILE",
         cardinality=AsyncZeroOrMore,
     )
