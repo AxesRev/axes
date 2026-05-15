@@ -23,6 +23,47 @@ class GithubAppSettings(BaseSettings):
         return Path(self.GITHUB_APP_PRIVATE_KEY_PATH).read_text(encoding="utf-8")
 
 
+class RunnerSettings(BaseSettings):
+    """Settings required to run the fetcher as a standalone script."""
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
+    # Neo4j
+    NEO4J_URI: str = "bolt://localhost:7687"
+    NEO4J_USER: str = "neo4j"
+    NEO4J_PASSWORD: str = "neo4j"
+
+    # Postgres
+    POSTGRES_USER: str = "postgres"
+    POSTGRES_PASSWORD: str = "postgres"
+    POSTGRES_HOST: str = "localhost"
+    POSTGRES_PORT: int = 5433
+    POSTGRES_DB: str = "aegra"
+
+    @computed_field
+    @property
+    def postgres_url(self) -> str:
+        return (
+            f"postgresql://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}"
+            f"@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
+        )
+
+    @computed_field
+    @property
+    def neomodel_url(self) -> str:
+        uri = self.NEO4J_URI.removeprefix("bolt://")
+        return f"bolt://{self.NEO4J_USER}:{self.NEO4J_PASSWORD}@{uri}"
+
+
 @lru_cache
 def get_github_settings() -> GithubAppSettings:
     return GithubAppSettings()
+
+
+@lru_cache
+def get_runner_settings() -> RunnerSettings:
+    return RunnerSettings()

@@ -91,6 +91,7 @@ name = "aegra-neo4j-mcp"
 version = "0.1.0"
 source = { editable = "graph_service" }
 dependencies = [
+    { name = "asyncpg" },
     { name = "mcp" },
     { name = "neo4j" },
     { name = "neomodel" },
@@ -110,6 +111,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "asyncpg", specifier = ">=0.31.0" },
     { name = "mcp", specifier = ">=1.0.0" },
     { name = "neo4j", specifier = ">=5.0.0" },
     { name = "neomodel", specifier = ">=6.1.0" },

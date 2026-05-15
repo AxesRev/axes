@@ -6,20 +6,29 @@ Fetches the org/account, all repos the app has access to, and all org
 members, then upserts them as AppConnection, Resource, and AppIdentity
 nodes linked under a Tenant.  A dummy Tenant is created if one does not
 yet exist for this installation.
+
+Run directly:
+    cd graph_service
+    uv run --package aegra-neo4j-mcp python -m integrations.github.fetcher
 """
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import sys
 
+import asyncpg
 from github import Auth, GithubIntegration
 from github.Installation import Installation
 from github.NamedUser import NamedUser
 from github.Organization import Organization
 from github.Repository import Repository
+from neomodel import adb, install_all_labels
 
+import common_nodes as _common_nodes  # noqa: F401 — registers all node classes with neomodel
 from integrations.github.models import GithubConnectionExtra, GithubIdentityExtra, GithubResourceExtra
-from integrations.github.settings import get_github_settings
+from integrations.github.settings import get_github_settings, get_runner_settings
 from nodes.app_connection import AppConnection
 from nodes.app_identity import AppIdentity
 from nodes.resource import Resource
@@ -156,3 +165,35 @@ async def fetch_installation(installation_id: int) -> None:
         await _upsert_identity(user, connection)
 
     logger.info("fetch_complete", extra={"installation_id": installation_id, "login": account.login})
+
+
+async def _run_once() -> None:
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s %(message)s")
+    runner = get_runner_settings()
+
+    pg_conn = await asyncpg.connect(runner.postgres_url)
+    try:
+        row = await pg_conn.fetchrow(
+            "SELECT github_installation_id FROM user_identities WHERE github_installation_id IS NOT NULL LIMIT 1"
+        )
+    finally:
+        await pg_conn.close()
+
+    if row is None:
+        logger.error("no_installation_id_found_in_postgres")
+        sys.exit(1)
+
+    installation_id = int(row["github_installation_id"])
+    logger.info("resolved_installation_id", extra={"installation_id": installation_id})
+
+    await adb.set_connection(runner.neomodel_url)
+    await install_all_labels()
+
+    try:
+        await fetch_installation(installation_id)
+    finally:
+        await adb.close_connection()
+
+
+if __name__ == "__main__":
+    asyncio.run(_run_once())
