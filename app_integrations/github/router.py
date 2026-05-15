@@ -20,7 +20,10 @@ GET /auth/github/install?installation_id=...&state=...&setup_action=...
 
 from __future__ import annotations
 
+import time
+
 import httpx
+import jwt as pyjwt
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -189,39 +192,58 @@ async def github_oauth_callback(
     Returns:
         HTML success page.
     """
-    # Scenario B: GitHub App installation — exchange the code to get the
-    # installer's identity, then store the installation record.
+    # Scenario B: GitHub App installation — use the App JWT to fetch the
+    # installation and get the target account (org or user).
     if state is None:
         github_user_id: str | None = None
         github_username: str | None = None
 
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            token_response = await client.post(
-                _GITHUB_TOKEN_URL,
-                data={
-                    "client_id": github_settings.GITHUB_CLIENT_ID,
-                    "client_secret": github_settings.GITHUB_CLIENT_SECRET,
-                    "code": code,
-                    "redirect_uri": f"{github_settings.SERVER_URL}/auth/github/callback",
-                },
-                headers={"Accept": "application/json"},
-            )
-
-        if token_response.status_code == status.HTTP_200_OK:
-            access_token = token_response.json().get("access_token")
-            if access_token:
+        if installation_id is not None:
+            app_pk = github_settings.github_app_private_key
+            if github_settings.GITHUB_APP_ID <= 0 or app_pk is None:
+                logger.warning(
+                    "github_app_install_skipped_installation_lookup",
+                    installation_id=installation_id,
+                    has_app_id=github_settings.GITHUB_APP_ID > 0,
+                    has_private_key=app_pk is not None,
+                )
+            else:
+                now = int(time.time())
+                app_jwt = pyjwt.encode(
+                    {"iat": now - 60, "exp": now + 600, "iss": str(github_settings.GITHUB_APP_ID)},
+                    app_pk,
+                    algorithm="RS256",
+                )
                 async with httpx.AsyncClient(timeout=15.0) as client:
-                    user_response = await client.get(
-                        _GITHUB_USER_URL,
+                    install_response = await client.get(
+                        f"https://api.github.com/app/installations/{installation_id}",
                         headers={
-                            "Authorization": f"Bearer {access_token}",
+                            "Authorization": f"Bearer {app_jwt}",
                             "Accept": "application/vnd.github+json",
+                            "X-GitHub-Api-Version": "2022-11-28",
                         },
                     )
-                if user_response.status_code == status.HTTP_200_OK:
-                    user_data = user_response.json()
-                    github_user_id = str(user_data["id"])
-                    github_username = user_data["login"]
+                if install_response.status_code != status.HTTP_200_OK:
+                    logger.error(
+                        "github_app_install_lookup_failed",
+                        installation_id=installation_id,
+                        status_code=install_response.status_code,
+                        body=install_response.text[:2000],
+                    )
+                else:
+                    payload = install_response.json()
+                    account = payload.get("account") or {}
+                    aid = account.get("id")
+                    login = account.get("login")
+                    if aid is None or login is None:
+                        logger.error(
+                            "github_app_install_missing_account",
+                            installation_id=installation_id,
+                            keys=list(payload.keys()),
+                        )
+                    else:
+                        github_user_id = str(aid)
+                        github_username = str(login)
 
         if installation_id is not None:
             await store_installation_by_github_user_id(

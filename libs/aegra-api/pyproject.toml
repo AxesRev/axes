@@ -39,6 +39,8 @@ dependencies = [
     # Utils
     "structlog>=25.4.0",
     "asgi-correlation-id>=4.3.4",
+    "pyjwt>=2.11.0",
+    "cryptography>=46.0.5",
 ]
 
 [project.urls]
