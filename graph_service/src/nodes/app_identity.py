@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from neomodel import AsyncOne, AsyncRelationshipFrom, JSONProperty, StringProperty
+from neomodel import AsyncOne, AsyncRelationshipFrom, AsyncRelationshipTo, AsyncZeroOrMore, JSONProperty, StringProperty
 
 from nodes.base import BaseNode
 
@@ -22,4 +22,9 @@ class AppIdentity(BaseNode):
         "nodes.identity.Identity",
         "HAS_PROFILE",
         cardinality=AsyncOne,
+    )
+    groups = AsyncRelationshipTo(
+        "nodes.group.Group",
+        "MEMBER_OF",
+        cardinality=AsyncZeroOrMore,
     )
