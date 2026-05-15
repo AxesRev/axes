@@ -33,3 +33,6 @@ htmlcov/
 
 # MacOS
 .DS_Store
+
+# Private keys
+*.pem
