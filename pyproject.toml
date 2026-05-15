@@ -65,6 +65,7 @@ python-version = "3.12"
 exclude_dirs = ["tests", ".venv"]
 skips = [
     "B101",  # assert statements
+    "B104",  # binding to all interfaces (0.0.0.0 default is intentional for server configs)
     "B404",  # import subprocess (needed for CLI)
     "B603",  # subprocess without shell=True (needed for CLI)
     "B607",  # partial executable path (needed for CLI to run docker, systemctl, etc.)
