@@ -54,3 +54,19 @@ class Resource(BaseNode):
         "ADMIN",
         cardinality=AsyncZeroOrMore,
     )
+
+    read_only_groups = AsyncRelationshipFrom(
+        "nodes.group.Group",
+        "READ_ONLY",
+        cardinality=AsyncZeroOrMore,
+    )
+    read_write_groups = AsyncRelationshipFrom(
+        "nodes.group.Group",
+        "READ_WRITE",
+        cardinality=AsyncZeroOrMore,
+    )
+    admin_groups = AsyncRelationshipFrom(
+        "nodes.group.Group",
+        "ADMIN",
+        cardinality=AsyncZeroOrMore,
+    )
