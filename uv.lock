@@ -89,7 +89,7 @@ dev = [
 [[package]]
 name = "aegra-neo4j-mcp"
 version = "0.1.0"
-source = { editable = "libs/neo4j-mcp" }
+source = { editable = "graph_service" }
 dependencies = [
     { name = "mcp" },
     { name = "neo4j" },

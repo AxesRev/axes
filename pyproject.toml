@@ -16,7 +16,7 @@ dependencies = [
 package = false
 
 [tool.uv.workspace]
-members = ["libs/*"]
+members = ["libs/*", "graph_service"]
 
 [dependency-groups]
 dev = [
