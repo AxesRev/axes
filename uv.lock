@@ -93,6 +93,7 @@ source = { editable = "graph_service" }
 dependencies = [
     { name = "mcp" },
     { name = "neo4j" },
+    { name = "neomodel" },
     { name = "pydantic-settings" },
     { name = "starlette" },
     { name = "structlog" },
@@ -110,6 +111,7 @@ dev = [
 requires-dist = [
     { name = "mcp", specifier = ">=1.0.0" },
     { name = "neo4j", specifier = ">=5.0.0" },
+    { name = "neomodel", specifier = ">=6.1.0" },
     { name = "pydantic-settings", specifier = ">=2.0.0" },
     { name = "starlette", specifier = ">=0.40.0" },
     { name = "structlog", specifier = ">=25.0.0" },
@@ -1177,14 +1179,27 @@ wheels = [
 
 [[package]]
 name = "neo4j"
-version = "6.2.0"
+version = "6.1.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pytz" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/ce/f4/aaa4ac19adae4b01bc742b63afd2672a77e7351566f02721e713e4b863ee/neo4j-6.2.0.tar.gz", hash = "sha256:e1e246b65b572bd8ea97f9e0e721b7d40a5ce53e53d0007c29aef63e4f9124d9", size = 241459, upload-time = "2026-05-04T07:35:41.428Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/1b/01/d6ce65e4647f6cb2b9cca3b813978f7329b54b4e36660aaec1ddf0ccce7a/neo4j-6.1.0.tar.gz", hash = "sha256:b5dde8c0d8481e7b6ae3733569d990dd3e5befdc5d452f531ad1884ed3500b84", size = 239629, upload-time = "2026-01-12T11:27:34.777Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/e6/cf/1c3795866cefaac6e648d4e98c373cafd97810f6e317c307371007ab4abb/neo4j-6.2.0-py3-none-any.whl", hash = "sha256:b87abdd13a5cc2e3bd51026926c2f20ac38fa3febe98c340520dce19e97388d0", size = 327824, upload-time = "2026-05-04T07:35:39.604Z" },
+    { url = "https://files.pythonhosted.org/packages/70/5c/ee71e2dd955045425ef44283f40ba1da67673cf06404916ca2950ac0cd39/neo4j-6.1.0-py3-none-any.whl", hash = "sha256:3bd93941f3a3559af197031157220af9fd71f4f93a311db687bd69ffa417b67d", size = 325326, upload-time = "2026-01-12T11:27:33.196Z" },
+]
+
+[[package]]
+name = "neomodel"
+version = "6.1.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "neo4j" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/1d/39/8ef5c855acd7ada9b514ad36dc9253afc035778131ea31ce29db1652eb97/neomodel-6.1.0.tar.gz", hash = "sha256:1c8c4e1c0e4e10ff58b214ee4822a0a6e2888318184ae648f8f5312ce0f2d547", size = 244211, upload-time = "2026-03-04T13:40:52.232Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/71/f9/9b46895ed0ea330c63d7dda2f4d8438e947f3cc28da818c857f1512b1ab8/neomodel-6.1.0-py3-none-any.whl", hash = "sha256:4a840e7deba5c0318553c58479e8aa6a9ad80397b3e84ef40570a1d4ab963950", size = 287329, upload-time = "2026-03-04T13:40:50.941Z" },
 ]
 
 [[package]]

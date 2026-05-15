@@ -6,7 +6,7 @@ coupling.  They are registered on the FastMCP instance in
 testable and free of framework concerns.
 
 TODO: replace the dummy implementation with real Neo4j queries using the
-helpers in ``neo4j_mcp.db.queries``.
+helpers in ``db.queries``.
 """
 
 from typing import Any
@@ -25,5 +25,5 @@ async def execute_cypher(
     Returns:
         Query results serialised as a JSON string.
     """
-    # TODO: wire up to neo4j_mcp.db.queries.run_read_query / run_write_query
+    # TODO: wire up to db.queries.run_read_query / run_write_query
     return "hello world"

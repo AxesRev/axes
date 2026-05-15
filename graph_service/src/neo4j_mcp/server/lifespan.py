@@ -7,8 +7,10 @@ from dataclasses import dataclass
 
 from mcp.server.fastmcp import FastMCP
 from neo4j import AsyncDriver
+from neomodel import adb, install_all_labels
 
-from neo4j_mcp.db.client import close_driver, init_driver, verify_connectivity
+import common_nodes as _common_nodes  # noqa: F401 — registers all node classes with neomodel
+from db.client import close_driver, init_driver, verify_connectivity
 from neo4j_mcp.settings import get_settings
 
 logger = logging.getLogger(__name__)
@@ -41,8 +43,16 @@ async def neo4j_lifespan(server: FastMCP) -> AsyncIterator[AppContext]:
     )
     await verify_connectivity()
 
+    neomodel_url = (
+        f"bolt://{settings.neo4j_user}:{settings.neo4j_password}@{settings.neo4j_uri.removeprefix('bolt://')}"
+    )
+    await adb.set_connection(neomodel_url)
+    await install_all_labels()
+    logger.info("neomodel connected and labels installed")
+
     try:
         yield AppContext(driver=driver)
     finally:
         logger.info("neo4j_mcp shutting down")
+        await adb.close_connection()
         await close_driver()
