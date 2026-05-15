@@ -28,6 +28,7 @@ class UserIdentity(Base):
     slack_user_id: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
     github_user_id: Mapped[str | None] = mapped_column(Text, nullable=True)
     github_username: Mapped[str | None] = mapped_column(Text, nullable=True)
+    github_installation_id: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True),
         server_default=text("now()"),

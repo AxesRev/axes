@@ -149,6 +149,37 @@ async def handle_access_request(
     return AccessRequestResult(linked=True, identity=result)
 
 
+async def store_github_installation(
+    *,
+    slack_user_id: str,
+    installation_id: str,
+    session: AsyncSession,
+) -> UserIdentity:
+    """Persist the GitHub App *installation_id* for *slack_user_id*.
+
+    Creates the ``UserIdentity`` row if it does not yet exist (e.g. the user
+    installed the app before completing OAuth).
+
+    Args:
+        slack_user_id: Slack user ID recovered from the verified signed state.
+        installation_id: GitHub App installation ID supplied by GitHub.
+        session: Active async database session.
+
+    Returns:
+        The updated ``UserIdentity`` row.
+    """
+    identity = await _get_or_create_identity(slack_user_id, session)
+    identity.github_installation_id = installation_id
+    identity.updated_at = datetime.now(UTC)
+    await session.commit()
+    logger.info(
+        "github_installation_stored",
+        slack_user_id=slack_user_id,
+        installation_id=installation_id,
+    )
+    return identity
+
+
 async def link_github_identity(
     *,
     slack_user_id: str,

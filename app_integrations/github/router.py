@@ -11,6 +11,11 @@ GET /auth/github/callback?code=...&state=...
     Receives the GitHub callback, verifies the ``state`` signature, exchanges
     the authorization code for a GitHub access token, fetches the user's
     GitHub identity, and stores the Slack → GitHub mapping.
+
+GET /auth/github/install?installation_id=...&state=...&setup_action=...
+    Receives the GitHub App installation callback.  Verifies the signed
+    ``state`` to recover the ``slack_user_id``, then persists the
+    ``installation_id`` on the corresponding ``user_identities`` row.
 """
 
 from __future__ import annotations
@@ -25,7 +30,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from aegra_api.core.orm import get_session
 from app_integrations.github.models import OAuthState
 from app_integrations.github.oauth_state import create_github_oauth_state, verify_github_oauth_state
-from app_integrations.github.service import link_github_identity
+from app_integrations.github.service import link_github_identity, store_github_installation
 from app_integrations.github.settings import github_settings
 
 logger = structlog.getLogger(__name__)
@@ -253,5 +258,85 @@ async def github_oauth_callback(
     )
     return HTMLResponse(
         content=_SUCCESS_HTML.format(github_username=github_username),
+        status_code=status.HTTP_200_OK,
+    )
+
+
+_INSTALL_SUCCESS_HTML = """<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>GitHub App Installed</title>
+  <style>
+    body {{ font-family: sans-serif; display: flex; justify-content: center;
+           align-items: center; height: 100vh; margin: 0; background: #f6f8fa; }}
+    .card {{ background: white; border-radius: 8px; padding: 2rem 3rem;
+             box-shadow: 0 2px 8px rgba(0,0,0,.12); text-align: center; }}
+    h1 {{ color: #2da44e; }}
+    p  {{ color: #57606a; }}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>&#10003; GitHub App installed</h1>
+    <p>Installation <strong>#{installation_id}</strong> has been recorded.<br>
+       You can close this tab and return to Slack.</p>
+  </div>
+</body>
+</html>"""
+
+
+@router.get("/install")
+async def github_app_install_callback(
+    installation_id: str,
+    state: str,
+    setup_action: str = "install",
+    session: AsyncSession = Depends(get_session),
+) -> HTMLResponse:
+    """Handle the GitHub App installation callback.
+
+    GitHub redirects here after a user installs the app.  The ``state``
+    parameter must be the HMAC-signed value generated when the bot sent the
+    user their installation link — it encodes the ``slack_user_id`` so we can
+    associate the installation without trusting client input.
+
+    Steps:
+    1. Verify and decode the signed ``state`` to recover ``slack_user_id``.
+    2. Persist ``installation_id`` on the ``user_identities`` row.
+    3. Return a success HTML page the user can close.
+
+    Args:
+        installation_id: GitHub App installation ID provided by GitHub.
+        state: HMAC-signed state containing the ``slack_user_id``.
+        setup_action: Action that triggered the callback (``install`` /
+            ``update`` / ``delete``).  Defaults to ``"install"``.
+        session: Injected async database session.
+
+    Returns:
+        HTML success page.
+    """
+    try:
+        slack_user_id = verify_github_oauth_state(state, github_settings.GITHUB_OAUTH_STATE_SECRET)
+    except ValueError as exc:
+        logger.warning("github_install_invalid_state", error=str(exc))
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid state parameter: {exc}",
+        )
+
+    await store_github_installation(
+        slack_user_id=slack_user_id,
+        installation_id=installation_id,
+        session=session,
+    )
+
+    logger.info(
+        "github_app_install_complete",
+        slack_user_id=slack_user_id,
+        installation_id=installation_id,
+        setup_action=setup_action,
+    )
+    return HTMLResponse(
+        content=_INSTALL_SUCCESS_HTML.format(installation_id=installation_id),
         status_code=status.HTTP_200_OK,
     )
