@@ -24,7 +24,7 @@ from github.Installation import Installation
 from github.NamedUser import NamedUser
 from github.Organization import Organization
 from github.Repository import Repository
-from neomodel import adb, install_all_labels
+from neomodel import adb
 
 import common_nodes as _common_nodes  # noqa: F401 — registers all node classes with neomodel
 from integrations.github.models import GithubConnectionExtra, GithubIdentityExtra, GithubResourceExtra
@@ -50,7 +50,7 @@ async def _get_or_create_dummy_tenant(name: str) -> Tenant:
     if results:
         return results[0]
     tenant = await Tenant(name=name).save()
-    logger.info("created_dummy_tenant", extra={"name": name})
+    logger.info("created_dummy_tenant tenant=%s", name)
     return tenant
 
 
@@ -65,11 +65,16 @@ async def _upsert_connection(
         html_url=account.html_url,
         avatar_url=account.avatar_url,
     )
-    connection, created = await AppConnection.get_or_create(
-        {"app": _GITHUB_APP, "external_id": str(account.id)},
-        defaults={"name": account.login, "extra": extra.model_dump()},
-    )
-    if not created:
+    connection = await AppConnection.nodes.get_or_none(app=_GITHUB_APP, external_id=str(account.id))
+    if connection is None:
+        connection = await AppConnection(
+            app=_GITHUB_APP,
+            external_id=str(account.id),
+            name=account.login,
+            extra=extra.model_dump(),
+        ).save()
+        logger.info("created_app_connection login=%s", account.login)
+    else:
         connection.name = account.login
         connection.extra = extra.model_dump()
         await connection.save()
@@ -77,8 +82,6 @@ async def _upsert_connection(
     if not await connection.tenant.is_connected(tenant):
         await connection.tenant.connect(tenant)
 
-    if created:
-        logger.info("created_app_connection", extra={"login": account.login})
     return connection
 
 
@@ -91,11 +94,16 @@ async def _upsert_resource(repo: Repository, connection: AppConnection) -> Resou
         html_url=repo.html_url,
         visibility=repo.visibility,
     )
-    resource, created = await Resource.get_or_create(
-        {"uri": repo.full_name},
-        defaults={"name": repo.name, "kind": "repository", "extra": extra.model_dump()},
-    )
-    if not created:
+    resource = await Resource.nodes.get_or_none(uri=repo.full_name)
+    if resource is None:
+        resource = await Resource(
+            uri=repo.full_name,
+            name=repo.name,
+            kind="repository",
+            extra=extra.model_dump(),
+        ).save()
+        logger.info("created_resource full_name=%s", repo.full_name)
+    else:
         resource.name = repo.name
         resource.extra = extra.model_dump()
         await resource.save()
@@ -103,8 +111,6 @@ async def _upsert_resource(repo: Repository, connection: AppConnection) -> Resou
     if not await resource.connection.is_connected(connection):
         await resource.connection.connect(connection)
 
-    if created:
-        logger.info("created_resource", extra={"full_name": repo.full_name})
     return resource
 
 
@@ -117,19 +123,21 @@ async def _upsert_identity(user: NamedUser, connection: AppConnection) -> AppIde
         html_url=user.html_url,
         avatar_url=user.avatar_url,
     )
-    identity, created = await AppIdentity.get_or_create(
-        {"app": _GITHUB_APP, "external_id": str(user.id)},
-        defaults={"extra": extra.model_dump()},
-    )
-    if not created:
+    identity = await AppIdentity.nodes.get_or_none(app=_GITHUB_APP, external_id=str(user.id))
+    if identity is None:
+        identity = await AppIdentity(
+            app=_GITHUB_APP,
+            external_id=str(user.id),
+            extra=extra.model_dump(),
+        ).save()
+        logger.info("created_app_identity login=%s", user.login)
+    else:
         identity.extra = extra.model_dump()
         await identity.save()
 
     if not await identity.connection.is_connected(connection):
         await identity.connection.connect(connection)
 
-    if created:
-        logger.info("created_app_identity", extra={"login": user.login})
     return identity
 
 
@@ -143,7 +151,7 @@ async def fetch_installation(installation_id: int) -> None:
         installation_id: The GitHub App installation ID stored in UserIdentity.
     """
     gi = _make_github_integration()
-    installation: Installation = gi.get_installation(installation_id)
+    installation: Installation = gi.get_app_installation(installation_id)
     account: Organization | NamedUser = installation.account
 
     gh = gi.get_github_for_installation(installation_id)
@@ -151,11 +159,11 @@ async def fetch_installation(installation_id: int) -> None:
     tenant = await _get_or_create_dummy_tenant(f"github:{account.login}")
     connection = await _upsert_connection(account, tenant)
 
-    logger.info("fetching_repos", extra={"login": account.login})
-    for repo in gh.get_installation(installation_id).get_repos():
+    logger.info("fetching_repos login=%s", account.login)
+    for repo in installation.get_repos():
         await _upsert_resource(repo, connection)
 
-    logger.info("fetching_members", extra={"login": account.login})
+    logger.info("fetching_members login=%s", account.login)
     if account.type == "Organization":
         org: Organization = gh.get_organization(account.login)
         for member in org.get_members():
@@ -164,7 +172,7 @@ async def fetch_installation(installation_id: int) -> None:
         user: NamedUser = gh.get_user(account.login)
         await _upsert_identity(user, connection)
 
-    logger.info("fetch_complete", extra={"installation_id": installation_id, "login": account.login})
+    logger.info("fetch_complete installation_id=%s login=%s", installation_id, account.login)
 
 
 async def _run_once() -> None:
@@ -184,10 +192,10 @@ async def _run_once() -> None:
         sys.exit(1)
 
     installation_id = int(row["github_installation_id"])
-    logger.info("resolved_installation_id", extra={"installation_id": installation_id})
+    logger.info("resolved_installation_id=%s", installation_id)
 
     await adb.set_connection(runner.neomodel_url)
-    await install_all_labels()
+    await adb.install_all_labels()
 
     try:
         await fetch_installation(installation_id)

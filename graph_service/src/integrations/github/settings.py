@@ -6,10 +6,13 @@ from pathlib import Path
 from pydantic import computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+_REPO_ROOT = Path(__file__).resolve().parents[4]
+_ENV_FILE = str(_REPO_ROOT / ".env")
+
 
 class GithubAppSettings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=_ENV_FILE,
         env_file_encoding="utf-8",
         extra="ignore",
     )
@@ -20,14 +23,17 @@ class GithubAppSettings(BaseSettings):
     @computed_field
     @property
     def private_key(self) -> str:
-        return Path(self.GITHUB_APP_PRIVATE_KEY_PATH).read_text(encoding="utf-8")
+        path = Path(self.GITHUB_APP_PRIVATE_KEY_PATH)
+        if not path.is_absolute():
+            path = _REPO_ROOT / path
+        return path.read_text(encoding="utf-8")
 
 
 class RunnerSettings(BaseSettings):
     """Settings required to run the fetcher as a standalone script."""
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=_ENV_FILE,
         env_file_encoding="utf-8",
         extra="ignore",
     )

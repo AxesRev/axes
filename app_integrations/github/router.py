@@ -189,19 +189,51 @@ async def github_oauth_callback(
     Returns:
         HTML success page.
     """
-    # Scenario B: GitHub App installation — store installation_id and return
-    # immediately.  No code exchange needed or desired.
+    # Scenario B: GitHub App installation — exchange the code to get the
+    # installer's identity, then store the installation record.
     if state is None:
+        github_user_id: str | None = None
+        github_username: str | None = None
+
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            token_response = await client.post(
+                _GITHUB_TOKEN_URL,
+                data={
+                    "client_id": github_settings.GITHUB_CLIENT_ID,
+                    "client_secret": github_settings.GITHUB_CLIENT_SECRET,
+                    "code": code,
+                    "redirect_uri": f"{github_settings.SERVER_URL}/auth/github/callback",
+                },
+                headers={"Accept": "application/json"},
+            )
+
+        if token_response.status_code == status.HTTP_200_OK:
+            access_token = token_response.json().get("access_token")
+            if access_token:
+                async with httpx.AsyncClient(timeout=15.0) as client:
+                    user_response = await client.get(
+                        _GITHUB_USER_URL,
+                        headers={
+                            "Authorization": f"Bearer {access_token}",
+                            "Accept": "application/vnd.github+json",
+                        },
+                    )
+                if user_response.status_code == status.HTTP_200_OK:
+                    user_data = user_response.json()
+                    github_user_id = str(user_data["id"])
+                    github_username = user_data["login"]
+
         if installation_id is not None:
             await store_installation_by_github_user_id(
-                github_user_id=None,
-                github_username=None,
+                github_user_id=github_user_id,
+                github_username=github_username,
                 installation_id=installation_id,
                 session=session,
             )
         logger.info(
             "github_app_install_complete",
             installation_id=installation_id,
+            github_username=github_username,
             setup_action=setup_action,
         )
         return HTMLResponse(
