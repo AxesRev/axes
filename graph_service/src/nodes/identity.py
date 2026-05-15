@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from neomodel import AsyncRelationshipTo, AsyncZeroOrMore, StringProperty
+from neomodel import AsyncRelationshipTo, AsyncZeroOrMore, AsyncZeroOrOne, StringProperty
 
 from nodes.base import BaseNode
 
@@ -28,4 +28,9 @@ class Identity(BaseNode):
         "nodes.app_identity.AppIdentity",
         "HAS_PROFILE",
         cardinality=AsyncZeroOrMore,
+    )
+    tenant = AsyncRelationshipTo(
+        "nodes.tenant.Tenant",
+        "BELONGS_TO",
+        cardinality=AsyncZeroOrOne,
     )

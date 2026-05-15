@@ -4,5 +4,6 @@ from nodes.group import Group
 from nodes.identity import Identity
 from nodes.profile import Profile
 from nodes.resource import Resource
+from nodes.tenant import Tenant
 
-__all__ = ["Identity", "AppConnection", "AppIdentity", "Group", "Resource", "Profile"]
+__all__ = ["Tenant", "Identity", "AppConnection", "AppIdentity", "Group", "Resource", "Profile"]

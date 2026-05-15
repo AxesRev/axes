@@ -1,6 +1,13 @@
 from __future__ import annotations
 
-from neomodel import AsyncRelationshipFrom, AsyncZeroOrMore, JSONProperty, StringProperty
+from neomodel import (
+    AsyncRelationshipFrom,
+    AsyncRelationshipTo,
+    AsyncZeroOrMore,
+    AsyncZeroOrOne,
+    JSONProperty,
+    StringProperty,
+)
 
 from nodes.base import BaseNode
 
@@ -41,4 +48,9 @@ class AppConnection(BaseNode):
         "nodes.profile.Profile",
         "BELONGS_TO",
         cardinality=AsyncZeroOrMore,
+    )
+    tenant = AsyncRelationshipTo(
+        "nodes.tenant.Tenant",
+        "BELONGS_TO",
+        cardinality=AsyncZeroOrOne,
     )
