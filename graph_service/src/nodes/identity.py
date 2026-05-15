@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from neomodel import AsyncRelationshipTo, AsyncZeroOrOne, StringProperty
+from neomodel import AsyncRelationshipTo, AsyncZeroOrMore, StringProperty
 
 from nodes.base import BaseNode
 
@@ -24,8 +24,8 @@ class Identity(BaseNode):
     name = StringProperty(required=True)
     kind = StringProperty(choices=_IDENTITY_KINDS, required=True)
 
-    github_profile = AsyncRelationshipTo(
-        "integrations.github.nodes.GithubUser",
+    app_profiles = AsyncRelationshipTo(
+        "nodes.app_identity.AppIdentity",
         "HAS_PROFILE",
-        cardinality=AsyncZeroOrOne,
+        cardinality=AsyncZeroOrMore,
     )

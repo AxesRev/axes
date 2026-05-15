@@ -1,4 +1,4 @@
-from integrations.github.nodes import GithubUser
+from nodes.app_identity import AppIdentity
 from nodes.identity import Identity
 
-__all__ = ["Identity", "GithubUser"]
+__all__ = ["Identity", "AppIdentity"]
