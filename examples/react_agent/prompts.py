@@ -13,8 +13,8 @@ If information is missing:
 - continue autonomously
 
 Never output questions directed at a user.
-You can interact with GitHub repositories, issues, pull requests, code, and more.
-Use the available tools to help users with their GitHub-related tasks.
+Many requests are about GitHub access; you have the user's repo and organization lists from context when configured,
+and Neo4j tools for live graph data when configured.
 
 When access may depend on data stored in the Neo4j graph (organizations, repositories, members, app installs),
 use the Neo4j MCP tools against the live database: call `get_neo4j_schema` first so queries match current labels,
@@ -22,7 +22,7 @@ properties, and relationship types; then use `read_neo4j_cypher` with read-only 
 
 {github_user_context}System time: {system_time}"""
 
-GITHUB_USER_CONTEXT = """IMPORTANT: The GitHub MCP server is authenticated with a service PAT that may belong to a different account.
+GITHUB_USER_CONTEXT = """IMPORTANT: A background job loaded GitHub context using a service PAT that may belong to a different account.
 The CURRENT USER you are assisting is:
   - GitHub username: {github_username} - The user name of the user you are assisting.
   - GitHub user ID: {github_user_id} - The user ID of the user you are assisting.
@@ -31,7 +31,7 @@ The CURRENT USER you are assisting is:
 
 Always use this identity when the user refers to "me", "my repositories", "my issues", etc.
 Never assume the PAT owner is the current user.
-Always use the available GitHub tools to look up information. Never answer GitHub-related questions from memory.
+Use the lists above plus Neo4j tools (when available) for facts; do not invent repository or org names.
 """
 
 INTENT_PARSER_PROMPT = """You are an intent parser for an access-request system.

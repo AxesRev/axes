@@ -47,7 +47,7 @@ def _truncate_if_oversized(message: ToolMessage, encoder: tiktoken.Encoding) -> 
 
 
 async def execute_tools(state: State, runtime: Runtime[Context]) -> dict[str, list[Any]]:
-    """Execute tools (GitHub MCP stdio, Neo4j MCP remote HTTP, or static TOOLS)."""
+    """Execute tools (Neo4j MCP over HTTP when configured, plus static TOOLS)."""
     last_message = state.messages[-1]
     tool_names = [tc["name"] for tc in getattr(last_message, "tool_calls", [])]
     logger.info("Node tools: executing %d tool(s): %s", len(tool_names), tool_names)
@@ -63,23 +63,8 @@ async def execute_tools(state: State, runtime: Runtime[Context]) -> dict[str, li
     return result
 
 
-def _mcp_servers(runtime: Runtime[Context]) -> dict[str, dict[str, Any]]:
+def _mcp_servers() -> dict[str, dict[str, Any]]:
     servers: dict[str, dict[str, Any]] = {}
-
-    if runtime.context.github_pat:
-        servers["github"] = {
-            "transport": "stdio",
-            "command": "docker",
-            "args": [
-                "run",
-                "-i",
-                "--rm",
-                "-e",
-                "GITHUB_PERSONAL_ACCESS_TOKEN",
-                "ghcr.io/github/github-mcp-server",
-            ],
-            "env": {"GITHUB_PERSONAL_ACCESS_TOKEN": runtime.context.github_pat},
-        }
 
     neo4j_host = os.environ.get("NEO4J_MCP_HOST", "").strip()
     if neo4j_host:
@@ -88,9 +73,9 @@ def _mcp_servers(runtime: Runtime[Context]) -> dict[str, dict[str, Any]]:
     return servers
 
 
-async def _get_all_tools(runtime: Runtime[Context]) -> list[Any]:
-    """Static tools plus MCP tools when GitHub PAT is set and/or NEO4J_MCP_HOST is set."""
-    servers = _mcp_servers(runtime)
+async def _get_all_tools(_runtime: Runtime[Context]) -> list[Any]:
+    """Static TOOLS plus MCP tools when ``NEO4J_MCP_HOST`` is set."""
+    servers = _mcp_servers()
     if not servers:
         return list(TOOLS)
 

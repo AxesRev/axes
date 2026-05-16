@@ -37,7 +37,10 @@ class Context:
     github_pat: str = field(
         default="",
         metadata={
-            "description": "GitHub Personal Access Token for GitHub MCP server. Leave empty to disable GitHub tools."
+            "description": (
+                "GitHub PAT used only to load the current user's repos/orgs into state (see github_context). "
+                "Not used for MCP tools."
+            ),
         },
     )
 
