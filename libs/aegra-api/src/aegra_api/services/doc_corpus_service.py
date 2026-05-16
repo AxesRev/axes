@@ -109,7 +109,8 @@ async def _firecrawl_start_crawl(
         "scrapeOptions": {
             "onlyMainContent": True,
             "maxAge": 172800000,
-            "parsers": ["pdf"],
+            # No PDF/binary parsers — HTML→markdown text only (lighter; avoids PDF credits).
+            "parsers": [],
             "formats": ["markdown"],
         },
     }
