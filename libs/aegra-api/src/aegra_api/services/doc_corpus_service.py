@@ -1,5 +1,6 @@
-"""Ingest and search crawled documentation using Firecrawl, OpenAI embeddings, and pgvector.
+"""Ingest and search crawled documentation using Firecrawl or local zip archives, OpenAI embeddings, and pgvector.
 
+Use ``ingest_github_documentation_from_zip`` for the GitHub docs CLI (YAML frontmatter ``title:``, hierarchical chunking).
 Use ``ingest_documentation_source`` to crawl a site (Firecrawl v2 ``/crawl``), embed chunks, and write ``doc_embedding_chunks``.
 There is no public HTTP API for corpus ingest or search helpers.
 """
@@ -8,7 +9,10 @@ from __future__ import annotations
 
 import asyncio
 import math
+import re
+import zipfile
 from collections.abc import AsyncIterator
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -29,6 +33,11 @@ _FIRECRAWL_HTTP_TIMEOUT_SEC = 120.0
 
 _DOC_INGEST_APPLICATION = "github"
 _DOC_INGEST_COLLECTION_KEY = "default"
+
+# GitHub Docs zip: hierarchical chunk thresholds (characters, post-frontmatter body).
+_GITHUB_DOCS_SMALL_FILE_MAX_CHARS = 2048
+_GITHUB_DOCS_HEADER_STRATEGY_UPPER_MAX_CHARS = 98304  # 96 KiB
+_GITHUB_DOCS_H2_BLOCK_SUBDIVIDE_CHARS = 4096
 
 
 def split_text_into_chunks(
@@ -195,6 +204,315 @@ def _metadata_page_title(fire_meta: dict[str, Any]) -> str | None:
     if title_val is not None:
         return str(title_val)
     return None
+
+
+def _safe_zip_inner_path(name: str) -> str | None:
+    """Reject zip members with absolute paths or ``..`` segments."""
+    path = Path(name)
+    if path.is_absolute():
+        return None
+    if ".." in path.parts:
+        return None
+    return path.as_posix()
+
+
+def _github_docs_body_without_frontmatter(markdown: str) -> str:
+    """Return markdown body after optional YAML frontmatter delimited by ``---`` lines."""
+    lines = markdown.splitlines()
+    if not lines or lines[0].strip() != "---":
+        return markdown.strip()
+    for i in range(1, len(lines)):
+        if lines[i].strip() == "---":
+            return "\n".join(lines[i + 1 :]).strip()
+    return markdown.strip()
+
+
+def _github_docs_zip_document_title(markdown: str, *, member: str) -> str:
+    """Read ``title:`` from YAML frontmatter (required for GitHub docs zip corpus)."""
+    lines = markdown.splitlines()
+    if not lines or lines[0].strip() != "---":
+        raise ValueError(f"github docs markdown must start with YAML frontmatter: {member!r}")
+    closing: int | None = None
+    for i in range(1, len(lines)):
+        if lines[i].strip() == "---":
+            closing = i
+            break
+    if closing is None:
+        raise ValueError(f"github docs markdown has unclosed YAML frontmatter: {member!r}")
+    for raw in lines[1:closing]:
+        stripped = raw.strip()
+        if stripped.startswith("title:"):
+            val = stripped.removeprefix("title:").strip()
+            if val:
+                if len(val) >= 2 and val[0] == val[-1] and val[0] in "\"'":
+                    val = val[1:-1]
+                return val
+    raise ValueError(f"github docs frontmatter must contain a non-empty title: field: {member!r}")
+
+
+def _github_docs_chunk_title_from_member_path(zip_member_path: str) -> str:
+    """Display title from zip entry path (filename stem without ``.md``)."""
+    stem = Path(zip_member_path).stem.strip()
+    return stem if stem else zip_member_path
+
+
+def _section_heading_title_or_file(primary: str, *, file_title: str) -> str:
+    candidate = primary.strip()
+    return candidate if candidate else file_title
+
+
+def _first_h2_heading_line_text(body: str) -> str | None:
+    """Return the text of the first ``##`` heading line (ignores ``###`` and deeper)."""
+    for raw_line in body.splitlines():
+        line = raw_line.strip()
+        if line.startswith("###"):
+            continue
+        matched = re.match(r"^##\s+(.+)$", line)
+        if matched:
+            title = matched.group(1).strip()
+            if title:
+                return title
+    return None
+
+
+def split_github_docs_zip_markdown_into_chunks(
+    body_markdown: str,
+    *,
+    zip_member_path: str,
+    max_chars: int,
+    overlap_chars: int,
+) -> list[tuple[str, str]]:
+    """Split GitHub-docs-style markdown body; returns ``(chunk_text, chunk_title)`` pairs.
+
+    Chunk titles:
+
+    * Whole-file small docs (``len <= 2048``): one chunk; title is the first ``##`` heading if any,
+      otherwise the zip entry filename stem.
+    * ``##`` sections use that heading line text (without the ``##`` marker).
+    * ``###`` subdivisions use ``"{h2} — {h3}"``.
+    * Sliding-window splits (oversized sections or huge files) reuse the same section title when
+      applicable; otherwise the zip entry filename stem.
+
+    * ``len(body) <= 2048``: one chunk (no split).
+    * ``2048 < len(body) <= 98304``: split on top-level ``## `` headings; any ``##`` section longer
+      than 4096 chars is subdivided on ``### `` headings.
+    * ``len(body) > 98304``: sliding-window chunking over the whole body (same as
+      ``split_text_into_chunks``).
+
+    Pieces that remain oversized after ``###`` splits are further split with ``split_text_into_chunks``.
+    """
+    file_chunk_title = _github_docs_chunk_title_from_member_path(zip_member_path)
+    body = body_markdown.strip()
+    if not body:
+        return []
+
+    n = len(body)
+    if n <= _GITHUB_DOCS_SMALL_FILE_MAX_CHARS:
+        h2_title = _first_h2_heading_line_text(body)
+        chunk_title = (
+            _section_heading_title_or_file(h2_title, file_title=file_chunk_title)
+            if h2_title is not None
+            else file_chunk_title
+        )
+        return [(body, chunk_title)]
+
+    if n > _GITHUB_DOCS_HEADER_STRATEGY_UPPER_MAX_CHARS:
+        return [
+            (piece, file_chunk_title)
+            for piece in split_text_into_chunks(body, max_chars=max_chars, overlap_chars=overlap_chars)
+        ]
+
+    segments = re.split(r"^##\s+", body, flags=re.MULTILINE)
+    preamble = segments[0].strip()
+    h2_sections: list[tuple[str, str]] = []
+    for raw in segments[1:]:
+        raw_lines = raw.splitlines()
+        h2_title = raw_lines[0].strip() if raw_lines else ""
+        section_rest = "\n".join(raw_lines[1:]).strip()
+        h2_sections.append((h2_title, section_rest))
+
+    if preamble and h2_sections:
+        first_title, first_body = h2_sections[0]
+        merged = f"{preamble}\n\n{first_body}".strip() if first_body else preamble
+        h2_sections[0] = (first_title, merged)
+    elif preamble and not h2_sections:
+        merged_body = preamble
+        return [
+            (piece, file_chunk_title)
+            for piece in split_text_into_chunks(merged_body, max_chars=max_chars, overlap_chars=overlap_chars)
+        ]
+
+    if not h2_sections:
+        return [
+            (piece, file_chunk_title)
+            for piece in split_text_into_chunks(body, max_chars=max_chars, overlap_chars=overlap_chars)
+        ]
+
+    out: list[tuple[str, str]] = []
+
+    def append_or_window(text: str, chunk_title: str) -> None:
+        piece = text.strip()
+        if not piece:
+            return
+        resolved_title = _section_heading_title_or_file(chunk_title, file_title=file_chunk_title)
+        if len(piece) <= _GITHUB_DOCS_H2_BLOCK_SUBDIVIDE_CHARS:
+            out.append((piece, resolved_title))
+            return
+        for window in split_text_into_chunks(piece, max_chars=max_chars, overlap_chars=overlap_chars):
+            out.append((window, resolved_title))
+
+    for h2_title, section_body in h2_sections:
+        h2_heading_title = _section_heading_title_or_file(h2_title, file_title=file_chunk_title)
+        h2_block = f"## {h2_title}\n\n{section_body}".strip() if section_body else f"## {h2_title}".strip()
+        if len(h2_block) <= _GITHUB_DOCS_H2_BLOCK_SUBDIVIDE_CHARS:
+            append_or_window(h2_block, h2_heading_title)
+            continue
+
+        sub = re.split(r"^###\s+", section_body, flags=re.MULTILINE)
+        before_h3 = sub[0].strip()
+        head_with_intro = f"## {h2_title}\n\n{before_h3}".strip() if before_h3 else f"## {h2_title}".strip()
+        append_or_window(head_with_intro, h2_heading_title)
+
+        for raw_h3 in sub[1:]:
+            h3_lines = raw_h3.splitlines()
+            h3_title = h3_lines[0].strip() if h3_lines else ""
+            h3_rest = "\n".join(h3_lines[1:]).strip()
+            h3_block = (
+                f"## {h2_title}\n\n### {h3_title}\n\n{h3_rest}".strip()
+                if h3_rest
+                else (f"## {h2_title}\n\n### {h3_title}".strip())
+            )
+            h3_heading_title = h3_title.strip()
+            if h3_heading_title:
+                combined = f"{h2_heading_title} — {h3_heading_title}"
+            else:
+                combined = h2_heading_title
+            append_or_window(h3_block, combined)
+
+    return [(c, t) for c, t in out if c.strip()]
+
+
+def iter_github_docs_zip_markdown_members(zip_path: Path) -> list[str]:
+    """Return sorted safe zip member paths ending in ``.md`` (non-directory).
+
+    Raises:
+        ValueError: If the archive contains no ``.md`` files, or any ``.md`` member path is unsafe.
+    """
+    with zipfile.ZipFile(zip_path, "r") as archive:
+        md_members: list[str] = []
+        for name in archive.namelist():
+            if name.endswith("/"):
+                continue
+            if not name.lower().endswith(".md"):
+                continue
+            safe = _safe_zip_inner_path(name)
+            if safe is None:
+                raise ValueError(f"unsafe zip member path: {name!r}")
+            md_members.append(safe)
+        md_members.sort()
+        if not md_members:
+            raise ValueError("zip contains no .md files")
+        return md_members
+
+
+def read_github_docs_zip_markdown(zip_path: Path, inner_path: str) -> str:
+    """Read one zip member as strict UTF-8 text."""
+    safe = _safe_zip_inner_path(inner_path)
+    if safe is None:
+        raise ValueError("unsafe zip member path")
+    with zipfile.ZipFile(zip_path, "r") as archive, archive.open(safe, "r") as raw:
+        data = raw.read()
+    return data.decode("utf-8")
+
+
+async def ingest_github_documentation_from_zip(session: AsyncSession) -> tuple[int, int, list[str]]:
+    """Ingest markdown files from the zip at ``GITHUB_DOCS_ZIP_PATH``.
+
+    Each file must start with YAML frontmatter containing a ``title:`` field. Body text uses
+    hierarchical chunking (see ``split_github_docs_zip_markdown_into_chunks``).
+
+    Returns:
+        ``(markdown files ingested, chunk rows inserted, chunk display title per row)``.
+    """
+    cfg = settings.doc_corpus
+    configured = cfg.GITHUB_DOCS_ZIP_PATH
+    if configured is None:
+        raise ValueError("GITHUB_DOCS_ZIP_PATH is not configured")
+    resolved = configured.strip()
+    if not resolved:
+        raise ValueError("GITHUB_DOCS_ZIP_PATH is empty")
+    if not cfg.OPENAI_API_KEY:
+        raise ValueError("OPENAI_API_KEY is not configured")
+
+    archive_path = Path(resolved)
+    if not archive_path.is_file():
+        raise ValueError(f"github docs zip not found or not a file: {archive_path}")
+
+    application = _DOC_INGEST_APPLICATION
+    collection_key = _DOC_INGEST_COLLECTION_KEY
+
+    await session.execute(
+        delete(DocEmbeddingChunk).where(
+            DocEmbeddingChunk.application == application,
+            DocEmbeddingChunk.collection_key == collection_key,
+        )
+    )
+    await session.commit()
+
+    members = iter_github_docs_zip_markdown_members(archive_path)
+    files_seen = 0
+    chunks_written = 0
+    row_titles: list[str] = []
+
+    for inner in members:
+        markdown = read_github_docs_zip_markdown(archive_path, inner)
+        document_title = _github_docs_zip_document_title(markdown, member=inner)
+        body = _github_docs_body_without_frontmatter(markdown)
+        source_ref = f"github-docs://{inner}"
+
+        chunk_pairs = split_github_docs_zip_markdown_into_chunks(
+            body,
+            zip_member_path=inner,
+            max_chars=cfg.DOCS_CHUNK_MAX_CHARS,
+            overlap_chars=cfg.DOCS_CHUNK_OVERLAP_CHARS,
+        )
+        if not chunk_pairs:
+            raise ValueError(f"github docs markdown produced no chunks after split: {inner!r}")
+
+        files_seen += 1
+
+        chunk_texts = [pair[0] for pair in chunk_pairs]
+
+        embeddings = await embed_texts_openai(
+            texts=chunk_texts,
+            model=cfg.DOCS_EMBED_MODEL,
+            api_key=cfg.OPENAI_API_KEY,
+        )
+        if len(embeddings) != len(chunk_pairs):
+            raise RuntimeError("embedding count does not match chunk count")
+
+        zip_meta: dict[str, Any] = {"zip_member": inner, "document_title": document_title}
+        for idx, ((text_chunk, chunk_title), vector) in enumerate(zip(chunk_pairs, embeddings, strict=True)):
+            if len(vector) != cfg.DOCS_EMBED_DIMENSIONS:
+                raise ValueError("unexpected embedding size from OpenAI")
+            session.add(
+                DocEmbeddingChunk(
+                    application=application,
+                    collection_key=collection_key,
+                    source_url=source_ref,
+                    page_title=chunk_title,
+                    chunk_index=idx,
+                    content=text_chunk,
+                    metadata_dict={"github_docs_zip": zip_meta},
+                    embedding=vector,
+                )
+            )
+            row_titles.append(chunk_title)
+
+        chunks_written += len(chunk_pairs)
+
+    await session.commit()
+    return files_seen, chunks_written, row_titles
 
 
 async def embed_texts_openai(*, texts: list[str], model: str, api_key: str) -> list[list[float]]:

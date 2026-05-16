@@ -34,20 +34,18 @@ def test_main_runs_ingest_and_closes_db(monkeypatch: pytest.MonkeyPatch) -> None
         lambda: _Maker(),
     )
 
-    async def fake_ingest(session: object, *, source_url: str) -> tuple[int, int, list[str | None]]:
-        captured["source_url"] = source_url
+    async def fake_ingest(session: object) -> tuple[int, int, list[str]]:
         captured["ingest_session"] = session
         return (1, 4, ["GitHub Docs", "GitHub Docs", "GitHub Docs", "GitHub Docs"])
 
     monkeypatch.setattr(
-        "app_integrations.github.__main__.ingest_documentation_source",
+        "app_integrations.github.__main__.ingest_github_documentation_from_zip",
         fake_ingest,
     )
 
     assert main() == 0
     init.assert_awaited_once()
     close.assert_awaited_once()
-    assert captured["source_url"] == "https://docs.github.com/en"
     assert captured["ingest_session"] is captured["session"]
 
 
