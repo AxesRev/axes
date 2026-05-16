@@ -1,4 +1,8 @@
-"""Ingest and search crawled documentation using Firecrawl, OpenAI embeddings, and pgvector."""
+"""Ingest and search crawled documentation using Firecrawl, OpenAI embeddings, and pgvector.
+
+Call ``ingest_doc_urls_for_collection`` and ``search_doc_chunks`` (plus ``embed_texts_openai``
+when embedding a query string) from application code — there is no public HTTP API for this.
+"""
 
 from __future__ import annotations
 
