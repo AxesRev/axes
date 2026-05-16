@@ -9,7 +9,7 @@ yet exist for this installation.
 
 Run directly:
     cd graph_service
-    uv run --package aegra-neo4j-mcp python -m integrations.github.fetcher [INSTALLATION_ID]
+    uv run --package aegra-graph-service python -m integrations.github.fetcher [INSTALLATION_ID]
 
 When INSTALLATION_ID is omitted, the first row with a non-null ``github_installation_id``
 is read from Postgres.
@@ -29,7 +29,7 @@ from github.Organization import Organization
 from github.Repository import Repository
 from neomodel import adb
 
-import common_nodes as _common_nodes  # noqa: F401 — registers all node classes with neomodel
+import nodes as _nodes_pkg  # noqa: F401 — registers all node classes with neomodel
 from integrations.github.models import GithubConnectionExtra, GithubIdentityExtra, GithubResourceExtra
 from integrations.github.settings import get_github_settings, get_runner_settings
 from nodes.app_connection import AppConnection

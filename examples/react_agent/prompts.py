@@ -16,6 +16,10 @@ Never output questions directed at a user.
 You can interact with GitHub repositories, issues, pull requests, code, and more.
 Use the available tools to help users with their GitHub-related tasks.
 
+When access may depend on data stored in the Neo4j graph (organizations, repositories, members, app installs),
+use the Neo4j MCP tools against the live database: call `get_neo4j_schema` first so queries match current labels,
+properties, and relationship types; then use `read_neo4j_cypher` with read-only Cypher consistent with that schema.
+
 {github_user_context}System time: {system_time}"""
 
 GITHUB_USER_CONTEXT = """IMPORTANT: The GitHub MCP server is authenticated with a service PAT that may belong to a different account.
@@ -62,6 +66,9 @@ Your job:
   - Determine the value of the `{field_name}` field for this request.
   - Use the available tools to look up real information whenever the answer depends on the user's environment.
   - When you are confident, stop calling tools and return your conclusion as a final assistant message.
+
+When facts may be in the Neo4j graph, call `get_neo4j_schema` before `read_neo4j_cypher` and only use labels and
+relationship types returned there.
 
 The `{field_name}` field describes:
 {field_description}

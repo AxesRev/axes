@@ -1,4 +1,5 @@
 import logging
+import os
 from typing import Any
 
 import tiktoken
@@ -18,6 +19,8 @@ _MAX_TOOL_RESULT_TOKENS = 10_000
 _TOO_LARGE_MESSAGE = (
     "Tool call result was too large (exceeded {token_count:,} tokens). Narrow down your search and try again."
 )
+
+_NEO4J_MCP_SPEC = "mcp-neo4j-cypher@0.6.0"
 
 
 def _get_encoder(model: str) -> tiktoken.Encoding:
@@ -46,7 +49,7 @@ def _truncate_if_oversized(message: ToolMessage, encoder: tiktoken.Encoding) -> 
 
 
 async def execute_tools(state: State, runtime: Runtime[Context]) -> dict[str, list[Any]]:
-    """Execute tools, including GitHub MCP tools if a PAT is configured."""
+    """Execute tools (GitHub MCP, Neo4j MCP via mcp-neo4j-cypher, or static TOOLS)."""
     last_message = state.messages[-1]
     tool_names = [tc["name"] for tc in getattr(last_message, "tool_calls", [])]
     logger.info("Node tools: executing %d tool(s): %s", len(tool_names), tool_names)
@@ -62,27 +65,48 @@ async def execute_tools(state: State, runtime: Runtime[Context]) -> dict[str, li
     return result
 
 
+def _mcp_servers(runtime: Runtime[Context]) -> dict[str, dict[str, Any]]:
+    servers: dict[str, dict[str, Any]] = {}
+
+    if runtime.context.github_pat:
+        servers["github"] = {
+            "transport": "stdio",
+            "command": "docker",
+            "args": [
+                "run",
+                "-i",
+                "--rm",
+                "-e",
+                "GITHUB_PERSONAL_ACCESS_TOKEN",
+                "ghcr.io/github/github-mcp-server",
+            ],
+            "env": {"GITHUB_PERSONAL_ACCESS_TOKEN": runtime.context.github_pat},
+        }
+
+    if runtime.context.neo4j_uri.strip():
+        neo4j_env = {
+            "NEO4J_URI": runtime.context.neo4j_uri.strip(),
+            "NEO4J_USERNAME": runtime.context.neo4j_username or os.environ.get("NEO4J_USER", "neo4j"),
+            "NEO4J_PASSWORD": runtime.context.neo4j_password or os.environ.get("NEO4J_PASSWORD", ""),
+            "NEO4J_DATABASE": runtime.context.neo4j_database,
+            "NEO4J_READ_ONLY": "true",
+        }
+        servers["neo4j"] = {
+            "transport": "stdio",
+            "command": "uvx",
+            "args": [_NEO4J_MCP_SPEC, "--transport", "stdio"],
+            "env": neo4j_env,
+        }
+
+    return servers
+
+
 async def _get_all_tools(runtime: Runtime[Context]) -> list[Any]:
-    """Return the combined list of static tools + GitHub MCP tools (if PAT is set)."""
-    if not runtime.context.github_pat:
+    """Static tools plus MCP tools when GitHub PAT and/or Neo4j URI are configured."""
+    servers = _mcp_servers(runtime)
+    if not servers:
         return list(TOOLS)
 
-    client = MultiServerMCPClient(
-        {
-            "github": {
-                "transport": "stdio",
-                "command": "docker",
-                "args": [
-                    "run",
-                    "-i",
-                    "--rm",
-                    "-e",
-                    "GITHUB_PERSONAL_ACCESS_TOKEN",
-                    "ghcr.io/github/github-mcp-server",
-                ],
-                "env": {"GITHUB_PERSONAL_ACCESS_TOKEN": runtime.context.github_pat},
-            }
-        }
-    )
+    client = MultiServerMCPClient(servers)
     mcp_tools = await client.get_tools()
     return [*TOOLS, *mcp_tools]
