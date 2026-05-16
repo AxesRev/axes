@@ -21,9 +21,9 @@ class TestDatabaseURLSupport:
 
         assert db.POSTGRES_USER == "postgres"
         assert db.POSTGRES_HOST == "localhost"
-        assert db.POSTGRES_PORT == "5432"
+        assert db.POSTGRES_PORT == "5433"
         assert db.POSTGRES_DB == "aegra"
-        assert "postgres:postgres@localhost:5432/aegra" in db.database_url
+        assert "postgres:postgres@localhost:5433/aegra" in db.database_url
 
     def test_database_url_used_directly_in_computed_urls(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """DATABASE_URL is used directly with correct driver prefix."""

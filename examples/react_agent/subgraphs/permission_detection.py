@@ -150,6 +150,7 @@ async def _detect(
         field_name=field_name,
         github_repos=state.github_repos,
         github_orgs=state.github_orgs,
+        doc_corpus_context=state.doc_corpus_context,
     )
     field_context = dataclasses.replace(
         runtime.context,

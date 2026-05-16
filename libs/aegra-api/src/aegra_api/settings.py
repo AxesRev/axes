@@ -110,6 +110,24 @@ class PoolSettings(EnvBase):
     LANGGRAPH_MAX_POOL_SIZE: int = 6
 
 
+class DocCorpusSettings(EnvBase):
+    """Settings for ingesting external documentation into pgvector."""
+
+    OPENAI_API_KEY: str | None = None
+    # Local GitHub Docs archive for ``python -m app_integrations.github`` (markdown files inside the zip).
+    GITHUB_DOCS_ZIP_PATH: str | None = None
+    FIRECRAWL_API_KEY: str | None = None
+    FIRECRAWL_BASE_URL: str = "https://api.firecrawl.dev/v2"
+    DOCS_EMBED_MODEL: str = "text-embedding-3-small"
+    DOCS_EMBED_DIMENSIONS: int = 1536
+    DOCS_CHUNK_MAX_CHARS: int = 2000
+    DOCS_CHUNK_OVERLAP_CHARS: int = 200
+    # Firecrawl crawl (multi-page ingest) — caps cost/latency for large sites
+    DOCS_CRAWL_PAGE_LIMIT: int = 10000
+    DOCS_CRAWL_POLL_INTERVAL_SEC: float = 3.0
+    DOCS_CRAWL_MAX_WAIT_SEC: float = 7200.0
+
+
 class ObservabilitySettings(EnvBase):
     """
     Unified settings for OpenTelemetry and Vendor targets.
@@ -140,6 +158,7 @@ class Settings:
         self.app = AppSettings()
         self.db = DatabaseSettings()
         self.pool = PoolSettings()
+        self.doc_corpus = DocCorpusSettings()
         self.observability = ObservabilitySettings()
 
 

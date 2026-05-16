@@ -52,6 +52,7 @@ async def parse_intent(state: State, runtime: Runtime[Context]) -> dict[str, str
 
     system_message = INTENT_PARSER_PROMPT.format(
         github_user_context=_build_github_user_context(state, runtime),
+        doc_corpus_context=state.doc_corpus_context.strip(),
     )
 
     response = cast(

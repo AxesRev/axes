@@ -223,7 +223,7 @@ HOST=0.0.0.0
 PORT=8000
 
 # Auth
-AUTH_TYPE=noop          # noop (no auth) or custom
+AUTH_TYPE=noop
 
 # Logging
 LOG_LEVEL=INFO

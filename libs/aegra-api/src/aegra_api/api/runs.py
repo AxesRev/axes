@@ -976,8 +976,14 @@ async def execute_run_async(
         await streaming_service.signal_run_cancelled(run_id)
         raise
     except Exception as e:
-        # Log with full traceback so bugs are visible in logs
-        logger.exception(f"[execute_run_async] run failed run_id={run_id}")
+        logger.exception(
+            "execute_run_async_failed",
+            run_id=run_id,
+            thread_id=thread_id,
+            graph_id=graph_id,
+            error=str(e),
+            error_type=type(e).__name__,
+        )
         # Store empty output to avoid JSON serialization issues - use standard status
         await update_run_status(run_id, "error", output={}, error=str(e), session=session)
         if not session:

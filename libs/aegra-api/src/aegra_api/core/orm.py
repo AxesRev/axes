@@ -13,9 +13,13 @@ Nothing is auto-imported by FastAPI yet; routers will `from ...core.db import ge
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+import uuid
+from collections.abc import AsyncIterator, Callable
 from datetime import datetime
+from typing import Any
 
+from pgvector import Vector as PgVector
+from pgvector.sqlalchemy.vector import VECTOR
 from sqlalchemy import (
     TIMESTAMP,
     ForeignKey,
@@ -25,10 +29,32 @@ from sqlalchemy import (
     text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.engine import Dialect
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm import Mapped, declarative_base, mapped_column
 
 Base = declarative_base()
+
+
+class AsyncPgVector(VECTOR):
+    """``pgvector.sqlalchemy.Vector`` text-binds values; asyncpg's vector codec expects ``PgVector`` for binary."""
+
+    cache_ok = True
+
+    def bind_processor(self, dialect: Dialect) -> Callable[[Any], Any] | None:
+        impl = super().bind_processor(dialect)
+        if getattr(dialect, "driver", None) != "asyncpg":
+            return impl
+
+        def process(value: Any) -> PgVector | None:
+            if value is None:
+                return None
+            vec = value if isinstance(value, PgVector) else PgVector(value)
+            if self.dim is not None and vec.dimensions() != self.dim:
+                raise ValueError(f"expected {self.dim} dimensions, not {vec.dimensions()}")
+            return vec
+
+        return process
 
 
 class Assistant(Base):
@@ -140,11 +166,63 @@ class RunEvent(Base):
     )
 
 
+class DocEmbeddingChunk(Base):
+    """Chunk of crawled documentation with an embedding for semantic search.
+
+    Populated by the docs corpus ingest pipeline (Firecrawl + OpenAI embeddings).
+    Vector dimension must match ``settings.doc_corpus.DOCS_EMBED_DIMENSIONS`` (default 1536).
+    """
+
+    __tablename__ = "doc_embedding_chunks"
+
+    id: Mapped[str] = mapped_column(
+        Text,
+        primary_key=True,
+        default=lambda: str(uuid.uuid4()),
+    )
+    application: Mapped[str] = mapped_column(Text, nullable=False)
+    collection_key: Mapped[str] = mapped_column(Text, nullable=False)
+    source_url: Mapped[str] = mapped_column(Text, nullable=False)
+    page_title: Mapped[str | None] = mapped_column(Text, nullable=True)
+    chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    metadata_dict: Mapped[dict] = mapped_column(JSONB, server_default=text("'{}'::jsonb"), name="metadata")
+    embedding: Mapped[list[float]] = mapped_column(AsyncPgVector(1536), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=text("now()"))
+
+    __table_args__ = (
+        Index("idx_doc_embedding_chunks_app_collection", "application", "collection_key"),
+        Index(
+            "idx_doc_embedding_chunks_app_collection_url",
+            "application",
+            "collection_key",
+            "source_url",
+        ),
+        Index(
+            "uq_doc_embedding_chunks_natural_key",
+            "application",
+            "collection_key",
+            "source_url",
+            "chunk_index",
+            unique=True,
+        ),
+    )
+
+
 # ---------------------------------------------------------------------------
 # Session factory
 # ---------------------------------------------------------------------------
 
 async_session_maker: async_sessionmaker[AsyncSession] | None = None
+
+
+def get_metadata_session_maker() -> async_sessionmaker[AsyncSession]:
+    """Return the SQLAlchemy async session factory for app metadata tables.
+
+    Used by LangGraph nodes (e.g. doc corpus retrieval) after
+    ``DatabaseManager.initialize()`` has run during Aegra startup.
+    """
+    return _get_session_maker()
 
 
 def _get_session_maker() -> async_sessionmaker[AsyncSession]:

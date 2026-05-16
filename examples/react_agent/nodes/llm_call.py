@@ -37,6 +37,7 @@ async def call_model(state: State, runtime: Runtime[Context]) -> dict[str, list[
             if runtime.context.github_username
             else ""
         ),
+        doc_corpus_context=state.doc_corpus_context.strip(),
     )
 
     response = cast(
