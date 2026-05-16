@@ -15,7 +15,7 @@ members = [
 
 [[package]]
 name = "aegra-api"
-version = "0.7.6"
+version = "0.7.9"
 source = { editable = "libs/aegra-api" }
 dependencies = [
     { name = "alembic" },

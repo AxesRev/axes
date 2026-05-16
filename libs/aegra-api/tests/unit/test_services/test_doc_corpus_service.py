@@ -6,8 +6,22 @@ import pytest
 
 from aegra_api.services.doc_corpus_service import (
     cosine_distance_row,
+    parse_firecrawl_scrape_payload,
     split_text_into_chunks,
 )
+
+
+def test_parse_firecrawl_scrape_payload_success() -> None:
+    markdown, meta = parse_firecrawl_scrape_payload(
+        {"success": True, "data": {"markdown": "# Hello", "metadata": {"title": "Hi"}}}
+    )
+    assert markdown == "# Hello"
+    assert meta["title"] == "Hi"
+
+
+def test_parse_firecrawl_scrape_payload_failure() -> None:
+    with pytest.raises(ValueError, match="oops"):
+        parse_firecrawl_scrape_payload({"success": False, "error": "oops"})
 
 
 def test_split_text_into_chunks_returns_empty_for_blank() -> None:

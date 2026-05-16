@@ -1,6 +1,6 @@
 [project]
 name = "aegra-api"
-version = "0.7.6"
+version = "0.7.9"
 description = "Aegra core API - Self-hosted Agent Protocol server"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -90,7 +90,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["aegra_api"]
+known-first-party = ["aegra_api", "app_integrations"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

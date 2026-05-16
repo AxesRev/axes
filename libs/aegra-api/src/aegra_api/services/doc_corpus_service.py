@@ -51,12 +51,25 @@ def split_text_into_chunks(
     return chunks
 
 
+def parse_firecrawl_scrape_payload(payload: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+    """Parse the JSON body from a Firecrawl v2 ``POST /scrape`` response."""
+    if not payload.get("success"):
+        msg = payload.get("error") or payload.get("message") or "Firecrawl scrape failed"
+        raise ValueError(str(msg))
+    data = payload.get("data") or {}
+    markdown = data.get("markdown") or ""
+    meta_raw = data.get("metadata")
+    metadata: dict[str, Any] = meta_raw if isinstance(meta_raw, dict) else {}
+    return str(markdown), metadata
+
+
 async def scrape_url_markdown(
     client: httpx.AsyncClient,
     *,
     api_key: str,
     base_url: str,
     url: str,
+    timeout_seconds: float = 120.0,
 ) -> tuple[str, dict[str, Any]]:
     """Scrape a single URL via Firecrawl and return markdown plus metadata."""
     endpoint = f"{base_url.rstrip('/')}/scrape"
@@ -67,19 +80,10 @@ async def scrape_url_markdown(
             "Content-Type": "application/json",
         },
         json={"url": url, "formats": ["markdown"]},
-        timeout=120.0,
+        timeout=timeout_seconds,
     )
     response.raise_for_status()
-    payload = response.json()
-    if not payload.get("success"):
-        msg = payload.get("error") or payload.get("message") or "Firecrawl scrape failed"
-        raise ValueError(str(msg))
-
-    data = payload.get("data") or {}
-    markdown = data.get("markdown") or ""
-    meta_raw = data.get("metadata")
-    metadata: dict[str, Any] = meta_raw if isinstance(meta_raw, dict) else {}
-    return str(markdown), metadata
+    return parse_firecrawl_scrape_payload(response.json())
 
 
 async def embed_texts_openai(*, texts: list[str], model: str, api_key: str) -> list[list[float]]:
