@@ -1,6 +1,6 @@
 """Ingest and search crawled documentation using Firecrawl or local zip archives, OpenAI embeddings, and pgvector.
 
-Use ``ingest_github_documentation_from_zip`` for the GitHub docs CLI (YAML frontmatter ``title:``, hierarchical chunking).
+Use ``ingest_github_documentation_from_zip`` for the GitHub docs CLI (``python-frontmatter`` for YAML, hierarchical chunking).
 Use ``ingest_documentation_source`` to crawl a site (Firecrawl v2 ``/crawl``), embed chunks, and write ``doc_embedding_chunks``.
 There is no public HTTP API for corpus ingest or search helpers.
 """
@@ -11,16 +11,20 @@ import asyncio
 import math
 import re
 import zipfile
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Mapping
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+import frontmatter
 import httpx
 import structlog
+import yaml
 from openai import AsyncOpenAI, OpenAIError
 from sqlalchemy import delete, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
+from tqdm import tqdm
 
 from aegra_api.core.orm import DocEmbeddingChunk, get_metadata_session_maker
 from aegra_api.models.doc_corpus import DocCorpusSearchHit
@@ -33,6 +37,18 @@ _FIRECRAWL_HTTP_TIMEOUT_SEC = 120.0
 
 _DOC_INGEST_APPLICATION = "github"
 _DOC_INGEST_COLLECTION_KEY = "default"
+
+
+@dataclass(frozen=True, slots=True)
+class _PendingGithubDocChunk:
+    """One chunk row waiting for batched embedding and DB insert."""
+
+    source_url: str
+    chunk_index: int
+    content: str
+    chunk_display_title: str
+    zip_meta: dict[str, Any]
+
 
 # GitHub Docs zip: hierarchical chunk thresholds (characters, post-frontmatter body).
 _GITHUB_DOCS_SMALL_FILE_MAX_CHARS = 2048
@@ -216,38 +232,115 @@ def _safe_zip_inner_path(name: str) -> str | None:
     return path.as_posix()
 
 
-def _github_docs_body_without_frontmatter(markdown: str) -> str:
-    """Return markdown body after optional YAML frontmatter delimited by ``---`` lines."""
-    lines = markdown.splitlines()
-    if not lines or lines[0].strip() != "---":
-        return markdown.strip()
-    for i in range(1, len(lines)):
-        if lines[i].strip() == "---":
-            return "\n".join(lines[i + 1 :]).strip()
-    return markdown.strip()
+def _github_docs_frontmatter_post(markdown: str, *, member: str) -> frontmatter.Post:
+    """Parse optional YAML frontmatter and markdown body using ``python-frontmatter``."""
+    text = markdown.lstrip("\ufeff")
+    lines = text.splitlines()
+    if lines and lines[0].strip() == "---":
+        found_close = False
+        for i in range(1, len(lines)):
+            if lines[i].strip() == "---":
+                found_close = True
+                break
+        if not found_close:
+            raise ValueError(f"github docs markdown has unclosed YAML frontmatter: {member!r}")
+    try:
+        return frontmatter.loads(text)
+    except yaml.YAMLError as exc:
+        logger.warning("github_docs_frontmatter_yaml_invalid", member=member, error=str(exc))
+        return frontmatter.Post(content=text)
+
+
+def _strip_markdown_inline_html_comment_suffix(fragment: str) -> str:
+    """Remove a trailing ``<!-- ... -->`` suffix from a heading fragment."""
+    if "<!--" not in fragment:
+        return fragment.strip()
+    return fragment.split("<!--", maxsplit=1)[0].strip()
+
+
+def _first_h1_heading_line_text(markdown: str) -> str | None:
+    """Return text of the first ATX ``#`` heading line (not ``##`` / ``###``)."""
+    for raw_line in markdown.splitlines():
+        line = raw_line.strip()
+        if not line.startswith("#") or line.startswith("##"):
+            continue
+        matched = re.match(r"^#\s+(.+)$", line)
+        if not matched:
+            continue
+        title = _strip_markdown_inline_html_comment_suffix(matched.group(1))
+        if title:
+            return title
+    return None
+
+
+def _metadata_title_string(metadata: Mapping[str, Any]) -> str | None:
+    raw_title = metadata.get("title")
+    if isinstance(raw_title, str):
+        val = raw_title.strip()
+        if val:
+            if len(val) >= 2 and val[0] == val[-1] and val[0] in "\"'":
+                return val[1:-1]
+            return val
+    if raw_title is not None and not isinstance(raw_title, (dict, list)):
+        val = str(raw_title).strip()
+        if val:
+            return val
+    return None
+
+
+def _github_docs_document_title_from_post(post: frontmatter.Post, *, member: str) -> str:
+    """Corpus document title: YAML ``title:``, else first ``#`` heading in body, else filename stem."""
+    yaml_title = _metadata_title_string(post.metadata)
+    if yaml_title is not None:
+        return yaml_title
+    h1 = _first_h1_heading_line_text(post.content)
+    if h1 is not None:
+        return h1
+    return _github_docs_chunk_title_from_member_path(member)
+
+
+def _github_docs_synthetic_markdown_from_frontmatter(post: frontmatter.Post) -> str | None:
+    """Build markdown from YAML when ``post.content`` is empty (GitHub docs index / landing stubs)."""
+    meta = post.metadata
+    blocks: list[str] = []
+    title = _metadata_title_string(meta)
+    if title:
+        blocks.append(f"# {title}")
+    intro = meta.get("intro")
+    if isinstance(intro, str) and intro.strip():
+        blocks.append(intro.strip())
+    children = meta.get("children")
+    if isinstance(children, list):
+        lines: list[str] = []
+        for item in children:
+            if isinstance(item, str) and item.strip():
+                lines.append(f"- {item.strip()}")
+            elif item is not None and not isinstance(item, (dict, list)):
+                text_item = str(item).strip()
+                if text_item:
+                    lines.append(f"- {text_item}")
+        if lines:
+            blocks.append("\n".join(lines))
+    if not blocks:
+        return None
+    return "\n\n".join(blocks)
+
+
+def _github_docs_chunking_body_from_post(post: frontmatter.Post, *, document_title: str) -> str:
+    """Markdown body used for chunking; synthesize text when the file has YAML only (no body)."""
+    body = post.content.strip()
+    if body:
+        return body
+    synthetic = _github_docs_synthetic_markdown_from_frontmatter(post)
+    if synthetic is not None:
+        return synthetic
+    return f"# {document_title}\n"
 
 
 def _github_docs_zip_document_title(markdown: str, *, member: str) -> str:
-    """Read ``title:`` from YAML frontmatter (required for GitHub docs zip corpus)."""
-    lines = markdown.splitlines()
-    if not lines or lines[0].strip() != "---":
-        raise ValueError(f"github docs markdown must start with YAML frontmatter: {member!r}")
-    closing: int | None = None
-    for i in range(1, len(lines)):
-        if lines[i].strip() == "---":
-            closing = i
-            break
-    if closing is None:
-        raise ValueError(f"github docs markdown has unclosed YAML frontmatter: {member!r}")
-    for raw in lines[1:closing]:
-        stripped = raw.strip()
-        if stripped.startswith("title:"):
-            val = stripped.removeprefix("title:").strip()
-            if val:
-                if len(val) >= 2 and val[0] == val[-1] and val[0] in "\"'":
-                    val = val[1:-1]
-                return val
-    raise ValueError(f"github docs frontmatter must contain a non-empty title: field: {member!r}")
+    """Same as ``_github_docs_document_title_from_post`` after parsing *markdown*."""
+    post = _github_docs_frontmatter_post(markdown, member=member)
+    return _github_docs_document_title_from_post(post, member=member)
 
 
 def _github_docs_chunk_title_from_member_path(zip_member_path: str) -> str:
@@ -292,6 +385,8 @@ def split_github_docs_zip_markdown_into_chunks(
     * ``###`` subdivisions use ``"{h2} — {h3}"``.
     * Sliding-window splits (oversized sections or huge files) reuse the same section title when
       applicable; otherwise the zip entry filename stem.
+
+    Rules (hardcoded size gates):
 
     * ``len(body) <= 2048``: one chunk (no split).
     * ``2048 < len(body) <= 98304``: split on top-level ``## `` headings; any ``##`` section longer
@@ -425,11 +520,22 @@ def read_github_docs_zip_markdown(zip_path: Path, inner_path: str) -> str:
     return data.decode("utf-8")
 
 
-async def ingest_github_documentation_from_zip(session: AsyncSession) -> tuple[int, int, list[str]]:
+async def ingest_github_documentation_from_zip(
+    session: AsyncSession,
+    *,
+    show_progress: bool = True,
+) -> tuple[int, int, list[str]]:
     """Ingest markdown files from the zip at ``GITHUB_DOCS_ZIP_PATH``.
 
-    Each file must start with YAML frontmatter containing a ``title:`` field. Body text uses
-    hierarchical chunking (see ``split_github_docs_zip_markdown_into_chunks``).
+    Pipeline: (1) chunk every file into a flat list, (2) one batched embedding pass over all chunk
+    texts, (3) insert rows. OpenAI still receives up to ``_DEFAULT_EMBED_BATCH`` strings per HTTP
+    request; batches are filled across files.
+
+    Each file should have YAML frontmatter with ``title:`` when possible; otherwise the first ``#``
+    heading or the zip entry filename stem is used for ``document_title`` metadata.
+
+    Args:
+        show_progress: When ``True``, render tqdm bars for chunking, embedding, and DB writes.
 
     Returns:
         ``(markdown files ingested, chunk rows inserted, chunk display title per row)``.
@@ -459,64 +565,100 @@ async def ingest_github_documentation_from_zip(session: AsyncSession) -> tuple[i
     )
     await session.commit()
 
-    members = iter_github_docs_zip_markdown_members(archive_path)
-    files_seen = 0
-    chunks_written = 0
-    row_titles: list[str] = []
+    member_paths = iter_github_docs_zip_markdown_members(archive_path)
+    file_total = len(member_paths)
+    tqdm_disable = not show_progress
+    tqdm_kw: dict[str, Any] = {
+        "disable": tqdm_disable,
+        "dynamic_ncols": True,
+        "leave": True,
+    }
 
-    for inner in members:
-        markdown = read_github_docs_zip_markdown(archive_path, inner)
-        document_title = _github_docs_zip_document_title(markdown, member=inner)
-        body = _github_docs_body_without_frontmatter(markdown)
-        source_ref = f"github-docs://{inner}"
+    pending: list[_PendingGithubDocChunk] = []
 
-        chunk_pairs = split_github_docs_zip_markdown_into_chunks(
-            body,
-            zip_member_path=inner,
-            max_chars=cfg.DOCS_CHUNK_MAX_CHARS,
-            overlap_chars=cfg.DOCS_CHUNK_OVERLAP_CHARS,
-        )
-        if not chunk_pairs:
-            raise ValueError(f"github docs markdown produced no chunks after split: {inner!r}")
+    with tqdm(total=file_total, desc="Chunking", unit="file", position=0, **tqdm_kw) as chunk_bar:
+        for inner in member_paths:
+            markdown = read_github_docs_zip_markdown(archive_path, inner)
+            post = _github_docs_frontmatter_post(markdown, member=inner)
+            document_title = _github_docs_document_title_from_post(post, member=inner)
+            body = _github_docs_chunking_body_from_post(post, document_title=document_title)
+            source_ref = f"github-docs://{inner}"
 
-        files_seen += 1
+            chunk_pairs = split_github_docs_zip_markdown_into_chunks(
+                body,
+                zip_member_path=inner,
+                max_chars=cfg.DOCS_CHUNK_MAX_CHARS,
+                overlap_chars=cfg.DOCS_CHUNK_OVERLAP_CHARS,
+            )
+            if not chunk_pairs:
+                raise ValueError(f"github docs markdown produced no chunks after split: {inner!r}")
 
-        chunk_texts = [pair[0] for pair in chunk_pairs]
+            zip_meta: dict[str, Any] = {"zip_member": inner, "document_title": document_title}
+            for idx, (text_chunk, chunk_title) in enumerate(chunk_pairs):
+                pending.append(
+                    _PendingGithubDocChunk(
+                        source_url=source_ref,
+                        chunk_index=idx,
+                        content=text_chunk,
+                        chunk_display_title=chunk_title,
+                        zip_meta=zip_meta,
+                    )
+                )
 
+            chunk_bar.update(1)
+
+    chunk_total = len(pending)
+
+    with tqdm(total=chunk_total, desc="Embedding", unit="chunk", position=1, **tqdm_kw) as embed_bar:
         embeddings = await embed_texts_openai(
-            texts=chunk_texts,
+            texts=[row.content for row in pending],
             model=cfg.DOCS_EMBED_MODEL,
             api_key=cfg.OPENAI_API_KEY,
+            progress_bar=embed_bar,
         )
-        if len(embeddings) != len(chunk_pairs):
-            raise RuntimeError("embedding count does not match chunk count")
 
-        zip_meta: dict[str, Any] = {"zip_member": inner, "document_title": document_title}
-        for idx, ((text_chunk, chunk_title), vector) in enumerate(zip(chunk_pairs, embeddings, strict=True)):
+    if len(embeddings) != chunk_total:
+        raise RuntimeError("embedding count does not match chunk count")
+
+    row_titles: list[str] = []
+
+    with tqdm(total=chunk_total, desc="Storing in DB", unit="chunk", position=2, **tqdm_kw) as store_bar:
+        for row, vector in zip(pending, embeddings, strict=True):
             if len(vector) != cfg.DOCS_EMBED_DIMENSIONS:
                 raise ValueError("unexpected embedding size from OpenAI")
             session.add(
                 DocEmbeddingChunk(
                     application=application,
                     collection_key=collection_key,
-                    source_url=source_ref,
-                    page_title=chunk_title,
-                    chunk_index=idx,
-                    content=text_chunk,
-                    metadata_dict={"github_docs_zip": zip_meta},
+                    source_url=row.source_url,
+                    page_title=row.chunk_display_title,
+                    chunk_index=row.chunk_index,
+                    content=row.content,
+                    metadata_dict={"github_docs_zip": row.zip_meta},
                     embedding=vector,
                 )
             )
-            row_titles.append(chunk_title)
-
-        chunks_written += len(chunk_pairs)
+            row_titles.append(row.chunk_display_title)
+            store_bar.update(1)
 
     await session.commit()
+    files_seen = file_total
+    chunks_written = chunk_total
     return files_seen, chunks_written, row_titles
 
 
-async def embed_texts_openai(*, texts: list[str], model: str, api_key: str) -> list[list[float]]:
-    """Return embedding vectors for each input string using the OpenAI API."""
+async def embed_texts_openai(
+    *,
+    texts: list[str],
+    model: str,
+    api_key: str,
+    progress_bar: tqdm | None = None,
+) -> list[list[float]]:
+    """Return embedding vectors for each input string using the OpenAI API.
+
+    Requests use batches of up to ``_DEFAULT_EMBED_BATCH`` texts each. ``progress_bar``, when set,
+    advances by the batch size after each API call.
+    """
     if not texts:
         return []
 
@@ -525,8 +667,11 @@ async def embed_texts_openai(*, texts: list[str], model: str, api_key: str) -> l
     for start in range(0, len(texts), _DEFAULT_EMBED_BATCH):
         batch = texts[start : start + _DEFAULT_EMBED_BATCH]
         result = await client.embeddings.create(model=model, input=batch)
-        for item in result.data:
+        sorted_items = sorted(result.data, key=lambda item: item.index)
+        for item in sorted_items:
             out.append(list(item.embedding))
+        if progress_bar is not None:
+            progress_bar.update(len(batch))
     return out
 
 
@@ -584,15 +729,19 @@ async def retrieve_doc_corpus_prompt_block(
     collection_key: str,
     query: str,
     limit: int,
-) -> str:
-    """Embed ``query``, cosine-search ``doc_embedding_chunks``, return formatted text."""
+) -> tuple[str, list[str]]:
+    """Embed ``query``, cosine-search ``doc_embedding_chunks``, return formatted text and titles.
+
+    Returns:
+        ``(prompt_block, hit_titles)`` — ``hit_titles`` matches rows merged into the block (empty when skipped).
+    """
     cfg = settings.doc_corpus
     if not cfg.OPENAI_API_KEY:
         logger.warning("doc_corpus_retrieval_skipped", reason="OPENAI_API_KEY unset")
-        return ""
+        return "", []
     q = query.strip()
     if not q:
-        return ""
+        return "", []
     try:
         async with get_metadata_session_maker()() as session:
             vectors = await embed_texts_openai(
@@ -602,7 +751,7 @@ async def retrieve_doc_corpus_prompt_block(
             )
             if not vectors or len(vectors[0]) != cfg.DOCS_EMBED_DIMENSIONS:
                 logger.warning("doc_corpus_retrieval_bad_embedding_shape")
-                return ""
+                return "", []
             hits = await search_doc_chunks(
                 session,
                 collection_key=collection_key,
@@ -611,11 +760,17 @@ async def retrieve_doc_corpus_prompt_block(
             )
     except (RuntimeError, SQLAlchemyError, OSError, ValueError, OpenAIError) as e:
         logger.warning("doc_corpus_retrieval_failed", error=str(e))
-        return ""
+        return "", []
 
     block = format_doc_corpus_hits_for_prompt(hits)
-    logger.info("doc_corpus_retrieval_ok", hit_count=len(hits), char_count=len(block))
-    return block
+    hit_titles = [h.page_title or "(no title)" for h in hits]
+    logger.info(
+        "doc_corpus_retrieval_ok",
+        hit_count=len(hits),
+        char_count=len(block),
+        hit_titles=hit_titles,
+    )
+    return block, hit_titles
 
 
 def cosine_distance_row(left: list[float], right: list[float]) -> float:

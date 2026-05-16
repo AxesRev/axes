@@ -73,7 +73,7 @@ POSTGRES_HOST=localhost
 POSTGRES_DB=aegra
 
 # Authentication
-AUTH_TYPE=noop  # Options: noop, custom
+AUTH_TYPE=noop
 
 # Server
 HOST=0.0.0.0

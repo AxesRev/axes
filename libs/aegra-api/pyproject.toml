@@ -44,6 +44,8 @@ dependencies = [
     "asgi-correlation-id>=4.3.4",
     "pyjwt>=2.11.0",
     "cryptography>=46.0.5",
+    "tqdm>=4.67.3",
+    "python-frontmatter>=1.1.0",
 ]
 
 [project.urls]

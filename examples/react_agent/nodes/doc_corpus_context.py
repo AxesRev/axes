@@ -35,11 +35,15 @@ async def load_doc_corpus_context(state: State, runtime: Runtime[Context]) -> di
         logger.info("doc_corpus_context: no human message text — skipping")
         return {"doc_corpus_context": ""}
 
-    block = await retrieve_doc_corpus_prompt_block(
+    block, hit_titles = await retrieve_doc_corpus_prompt_block(
         collection_key=coll_key,
         query=query,
         limit=ctx.doc_corpus_top_k,
     )
     if block:
-        logger.info("doc_corpus_context: loaded %d characters", len(block))
+        logger.info(
+            "doc_corpus_context: loaded %d characters; snippet titles: %s",
+            len(block),
+            hit_titles,
+        )
     return {"doc_corpus_context": block}
