@@ -110,6 +110,7 @@ class TestStreamingErrorHandling:
             assert "error" in error_event[1]
             assert "message" in error_event[1]
             assert "Graph execution failed" in str(error_event[1]["message"])
+            mock_session.close.assert_awaited_once()
 
     async def test_error_stored_for_replay(self, mock_user: User, run_id: str, thread_id: str):
         """Test that error events are stored for replay support"""
@@ -175,6 +176,7 @@ class TestStreamingErrorHandling:
             assert error_event["event_type"] == "error"
             assert error_event["data"]["error"] == "RuntimeError"
             assert "Storage test error" in error_event["data"]["message"]
+            mock_session.close.assert_awaited_once()
 
     async def test_error_type_preserved(self, mock_user: User, run_id: str, thread_id: str):
         """Test that error type is correctly preserved and sent"""
@@ -240,6 +242,7 @@ class TestStreamingErrorHandling:
             error_event = error_events[0]
             assert error_event[1]["error"] == "ValueError"
             assert error_event[1]["message"] == "Type preservation test"
+            mock_session.close.assert_awaited_once()
 
     async def test_multiple_errors_only_send_once(self, mock_user: User, run_id: str, thread_id: str):
         """Test that if error is caught in inner handler, outer handler doesn't duplicate"""
@@ -299,3 +302,4 @@ class TestStreamingErrorHandling:
             error_events = [evt for _, evt in events_received if isinstance(evt, tuple) and evt[0] == "error"]
             # Should have exactly one error event (not duplicated)
             assert len(error_events) == 1, f"Expected 1 error event, got {len(error_events)}"
+            mock_session.close.assert_awaited_once()

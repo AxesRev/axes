@@ -852,9 +852,11 @@ async def execute_run_async(
     subgraphs: bool | None = False,
 ) -> None:
     """Execute run asynchronously in background using streaming to capture all events"""  # Use provided session or get a new one
+    owns_session = False
     if session is None:
         maker = _get_session_maker()
         session = maker()
+        owns_session = True
 
     try:
         # Update status
@@ -992,9 +994,12 @@ async def execute_run_async(
         # so re-raising causes "Task exception was never retrieved" warnings.
         # The error is already fully handled (run status, thread status, broker).
     finally:
-        # Clean up broker
-        await streaming_service.cleanup_run(run_id)
-        active_runs.pop(run_id, None)
+        try:
+            await streaming_service.cleanup_run(run_id)
+        finally:
+            active_runs.pop(run_id, None)
+            if owns_session:
+                await session.close()
 
 
 async def update_run_status(

@@ -26,6 +26,9 @@ services:
     environment:
       - POSTGRES_HOST=postgres
       - PYTHONPATH=/app/src:/app
+      # react_agent MCP client; default reaches neo4j-mcp on the Compose network (see --profile neo4j).
+      # Override in .env e.g. http://127.0.0.1:8811 only makes sense for API outside Docker.
+      - NEO4J_MCP_HOST=${NEO4J_MCP_HOST:-http://neo4j-mcp:8811}
     depends_on:
       postgres:
         condition: service_healthy
@@ -44,22 +47,50 @@ services:
         uvicorn aegra_api.main:app --host 0.0.0.0 --port $${PORT:-8000} --reload
       "
 
+  # Neo4j (Bolt + APOC) — required for mcp-neo4j-cypher `get_neo4j_schema`.
+  neo4j:
+    image: neo4j:5-community
+    ports:
+      - "${NEO4J_PUBLISH_HTTP:-7474}:7474"
+      - "${NEO4J_PUBLISH_BOLT:-7687}:7687"
+    environment:
+      # Auth only via NEO4J_AUTH — do NOT set NEO4J_PASSWORD here (Neo4j maps NEO4J_* to config and treats PASSWORD as invalid).
+      NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:-password}
+      NEO4J_PLUGINS: '["apoc"]'
+      NEO4J_dbms_security_procedures_unrestricted: apoc.*
+    volumes:
+      - neo4j_data:/data
+    healthcheck:
+      # HTTP port comes up when DB is ready; avoids embedding password in healthcheck.
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:7474/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 40s
+    profiles:
+      - neo4j
+
   # Neo4j MCP (HTTP) — long-lived mcp-neo4j-cypher for LangChain MultiServerMCPClient.
-  # Set NEO4J_URI / credentials in .env; agents use NEO4J_MCP_HOST (e.g. http://neo4j-mcp:8811 → …/mcp).
+  # Bolt URL overridden to the neo4j service on the Compose network.
   neo4j-mcp:
     build:
       context: .
       dockerfile: deployments/docker/Dockerfile.neo4j-mcp
     ports:
       - "${NEO4J_MCP_PUBLISH_PORT:-8811}:8811"
-    env_file:
-      - .env
     environment:
       NEO4J_TRANSPORT: http
-      NEO4J_MCP_SERVER_HOST: 0.0.0.0
-      NEO4J_MCP_SERVER_PORT: 8811
+      NEO4J_URI: bolt://neo4j:7687
+      NEO4J_USER: ${NEO4J_USER:-neo4j}
+      NEO4J_PASSWORD: ${NEO4J_PASSWORD:-password}
+      NEO4J_DATABASE: ${NEO4J_DATABASE:-neo4j}
+      NEO4J_MCP_SERVER_HOST: "0.0.0.0"
+      NEO4J_MCP_SERVER_PORT: "8811"
       NEO4J_READ_ONLY: "true"
-      NEO4J_MCP_SERVER_ALLOWED_HOSTS: "localhost,127.0.0.1,neo4j-mcp,host.docker.internal"
+      NEO4J_MCP_SERVER_ALLOWED_HOSTS: "localhost,127.0.0.1,neo4j-mcp,neo4j,host.docker.internal"
+    depends_on:
+      neo4j:
+        condition: service_healthy
     profiles:
       - neo4j
 
@@ -76,3 +107,4 @@ services:
 volumes:
   postgres_data:
   redis_data:
+  neo4j_data:

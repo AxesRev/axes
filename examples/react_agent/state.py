@@ -113,11 +113,12 @@ class ValidationVerdict(BaseModel):
                 msg = "When passed is true, domain_feedback, resource_feedback, and permission_feedback must be null."
                 raise ValueError(msg)
             return self
-        if not any(
+        feedback_strips = (
             (self.domain_feedback or "").strip(),
             (self.resource_feedback or "").strip(),
             (self.permission_feedback or "").strip(),
-        ):
+        )
+        if not any(feedback_strips):
             msg = "When passed is false, at least one feedback field must be a non-empty string."
             raise ValueError(msg)
         return self

@@ -33,6 +33,9 @@ MAX_REVISIONS: int = 3
 
 _FieldName = Literal["domain", "resource", "permission"]
 
+_RESOURCE_DETECTOR_REPO_LIMIT: int = 50
+_RESOURCE_DETECTOR_ORG_LIMIT: int = 20
+
 
 # ---------------------------------------------------------------------------
 # Per-field subgraph — reuses call_model, execute_tools, route_model_output
@@ -92,19 +95,44 @@ _field_detection_graph = _field_builder.compile()
 # ---------------------------------------------------------------------------
 
 
+def _extra_detector_context(state: State, field_name: _FieldName) -> str:
+    """Add GitHub repo/org lists to the seeded task when detecting `resource`.
+
+    Keeps concrete owner/repo candidates in the message transcript so resolution does not depend solely on
+    system-template placeholders or external graph data.
+    """
+    if field_name != "resource":
+        return ""
+
+    sections: list[str] = []
+    if state.github_repos:
+        repo_lines = "\n".join(f"- {name}" for name in state.github_repos[:_RESOURCE_DETECTOR_REPO_LIMIT])
+        sections.append(
+            'Repositories linked to this user (use for vague references like "our test repo"; '
+            "prefer an exact owner/repo string):\n" + repo_lines
+        )
+    if state.github_orgs:
+        org_lines = "\n".join(f"- {login}" for login in state.github_orgs[:_RESOURCE_DETECTOR_ORG_LIMIT])
+        sections.append("Organizations linked to this user:\n" + org_lines)
+
+    if not sections:
+        return ""
+
+    return "\n\n" + "\n\n".join(sections)
+
+
 def _seed(state: State, field_name: _FieldName, hint: str | None, feedback: str | None) -> HumanMessage:
     user_request = next((get_message_text(m) for m in state.messages if isinstance(m, HumanMessage)), "")
     feedback_block = (
         FIELD_DETECTOR_FEEDBACK_TEMPLATE.format(field_name=field_name, feedback=feedback) if feedback else ""
     )
-    return HumanMessage(
-        content=FIELD_DETECTOR_TASK_TEMPLATE.format(
-            user_request=user_request,
-            field_name=field_name,
-            hint=hint or "(no hint — infer from the request)",
-            feedback_block=feedback_block,
-        )
+    base_content = FIELD_DETECTOR_TASK_TEMPLATE.format(
+        user_request=user_request,
+        field_name=field_name,
+        hint=hint or "(no hint — infer from the request)",
+        feedback_block=feedback_block,
     )
+    return HumanMessage(content=base_content + _extra_detector_context(state, field_name))
 
 
 async def _detect(

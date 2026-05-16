@@ -1,25 +1,43 @@
 """Run Neo4j ``mcp-neo4j-cypher`` over HTTP for LangChain remote MCP clients.
 
-This process stays up while Docker (or your supervisor) runs it; the agent uses
-``MultiServerMCPClient`` with ``transport: \"http\"`` instead of spawning ``uvx``.
+Loads a ``.env`` file from the current working directory or a parent (``python-dotenv`` lookup),
+then reads configuration only from environment variables understood by ``mcp-neo4j-cypher``.
 
-Configuration uses the same environment variables as upstream ``mcp-neo4j-cypher``
-(see PyPI / Neo4j docs). This entrypoint forces ``NEO4J_TRANSPORT=http`` and sets
-defaults for a network-facing MCP listener.
+This entry forces ``NEO4J_TRANSPORT=http`` and sets defaults for a network-facing MCP listener unless
+already set in the environment.
 
-Bolt credentials stay in this service only; the LangGraph agent uses ``NEO4J_MCP_HOST``
-(HTTP base, ``/mcp`` appended in tools), not the database password.
+The LangGraph agent uses ``NEO4J_MCP_HOST`` only (HTTP base); Bolt credentials stay on this process.
 """
 
 from __future__ import annotations
 
-import argparse
 import asyncio
 import logging
 import os
+from argparse import Namespace
 
+from dotenv import load_dotenv
 from mcp_neo4j_cypher import server as neo4j_mcp_server
 from mcp_neo4j_cypher.utils import process_config
+
+# ``process_config`` expects an argparse-like namespace; configuration comes from env only.
+_PROCESS_CONFIG_ARGS = Namespace(
+    db_url=None,
+    username=None,
+    password=None,
+    database=None,
+    transport=None,
+    namespace=None,
+    server_host=None,
+    server_port=None,
+    server_path=None,
+    allow_origins=None,
+    allowed_hosts=None,
+    read_timeout=None,
+    read_only=False,
+    token_limit=None,
+    schema_sample_size=None,
+)
 
 
 def _force_http_listener_defaults() -> None:
@@ -30,36 +48,17 @@ def _force_http_listener_defaults() -> None:
     os.environ.setdefault("NEO4J_MCP_SERVER_PATH", "/mcp/")
     os.environ.setdefault("NEO4J_READ_ONLY", "true")
     os.environ.setdefault("NEO4J_SCHEMA_SAMPLE_SIZE", "1000")
-    # Align with graph_service GitHub fetcher env (`NEO4J_USER`).
     if os.getenv("NEO4J_USERNAME") is None and os.getenv("NEO4J_USER"):
         os.environ["NEO4J_USERNAME"] = os.environ["NEO4J_USER"]
 
 
 def main() -> None:
-    """Parse CLI (optional overrides), merge env via ``process_config``, run HTTP MCP."""
+    """Load ``.env`` from cwd (or parents), apply HTTP defaults, run MCP from environment only."""
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s %(message)s")
+    load_dotenv(override=False)
     _force_http_listener_defaults()
 
-    parser = argparse.ArgumentParser(
-        description="Neo4j MCP remote server (HTTP); powered by mcp-neo4j-cypher",
-    )
-    parser.add_argument("--db-url", default=None)
-    parser.add_argument("--username", default=None)
-    parser.add_argument("--password", default=None)
-    parser.add_argument("--database", default=None)
-    parser.add_argument("--namespace", default=None)
-    parser.add_argument("--server-path", default=None)
-    parser.add_argument("--server-host", default=None)
-    parser.add_argument("--server-port", default=None, type=int)
-    parser.add_argument("--allow-origins", default=None)
-    parser.add_argument("--allowed-hosts", default=None)
-    parser.add_argument("--read-timeout", type=int, default=None)
-    parser.add_argument("--read-only", action="store_true")
-    parser.add_argument("--token-limit", default=None)
-    parser.add_argument("--schema-sample-size", type=int, default=None)
-
-    args = parser.parse_args()
-    config = process_config(args)
+    config = process_config(_PROCESS_CONFIG_ARGS)
     asyncio.run(neo4j_mcp_server.main(**config))
 
 
