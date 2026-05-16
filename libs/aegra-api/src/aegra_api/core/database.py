@@ -2,12 +2,15 @@
 
 import asyncio
 import sys
+from typing import Any
 
 import structlog
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from langgraph.store.postgres.aio import AsyncPostgresStore
+from pgvector.asyncpg import register_vector
 from psycopg.rows import dict_row
 from psycopg_pool import AsyncConnectionPool
+from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from aegra_api.config import load_store_config
@@ -47,6 +50,10 @@ class DatabaseManager:
             pool_pre_ping=True,
             echo=settings.db.DB_ECHO_LOG,
         )
+
+        @event.listens_for(self.engine.sync_engine, "connect")
+        def _register_pgvector(dbapi_connection: Any, _connection_record: object) -> None:
+            dbapi_connection.run_async(register_vector)
 
         lg_max = settings.pool.LANGGRAPH_MAX_POOL_SIZE
         lg_kwargs = {

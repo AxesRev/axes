@@ -13,9 +13,11 @@ Nothing is auto-imported by FastAPI yet; routers will `from ...core.db import ge
 
 from __future__ import annotations
 
+import uuid
 from collections.abc import AsyncIterator
 from datetime import datetime
 
+from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     TIMESTAMP,
     ForeignKey,
@@ -137,6 +139,49 @@ class RunEvent(Base):
     __table_args__ = (
         Index("idx_run_events_run_id", "run_id"),
         Index("idx_run_events_seq", "run_id", "seq"),
+    )
+
+
+class DocEmbeddingChunk(Base):
+    """Chunk of crawled documentation with an embedding for semantic search.
+
+    Populated by the docs corpus ingest pipeline (Firecrawl + OpenAI embeddings).
+    Vector dimension must match ``settings.doc_corpus.DOCS_EMBED_DIMENSIONS`` (default 1536).
+    """
+
+    __tablename__ = "doc_embedding_chunks"
+
+    id: Mapped[str] = mapped_column(
+        Text,
+        primary_key=True,
+        default=lambda: str(uuid.uuid4()),
+    )
+    application: Mapped[str] = mapped_column(Text, nullable=False)
+    collection_key: Mapped[str] = mapped_column(Text, nullable=False)
+    source_url: Mapped[str] = mapped_column(Text, nullable=False)
+    page_title: Mapped[str | None] = mapped_column(Text, nullable=True)
+    chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    metadata_dict: Mapped[dict] = mapped_column(JSONB, server_default=text("'{}'::jsonb"), name="metadata")
+    embedding: Mapped[list[float]] = mapped_column(Vector(1536), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=text("now()"))
+
+    __table_args__ = (
+        Index("idx_doc_embedding_chunks_app_collection", "application", "collection_key"),
+        Index(
+            "idx_doc_embedding_chunks_app_collection_url",
+            "application",
+            "collection_key",
+            "source_url",
+        ),
+        Index(
+            "uq_doc_embedding_chunks_natural_key",
+            "application",
+            "collection_key",
+            "source_url",
+            "chunk_index",
+            unique=True,
+        ),
     )
 
 

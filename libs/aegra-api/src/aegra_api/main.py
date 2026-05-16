@@ -32,6 +32,7 @@ from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 from fastapi.responses import JSONResponse  # noqa: E402
 
 from aegra_api.api.assistants import router as assistants_router  # noqa: E402
+from aegra_api.api.doc_corpus import router as doc_corpus_router  # noqa: E402
 from aegra_api.api.runs import router as runs_router  # noqa: E402
 from aegra_api.api.stateless_runs import router as stateless_runs_router  # noqa: E402
 from aegra_api.api.store import router as store_router  # noqa: E402
@@ -264,6 +265,7 @@ def _include_core_routers(app: FastAPI) -> None:
     app.include_router(runs_router)
     app.include_router(stateless_runs_router)
     app.include_router(store_router)
+    app.include_router(doc_corpus_router)
 
 
 def create_app() -> FastAPI:
