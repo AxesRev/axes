@@ -4,6 +4,8 @@ This file contains shared fixtures and configuration that are available
 to all tests across the test suite.
 """
 
+import asyncio
+import sys
 from unittest.mock import AsyncMock
 
 import pytest
@@ -40,6 +42,9 @@ from tests.fixtures.test_helpers import (
 )
 
 # Export fixtures for use in tests
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
 __all__ = [
     "DummyUser",
     "DummySessionBase",

@@ -544,17 +544,12 @@ async def join_run(
         output = getattr(run_orm, "output", None) or {}
         return output
 
-    # Wait for background task to complete
+    # Wait for background task to complete.
+    # asyncio.wait() is used intentionally instead of asyncio.wait_for() because
+    # wait_for() cancels the underlying task on timeout, which would kill the run.
     task = active_runs.get(run_id)
     if task:
-        try:
-            await asyncio.wait_for(task, timeout=30.0)
-        except TimeoutError:
-            # Task is taking too long, but that's okay - we'll check DB status
-            pass
-        except asyncio.CancelledError:
-            # Task was cancelled, that's also okay
-            pass
+        await asyncio.wait({task}, timeout=300.0)
 
     # Return final output from database
     run_orm = await session.scalar(select(RunORM).where(RunORM.run_id == run_id))
@@ -857,9 +852,11 @@ async def execute_run_async(
     subgraphs: bool | None = False,
 ) -> None:
     """Execute run asynchronously in background using streaming to capture all events"""  # Use provided session or get a new one
+    owns_session = False
     if session is None:
         maker = _get_session_maker()
         session = maker()
+        owns_session = True
 
     try:
         # Update status
@@ -997,9 +994,12 @@ async def execute_run_async(
         # so re-raising causes "Task exception was never retrieved" warnings.
         # The error is already fully handled (run status, thread status, broker).
     finally:
-        # Clean up broker
-        await streaming_service.cleanup_run(run_id)
-        active_runs.pop(run_id, None)
+        try:
+            await streaming_service.cleanup_run(run_id)
+        finally:
+            active_runs.pop(run_id, None)
+            if owns_session:
+                await session.close()
 
 
 async def update_run_status(

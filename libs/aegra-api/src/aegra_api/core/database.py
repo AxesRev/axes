@@ -1,5 +1,8 @@
 """Database manager with LangGraph integration"""
 
+import asyncio
+import sys
+
 import structlog
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from langgraph.store.postgres.aio import AsyncPostgresStore
@@ -9,6 +12,9 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from aegra_api.config import load_store_config
 from aegra_api.settings import settings
+
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 logger = structlog.get_logger(__name__)
 

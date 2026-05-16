@@ -149,6 +149,102 @@ async def handle_access_request(
     return AccessRequestResult(linked=True, identity=result)
 
 
+async def store_installation_by_github_user_id(
+    *,
+    github_user_id: str | None,
+    github_username: str | None,
+    installation_id: str,
+    session: AsyncSession,
+) -> UserIdentity:
+    """Upsert a ``UserIdentity`` row for a GitHub App installation.
+
+    Looks up an existing row by ``github_installation_id`` first, then by
+    ``github_user_id`` if provided.  Creates a new row when neither matches.
+    ``slack_user_id`` is left as ``None`` and can be filled in later when the
+    user links their Slack account.
+
+    Args:
+        github_user_id: Numeric GitHub user ID (as a string), or ``None`` when
+            the installation callback arrived without a user OAuth code.
+        github_username: GitHub login / username, or ``None``.
+        installation_id: GitHub App installation ID supplied by GitHub.
+        session: Active async database session.
+
+    Returns:
+        The created or updated ``UserIdentity`` row.
+    """
+    identity: UserIdentity | None = None
+
+    # Try to find an existing row for this installation first.
+    result = await session.execute(select(UserIdentity).where(UserIdentity.github_installation_id == installation_id))
+    identity = result.scalar_one_or_none()
+
+    # Fall back to lookup by github_user_id if we have it.
+    if identity is None and github_user_id is not None:
+        result = await session.execute(select(UserIdentity).where(UserIdentity.github_user_id == github_user_id))
+        identity = result.scalar_one_or_none()
+
+    if identity is None:
+        identity = UserIdentity(
+            github_user_id=github_user_id,
+            github_username=github_username,
+            github_installation_id=installation_id,
+        )
+        session.add(identity)
+        await session.flush()
+        logger.info(
+            "github_identity_created_from_install",
+            github_user_id=github_user_id,
+            installation_id=installation_id,
+        )
+    else:
+        if github_user_id is not None:
+            identity.github_user_id = github_user_id
+        if github_username is not None:
+            identity.github_username = github_username
+        identity.github_installation_id = installation_id
+        identity.updated_at = datetime.now(UTC)
+        logger.info(
+            "github_installation_updated",
+            github_user_id=github_user_id,
+            installation_id=installation_id,
+        )
+
+    await session.commit()
+    return identity
+
+
+async def store_github_installation(
+    *,
+    slack_user_id: str,
+    installation_id: str,
+    session: AsyncSession,
+) -> UserIdentity:
+    """Persist the GitHub App *installation_id* for *slack_user_id*.
+
+    Creates the ``UserIdentity`` row if it does not yet exist (e.g. the user
+    installed the app before completing OAuth).
+
+    Args:
+        slack_user_id: Slack user ID recovered from the verified signed state.
+        installation_id: GitHub App installation ID supplied by GitHub.
+        session: Active async database session.
+
+    Returns:
+        The updated ``UserIdentity`` row.
+    """
+    identity = await _get_or_create_identity(slack_user_id, session)
+    identity.github_installation_id = installation_id
+    identity.updated_at = datetime.now(UTC)
+    await session.commit()
+    logger.info(
+        "github_installation_stored",
+        slack_user_id=slack_user_id,
+        installation_id=installation_id,
+    )
+    return identity
+
+
 async def link_github_identity(
     *,
     slack_user_id: str,

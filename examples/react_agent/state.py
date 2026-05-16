@@ -9,13 +9,119 @@ from typing import Annotated
 from langchain_core.messages import AnyMessage
 from langgraph.graph import add_messages
 from langgraph.managed import IsLastStep
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, model_validator
 
 
 class Permission(BaseModel):
-    domain: str
-    resource: str | None = None
-    permission: str
+    domain: Annotated[str, Field(description="The type of resource to gain access to")]
+    resource: Annotated[str | None, Field(description="The name or identifier of the specific resource")] = None
+    permission: Annotated[str, Field(description="The name or type of the permission being requested.")]
+
+
+class FieldResult(BaseModel):
+    """Single-field detection result with the reasoning that produced it."""
+
+    value: Annotated[
+        str | None,
+        Field(
+            description=(
+                "Canonical value for this field. For `resource`, use null only when the request truly does not "
+                "name a specific resource; otherwise use an exact identifier (e.g. owner/repo)."
+            ),
+        ),
+    ] = None
+    justification: Annotated[
+        str,
+        Field(
+            description=(
+                "1–3 sentences explaining why `value` is correct, grounded in tool results when tools were used; "
+                "reject guesswork."
+            ),
+        ),
+    ]
+
+
+class IntentHints(BaseModel):
+    """Per-field hints derived from the user's request.
+
+    Each hint is a clarifying restatement of WHAT the field should describe
+    in the user's intent — not HOW to find it.
+    """
+
+    domain_hint: Annotated[
+        str,
+        Field(description="What the `domain` field should describe (the WHAT, not the HOW)."),
+    ]
+    resource_hint: Annotated[
+        str,
+        Field(description="What the `resource` field should describe (the WHAT, not the HOW)."),
+    ]
+    permission_hint: Annotated[
+        str,
+        Field(description="What the `permission` field should describe (the WHAT, not the HOW)."),
+    ]
+
+
+class ValidationVerdict(BaseModel):
+    """Validator's assessment of the per-field results."""
+
+    passed: Annotated[
+        bool,
+        Field(
+            description=(
+                "True only if domain, resource, and permission together correctly satisfy the user request. "
+                "Accept: tool-backed or context-aligned justifications that are logically sound. "
+                "Reject: guesswork, mismatch with user context, irrelevance, or justification contradicting value."
+            ),
+        ),
+    ]
+    domain_feedback: Annotated[
+        str | None,
+        Field(
+            description=(
+                "If `passed` is false and `domain` is wrong: short note on what was wrong and how to improve "
+                "(WHAT, not full how-to). Otherwise null."
+            )
+        ),
+    ] = None
+    resource_feedback: Annotated[
+        str | None,
+        Field(
+            description=(
+                "If `passed` is false and `resource` is wrong: same convention as domain_feedback. Otherwise null."
+            )
+        ),
+    ] = None
+    permission_feedback: Annotated[
+        str | None,
+        Field(
+            description=(
+                "If `passed` is false and `permission` is wrong: same convention as domain_feedback. Otherwise null."
+            )
+        ),
+    ] = None
+
+    @model_validator(mode="after")
+    def _feedback_consistent_with_passed(self) -> ValidationVerdict:
+        """Enforce invariants that prompts used to spell out; `with_structured_output` still returns this type."""
+        if self.passed:
+            if (
+                self.domain_feedback is not None
+                or self.resource_feedback is not None
+                or self.permission_feedback is not None
+            ):
+                msg = "When passed is true, domain_feedback, resource_feedback, and permission_feedback must be null."
+                raise ValueError(msg)
+            return self
+        feedback_strips = (
+            (self.domain_feedback or "").strip(),
+            (self.resource_feedback or "").strip(),
+            (self.permission_feedback or "").strip(),
+        )
+        if not any(feedback_strips):
+            msg = "When passed is false, at least one feedback field must be a non-empty string."
+            raise ValueError(msg)
+        return self
 
 
 @dataclass
@@ -60,3 +166,39 @@ class State(InputState):
 
     permission: Permission | None = field(default=None)
     """The structured permission model extracted from the conversation."""
+
+    github_repos: list[str] = field(default_factory=list)
+    """Full names (owner/repo) of GitHub repositories accessible to the authenticated user."""
+
+    github_orgs: list[str] = field(default_factory=list)
+    """Logins of GitHub organizations the authenticated user belongs to."""
+
+    domain_hint: str | None = field(default=None)
+    """Hint describing what the `domain` field should capture (produced by the intent parser)."""
+
+    resource_hint: str | None = field(default=None)
+    """Hint describing what the `resource` field should capture (produced by the intent parser)."""
+
+    permission_hint: str | None = field(default=None)
+    """Hint describing what the `permission` field should capture (produced by the intent parser)."""
+
+    domain_result: FieldResult | None = field(default=None)
+    """Result produced by the domain detector."""
+
+    resource_result: FieldResult | None = field(default=None)
+    """Result produced by the resource detector."""
+
+    permission_result: FieldResult | None = field(default=None)
+    """Result produced by the permission detector."""
+
+    domain_feedback: str | None = field(default=None)
+    """Feedback from the validator when the domain result must be re-derived."""
+
+    resource_feedback: str | None = field(default=None)
+    """Feedback from the validator when the resource result must be re-derived."""
+
+    permission_feedback: str | None = field(default=None)
+    """Feedback from the validator when the permission result must be re-derived."""
+
+    revision_count: int = field(default=0)
+    """Number of validator-driven re-run rounds performed so far (capped to bound the loop)."""

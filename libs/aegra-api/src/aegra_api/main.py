@@ -1,5 +1,13 @@
 """FastAPI application for Aegra (Agent Protocol Server)"""
 
+import sys
+
+if sys.platform == "win32":
+    import asyncio
+    import selectors
+
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
 import asyncio
 import os
 from collections.abc import AsyncIterator
@@ -328,4 +336,15 @@ if __name__ == "__main__":
     import uvicorn
 
     port = int(settings.app.PORT)
-    uvicorn.run(app, host=settings.app.HOST, port=port)  # nosec B104 - binding to all interfaces is intentional
+    host = settings.app.HOST
+
+    if sys.platform == "win32":
+        import selectors
+
+        # Use the loop_factory approach as suggested by the error message
+        # to force the SelectorEventLoop on Windows.
+        config = uvicorn.Config(app, host=host, port=port, loop="asyncio")
+        server = uvicorn.Server(config)
+        asyncio.run(server.serve(), loop_factory=lambda: asyncio.SelectorEventLoop(selectors.SelectSelector()))
+    else:
+        uvicorn.run(app, host=host, port=port)

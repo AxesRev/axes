@@ -215,3 +215,4 @@ class TestRunsStreamingEndpoints:
             assert error_event[0] == "error"
             assert error_event[1]["error"] == "ValueError"
             assert "Test error during streaming" in str(error_event[1]["message"])
+            mock_session.close.assert_awaited_once()

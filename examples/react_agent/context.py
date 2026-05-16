@@ -6,7 +6,7 @@ import os
 from dataclasses import dataclass, field, fields
 from typing import Annotated
 
-from react_agent import prompts
+from examples.react_agent import prompts
 
 
 @dataclass(kw_only=True)
@@ -37,7 +37,10 @@ class Context:
     github_pat: str = field(
         default="",
         metadata={
-            "description": "GitHub Personal Access Token for GitHub MCP server. Leave empty to disable GitHub tools."
+            "description": (
+                "GitHub PAT used only to load the current user's repos/orgs into state (see github_context). "
+                "Not used for MCP tools."
+            ),
         },
     )
 
@@ -55,6 +58,29 @@ class Context:
         },
     )
 
+    reasoning_effort: str = field(
+        default="",
+        metadata={
+            "description": (
+                "Reasoning effort for OpenAI reasoning-capable models: 'low', 'medium', or 'high'. "
+                "Leave empty to disable (default). Applies to o-series models (openai/o3, openai/o4-mini) "
+                "and GPT-5-class models (openai/gpt-5.4-mini, etc.) via the Responses API."
+            )
+        },
+    )
+
+    thinking_budget_tokens: int = field(
+        default=0,
+        metadata={
+            "description": (
+                "Token budget for extended thinking. "
+                "Applies to Anthropic (claude-3-7-sonnet and newer) and Google Gemini 2.5+. "
+                "Set to 0 to disable (default). Anthropic requires the model to be invoked "
+                "with max_tokens greater than this value."
+            )
+        },
+    )
+
     def __post_init__(self) -> None:
         """Fetch env vars for attributes that were not passed as args."""
         for f in fields(self):
@@ -62,4 +88,6 @@ class Context:
                 continue
 
             if getattr(self, f.name) == f.default:
-                setattr(self, f.name, os.environ.get(f.name.upper(), f.default))
+                raw = os.environ.get(f.name.upper())
+                if raw is not None:
+                    setattr(self, f.name, type(f.default)(raw))

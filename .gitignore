@@ -33,3 +33,9 @@ htmlcov/
 
 # MacOS
 .DS_Store
+
+# Private keys
+*.pem
+
+# Local inspect / debug output (scripts/inspect_latest_run.py)
+.scratch/
