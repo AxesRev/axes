@@ -65,21 +65,5 @@ async def fetch_schema_visualization_schematic(
 
 
 def schematic_to_json(schematic: dict[str, Any]) -> str:
-    """Pretty JSON for embedding in MCP tool descriptions."""
+    """Pretty JSON for the ``neo4j://schema`` MCP resource body."""
     return json.dumps(schematic, indent=2, sort_keys=True)
-
-
-def build_run_cypher_tool_description(*, schema_json: str, read_only: bool) -> str:
-    """Full MCP tool description: fixed instructions + live schematic JSON."""
-    mode = (
-        "Read-only mode is ON: mutating keywords (CREATE, MERGE, DELETE, SET, REMOVE, DROP, DETACH DELETE) are rejected."
-        if read_only
-        else "Read-only mode is OFF: write queries are allowed — use with care."
-    )
-    return (
-        "Execute parameterized read/write Cypher against this server's Neo4j database.\n\n"
-        'Results are returned as JSON {"rows": [...], "row_count": N}. Always prefer parameters ($map) over string concatenation.\n\n'
-        f"{mode}\n\n"
-        "Live schema snapshot (CALL db.schema.visualization(), schematic JSON):\n\n"
-        f"```json\n{schema_json}\n```"
-    )

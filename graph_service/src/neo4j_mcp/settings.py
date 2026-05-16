@@ -25,9 +25,6 @@ class Settings(BaseSettings):
     mcp_host: str = "0.0.0.0"
     mcp_port: int = 8001
 
-    # Safety: disallow write queries unless explicitly opted in
-    allow_write_queries: bool = False
-
 
 @lru_cache
 def get_settings() -> Settings:

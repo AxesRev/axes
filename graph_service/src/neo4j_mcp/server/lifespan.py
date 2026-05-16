@@ -1,4 +1,4 @@
-"""MCP server lifespan — Neo4j driver startup, schema snapshot, teardown."""
+"""MCP server lifespan — Neo4j driver startup, schema snapshot for resources, teardown."""
 
 from __future__ import annotations
 
@@ -11,36 +11,23 @@ from mcp.server.fastmcp import FastMCP
 from neo4j import AsyncDriver
 
 from db.client import close_driver, init_driver, verify_connectivity
-from neo4j_mcp.schema_snapshot import (
-    build_run_cypher_tool_description,
-    fetch_schema_visualization_schematic,
-    schematic_to_json,
-)
+from neo4j_mcp.schema_snapshot import fetch_schema_visualization_schematic, schematic_to_json
 from neo4j_mcp.settings import get_settings
 
 logger = logging.getLogger(__name__)
 
-_TOOL_NAME = "run_cypher"
-
 
 @dataclass
 class AppContext:
-    """Resources available to MCP tools via ``ctx.request_context.lifespan_context``."""
+    """Resources available to MCP tools/resources via ``lifespan_context``."""
 
     driver: AsyncDriver
+    schema_json: str
 
 
 @asynccontextmanager
-async def neo4j_lifespan(server: FastMCP) -> AsyncIterator[AppContext]:
-    """Open the Neo4j driver, load schema visualization, attach schematic to ``run_cypher``.
-
-    Mutates the registered FastMCP tool description after introspection so clients listing tools see an accurate schematic without maintaining strings by hand.
-
-    Raises:
-        RuntimeError: If the ``run_cypher`` tool was not registered (programming error).
-        neo4j.exceptions.ClientError: If Neo4j rejects ``CALL db.schema.visualization()`` or related calls.
-        ValueError: If visualization returns no rows.
-    """
+async def neo4j_lifespan(_server: FastMCP) -> AsyncIterator[AppContext]:
+    """Open the Neo4j driver and cache the schema schematic JSON for ``neo4j://schema``."""
     settings = get_settings()
     logger.info(
         "neo4j_mcp starting",
@@ -60,17 +47,8 @@ async def neo4j_lifespan(server: FastMCP) -> AsyncIterator[AppContext]:
     )
     schema_json = schematic_to_json(schematic)
 
-    tool = server._tool_manager.get_tool(_TOOL_NAME)
-    if tool is None:
-        logger.error("run_cypher_tool_missing")
-        raise RuntimeError(f"Internal error: MCP tool {_TOOL_NAME!r} is not registered.")
-    tool.description = build_run_cypher_tool_description(
-        schema_json=schema_json,
-        read_only=not settings.allow_write_queries,
-    )
-
     try:
-        yield AppContext(driver=driver)
+        yield AppContext(driver=driver, schema_json=schema_json)
     finally:
         logger.info("neo4j_mcp shutting down")
         await close_driver()

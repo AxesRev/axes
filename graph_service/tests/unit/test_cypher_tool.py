@@ -7,27 +7,28 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from neo4j_mcp.schemas import RunCypherOutput
 from neo4j_mcp.tools import cypher
 
 
 @pytest.mark.unit
-async def test_run_cypher_rejects_mutating_query_when_read_only(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_run_cypher_rejects_mutating_query(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         cypher,
         "get_settings",
-        lambda: SimpleNamespace(allow_write_queries=False, neo4j_database="neo4j"),
+        lambda: SimpleNamespace(neo4j_database="neo4j"),
     )
     ctx = MagicMock()
-    with pytest.raises(ValueError, match="Write/mutating"):
+    with pytest.raises(ValueError, match="Only read-only"):
         await cypher.run_cypher("CREATE (n:Tmp)", ctx=ctx)
 
 
 @pytest.mark.unit
-async def test_run_cypher_allows_match_when_read_only(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_run_cypher_returns_structured_rows(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         cypher,
         "get_settings",
-        lambda: SimpleNamespace(allow_write_queries=False, neo4j_database="neo4j"),
+        lambda: SimpleNamespace(neo4j_database="neo4j"),
     )
 
     driver = MagicMock()
@@ -39,4 +40,6 @@ async def test_run_cypher_allows_match_when_read_only(monkeypatch: pytest.Monkey
     result = await cypher.run_cypher("MATCH (n) RETURN n LIMIT 1", ctx=ctx)
 
     driver.execute_query.assert_awaited_once()
-    assert '"row_count": 0' in result
+    assert isinstance(result, RunCypherOutput)
+    assert result.row_count == 0
+    assert result.rows == []
