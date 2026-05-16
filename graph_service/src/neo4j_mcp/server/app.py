@@ -2,8 +2,11 @@
 
 This module is the single place where:
   - the FastMCP instance is created
-  - all tools are declared (logic delegated to ``neo4j_mcp.tools.*``)
+  - tools are declared (logic delegated to ``neo4j_mcp.tools.*``)
   - the ASGI app is exported for uvicorn
+
+The visible ``run_cypher`` description is overwritten at startup once
+``CALL db.schema.visualization()`` succeeds (see ``server/lifespan.py``).
 
 Run standalone:
     uvicorn neo4j_mcp.server.app:app --host 0.0.0.0 --port 8001
@@ -13,7 +16,7 @@ Run standalone:
 
 from typing import Any
 
-from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp import Context, FastMCP
 
 from neo4j_mcp.server.lifespan import neo4j_lifespan
 from neo4j_mcp.settings import get_settings
@@ -28,27 +31,19 @@ mcp: FastMCP = FastMCP(
 
 
 # ---------------------------------------------------------------------------
-# Tool registrations
-# Each @mcp.tool() call is a thin adapter: it declares the MCP-visible
-# signature and docstring, then delegates to the logic in tools/*.
+# Tool registrations — placeholder description replaced after schema snapshot.
 # ---------------------------------------------------------------------------
 
 
 @mcp.tool()
-async def execute_cypher(
+async def run_cypher(
     query: str,
     parameters: dict[str, Any] | None = None,
+    *,
+    ctx: Context,
 ) -> str:
-    """Execute a Cypher query against the Neo4j database.
-
-    Args:
-        query: A valid Cypher query string, e.g. ``MATCH (n) RETURN n LIMIT 5``.
-        parameters: Optional parameter map bound into the query at execution time.
-
-    Returns:
-        Query results as a JSON string.
-    """
-    return await _cypher.execute_cypher(query, parameters)
+    """Placeholder — overridden by lifespan once Neo4j schema visualization loads."""
+    return await _cypher.run_cypher(query, parameters, ctx=ctx)
 
 
 # ASGI app — used by uvicorn and importable for Starlette mounting

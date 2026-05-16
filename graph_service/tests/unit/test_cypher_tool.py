@@ -1,23 +1,42 @@
-"""Unit tests for the execute_cypher tool logic."""
+"""Unit tests for ``run_cypher`` guard and execution wiring."""
+
+from __future__ import annotations
+
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from neo4j_mcp.tools.cypher import execute_cypher
+from neo4j_mcp.tools import cypher
 
 
 @pytest.mark.unit
-async def test_execute_cypher_returns_hello_world() -> None:
-    result = await execute_cypher("MATCH (n) RETURN n LIMIT 1")
-    assert result == "hello world"
+async def test_run_cypher_rejects_mutating_query_when_read_only(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        cypher,
+        "get_settings",
+        lambda: SimpleNamespace(allow_write_queries=False, neo4j_database="neo4j"),
+    )
+    ctx = MagicMock()
+    with pytest.raises(ValueError, match="Write/mutating"):
+        await cypher.run_cypher("CREATE (n:Tmp)", ctx=ctx)
 
 
 @pytest.mark.unit
-async def test_execute_cypher_accepts_parameters() -> None:
-    result = await execute_cypher("MATCH (n {id: $id}) RETURN n", parameters={"id": "abc"})
-    assert result == "hello world"
+async def test_run_cypher_allows_match_when_read_only(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        cypher,
+        "get_settings",
+        lambda: SimpleNamespace(allow_write_queries=False, neo4j_database="neo4j"),
+    )
 
+    driver = MagicMock()
+    driver.execute_query = AsyncMock(return_value=([], MagicMock(), []))
 
-@pytest.mark.unit
-async def test_execute_cypher_parameters_default_to_none() -> None:
-    result = await execute_cypher("RETURN 1")
-    assert isinstance(result, str)
+    ctx = MagicMock()
+    ctx.request_context.lifespan_context = SimpleNamespace(driver=driver)
+
+    result = await cypher.run_cypher("MATCH (n) RETURN n LIMIT 1", ctx=ctx)
+
+    driver.execute_query.assert_awaited_once()
+    assert '"row_count": 0' in result

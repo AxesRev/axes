@@ -1,0 +1,27 @@
+"""Unit tests for schema visualization schematic builders."""
+
+from __future__ import annotations
+
+import pytest
+
+from neo4j_mcp.schema_snapshot import (
+    build_run_cypher_tool_description,
+    visualization_row_to_schematic,
+)
+
+
+@pytest.mark.unit
+def test_visualization_row_empty_lists() -> None:
+    row = {"viz_nodes": [], "viz_relationships": []}
+    doc = visualization_row_to_schematic(row)
+    assert doc["procedure"] == "db.schema.visualization"
+    assert doc["nodes"] == []
+    assert doc["relationships"] == []
+
+
+@pytest.mark.unit
+def test_build_run_cypher_tool_description_contains_schema_json() -> None:
+    desc = build_run_cypher_tool_description(schema_json='{"x": 1}', read_only=True)
+    assert "```json" in desc
+    assert '"x": 1' in desc
+    assert "Read-only mode is ON" in desc

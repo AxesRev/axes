@@ -9,7 +9,10 @@ yet exist for this installation.
 
 Run directly:
     cd graph_service
-    uv run --package aegra-neo4j-mcp python -m integrations.github.fetcher
+    uv run --package aegra-neo4j-mcp python -m integrations.github.fetcher [INSTALLATION_ID]
+
+When INSTALLATION_ID is omitted, the first row with a non-null ``github_installation_id``
+is read from Postgres.
 """
 
 from __future__ import annotations
@@ -80,7 +83,7 @@ async def _upsert_connection(
         await connection.save()
 
     if not await connection.tenant.is_connected(tenant):
-        await connection.tenant.connect(tenant)
+        await connection.tenant.replace(tenant)
 
     return connection
 
@@ -109,7 +112,7 @@ async def _upsert_resource(repo: Repository, connection: AppConnection) -> Resou
         await resource.save()
 
     if not await resource.connection.is_connected(connection):
-        await resource.connection.connect(connection)
+        await resource.connection.replace(connection)
 
     return resource
 
@@ -136,7 +139,7 @@ async def _upsert_identity(user: NamedUser, connection: AppConnection) -> AppIde
         await identity.save()
 
     if not await identity.connection.is_connected(connection):
-        await identity.connection.connect(connection)
+        await identity.connection.replace(connection)
 
     return identity
 
@@ -177,23 +180,29 @@ async def fetch_installation(installation_id: int) -> None:
 
 async def _run_once() -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s %(message)s")
+
+    if len(sys.argv) > 1:
+        installation_id = int(sys.argv[1])
+        logger.info("installation_id_from_cli=%s", installation_id)
+    else:
+        runner = get_runner_settings()
+
+        pg_conn = await asyncpg.connect(runner.postgres_url)
+        try:
+            row = await pg_conn.fetchrow(
+                "SELECT github_installation_id FROM user_identities WHERE github_installation_id IS NOT NULL LIMIT 1"
+            )
+        finally:
+            await pg_conn.close()
+
+        if row is None:
+            logger.error("no_installation_id_found_in_postgres")
+            sys.exit(1)
+
+        installation_id = int(row["github_installation_id"])
+        logger.info("resolved_installation_id=%s", installation_id)
+
     runner = get_runner_settings()
-
-    pg_conn = await asyncpg.connect(runner.postgres_url)
-    try:
-        row = await pg_conn.fetchrow(
-            "SELECT github_installation_id FROM user_identities WHERE github_installation_id IS NOT NULL LIMIT 1"
-        )
-    finally:
-        await pg_conn.close()
-
-    if row is None:
-        logger.error("no_installation_id_found_in_postgres")
-        sys.exit(1)
-
-    installation_id = int(row["github_installation_id"])
-    logger.info("resolved_installation_id=%s", installation_id)
-
     await adb.set_connection(runner.neomodel_url)
     await adb.install_all_labels()
 
