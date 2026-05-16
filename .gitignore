@@ -36,3 +36,6 @@ htmlcov/
 
 # Private keys
 *.pem
+
+# Local inspect / debug output (scripts/inspect_latest_run.py)
+.scratch/
