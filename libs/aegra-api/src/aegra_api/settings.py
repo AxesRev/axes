@@ -120,6 +120,10 @@ class DocCorpusSettings(EnvBase):
     DOCS_EMBED_DIMENSIONS: int = 1536
     DOCS_CHUNK_MAX_CHARS: int = 2000
     DOCS_CHUNK_OVERLAP_CHARS: int = 200
+    # Firecrawl crawl (multi-page ingest) — caps cost/latency for large sites
+    DOCS_CRAWL_PAGE_LIMIT: int = 10000
+    DOCS_CRAWL_POLL_INTERVAL_SEC: float = 3.0
+    DOCS_CRAWL_MAX_WAIT_SEC: float = 7200.0
 
 
 class ObservabilitySettings(EnvBase):

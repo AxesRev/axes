@@ -1,12 +1,14 @@
 """Ingest and search crawled documentation using Firecrawl, OpenAI embeddings, and pgvector.
 
-Call ``ingest_doc_urls_for_collection`` and ``search_doc_chunks`` (plus ``embed_texts_openai``
-when embedding a query string) from application code — there is no public HTTP API for this.
+Use ``ingest_documentation_source`` to crawl a site (Firecrawl v2 ``/crawl``), embed chunks, and write ``doc_embedding_chunks``.
+There is no public HTTP API for corpus ingest or search helpers.
 """
 
 from __future__ import annotations
 
+import asyncio
 import math
+from collections.abc import AsyncIterator
 from typing import Any
 
 import httpx
@@ -23,6 +25,10 @@ from aegra_api.settings import settings
 logger = structlog.get_logger(__name__)
 
 _DEFAULT_EMBED_BATCH = 64
+_FIRECRAWL_HTTP_TIMEOUT_SEC = 120.0
+
+_DOC_INGEST_APPLICATION = "github"
+_DOC_INGEST_COLLECTION_KEY = "default"
 
 
 def split_text_into_chunks(
@@ -69,7 +75,6 @@ async def scrape_url_markdown(
     api_key: str,
     base_url: str,
     url: str,
-    timeout_seconds: float = 120.0,
 ) -> tuple[str, dict[str, Any]]:
     """Scrape a single URL via Firecrawl and return markdown plus metadata."""
     endpoint = f"{base_url.rstrip('/')}/scrape"
@@ -80,10 +85,115 @@ async def scrape_url_markdown(
             "Content-Type": "application/json",
         },
         json={"url": url, "formats": ["markdown"]},
-        timeout=timeout_seconds,
+        timeout=_FIRECRAWL_HTTP_TIMEOUT_SEC,
     )
     response.raise_for_status()
     return parse_firecrawl_scrape_payload(response.json())
+
+
+async def _firecrawl_start_crawl(
+    client: httpx.AsyncClient,
+    *,
+    api_key: str,
+    base_url: str,
+    start_url: str,
+    limit: int,
+) -> str:
+    """Start a Firecrawl v2 multi-page crawl; returns crawl job id."""
+    api_base = base_url.rstrip("/")
+    body: dict[str, Any] = {
+        "url": start_url,
+        "sitemap": "include",
+        "crawlEntireDomain": True,
+        "limit": limit,
+        "scrapeOptions": {
+            "onlyMainContent": True,
+            "maxAge": 172800000,
+            "parsers": ["pdf"],
+            "formats": ["markdown"],
+        },
+    }
+    response = await client.post(
+        f"{api_base}/crawl",
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        },
+        json=body,
+        timeout=_FIRECRAWL_HTTP_TIMEOUT_SEC,
+    )
+    response.raise_for_status()
+    payload: dict[str, Any] = response.json()
+    if payload.get("success") is False:
+        msg = payload.get("error") or payload.get("message") or "firecrawl crawl start failed"
+        raise ValueError(str(msg))
+    crawl_id = payload.get("id")
+    if not crawl_id:
+        raise ValueError("firecrawl crawl start returned no job id")
+    return str(crawl_id)
+
+
+async def _firecrawl_iter_crawl_pages(
+    client: httpx.AsyncClient,
+    *,
+    api_key: str,
+    base_url: str,
+    crawl_id: str,
+    poll_interval: float,
+    max_wait: float,
+) -> AsyncIterator[tuple[str, str, dict[str, Any]]]:
+    """Poll a Firecrawl crawl job and yield ``(source_url, markdown, metadata_dict)`` per page."""
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + max_wait
+    api_base = base_url.rstrip("/")
+    status_url = f"{api_base}/crawl/{crawl_id}"
+    headers = {"Authorization": f"Bearer {api_key}"}
+    pending_url: str | None = status_url
+
+    while pending_url is not None:
+        if loop.time() > deadline:
+            raise TimeoutError(f"firecrawl crawl {crawl_id} exceeded {max_wait}s")
+
+        http_response = await client.get(pending_url, headers=headers, timeout=_FIRECRAWL_HTTP_TIMEOUT_SEC)
+        http_response.raise_for_status()
+        payload = http_response.json()
+        if payload.get("success") is False:
+            msg = payload.get("error") or payload.get("message") or "firecrawl crawl failed"
+            raise ValueError(str(msg))
+
+        for item in payload.get("data") or []:
+            if not isinstance(item, dict):
+                continue
+            markdown = item.get("markdown") or ""
+            meta_raw = item.get("metadata")
+            meta_d: dict[str, Any] = meta_raw if isinstance(meta_raw, dict) else {}
+            src = meta_d.get("sourceURL") or meta_d.get("url") or ""
+            yield (str(src), str(markdown), meta_d)
+
+        nxt = payload.get("next")
+        status = payload.get("status")
+
+        if nxt:
+            pending_url = str(nxt)
+            continue
+
+        if status == "failed":
+            raise ValueError(str(payload.get("error") or "firecrawl crawl failed"))
+
+        if status == "completed":
+            break
+
+        await asyncio.sleep(poll_interval)
+        pending_url = status_url
+
+
+def _metadata_page_title(fire_meta: dict[str, Any]) -> str | None:
+    title_val = fire_meta.get("title")
+    if isinstance(title_val, list) and title_val:
+        return str(title_val[0])
+    if title_val is not None:
+        return str(title_val)
+    return None
 
 
 async def embed_texts_openai(*, texts: list[str], model: str, api_key: str) -> list[list[float]]:
@@ -214,39 +324,58 @@ def _distance_to_similarity(distance: float) -> float:
     return max(0.0, 1.0 - d / 2.0)
 
 
-async def ingest_doc_urls_for_collection(
+async def ingest_documentation_source(
     session: AsyncSession,
     *,
-    application: str,
-    collection_key: str,
-    urls: list[str],
-) -> tuple[int, int]:
-    """Crawl URLs, chunk, embed, and persist rows for ``application`` + ``collection_key``.
+    source_url: str,
+) -> tuple[int, int, list[str | None]]:
+    """Crawl ``source_url`` with Firecrawl (multi-page), chunk, embed, and persist rows.
+
+    All existing rows for this application and collection are removed before new data is written.
 
     Returns:
-        Tuple of (number of URLs processed, number of chunk rows inserted).
+        ``(pages crawled, chunk rows inserted, page_title per row)``.
     """
     cfg = settings.doc_corpus
     if not cfg.FIRECRAWL_API_KEY:
         raise ValueError("FIRECRAWL_API_KEY is not configured")
     if not cfg.OPENAI_API_KEY:
         raise ValueError("OPENAI_API_KEY is not configured")
-    if cfg.DOCS_EMBED_DIMENSIONS != 1536:
-        raise ValueError("DOCS_EMBED_DIMENSIONS must be 1536 for the current schema")
 
-    urls_seen = 0
+    application = _DOC_INGEST_APPLICATION
+    collection_key = _DOC_INGEST_COLLECTION_KEY
+
+    await session.execute(
+        delete(DocEmbeddingChunk).where(
+            DocEmbeddingChunk.application == application,
+            DocEmbeddingChunk.collection_key == collection_key,
+        )
+    )
+    await session.commit()
+
+    pages_seen = 0
     chunks_written = 0
+    row_titles: list[str | None] = []
 
     async with httpx.AsyncClient() as http_client:
-        for source_url in urls:
-            markdown, fire_meta = await scrape_url_markdown(
-                http_client,
-                api_key=cfg.FIRECRAWL_API_KEY,
-                base_url=cfg.FIRECRAWL_BASE_URL,
-                url=source_url,
-            )
-            title_val = fire_meta.get("title")
-            page_title = str(title_val) if title_val is not None else None
+        crawl_id = await _firecrawl_start_crawl(
+            http_client,
+            api_key=cfg.FIRECRAWL_API_KEY,
+            base_url=cfg.FIRECRAWL_BASE_URL,
+            start_url=source_url,
+            limit=cfg.DOCS_CRAWL_PAGE_LIMIT,
+        )
+        async for source_page_url, markdown, fire_meta in _firecrawl_iter_crawl_pages(
+            http_client,
+            api_key=cfg.FIRECRAWL_API_KEY,
+            base_url=cfg.FIRECRAWL_BASE_URL,
+            crawl_id=crawl_id,
+            poll_interval=cfg.DOCS_CRAWL_POLL_INTERVAL_SEC,
+            max_wait=cfg.DOCS_CRAWL_MAX_WAIT_SEC,
+        ):
+            pages_seen += 1
+            page_title = _metadata_page_title(fire_meta)
+            key_url = source_page_url if source_page_url.strip() else source_url
 
             chunks = split_text_into_chunks(
                 markdown,
@@ -256,18 +385,10 @@ async def ingest_doc_urls_for_collection(
             if not chunks:
                 logger.warning(
                     "docs_corpus_empty_page",
-                    url=source_url,
+                    url=key_url,
                     application=application,
                     collection_key=collection_key,
                 )
-                await session.execute(
-                    delete(DocEmbeddingChunk).where(
-                        DocEmbeddingChunk.application == application,
-                        DocEmbeddingChunk.collection_key == collection_key,
-                        DocEmbeddingChunk.source_url == source_url,
-                    )
-                )
-                urls_seen += 1
                 continue
 
             embeddings = await embed_texts_openai(
@@ -278,25 +399,15 @@ async def ingest_doc_urls_for_collection(
             if len(embeddings) != len(chunks):
                 raise RuntimeError("embedding count does not match chunk count")
 
-            await session.execute(
-                delete(DocEmbeddingChunk).where(
-                    DocEmbeddingChunk.application == application,
-                    DocEmbeddingChunk.collection_key == collection_key,
-                    DocEmbeddingChunk.source_url == source_url,
-                )
-            )
-
             for idx, (text_chunk, vector) in enumerate(zip(chunks, embeddings, strict=True)):
                 if len(vector) != cfg.DOCS_EMBED_DIMENSIONS:
                     raise ValueError("unexpected embedding size from OpenAI")
-                metadata = {
-                    "firecrawl_metadata": fire_meta,
-                }
+                metadata = {"firecrawl_metadata": fire_meta}
                 session.add(
                     DocEmbeddingChunk(
                         application=application,
                         collection_key=collection_key,
-                        source_url=source_url,
+                        source_url=key_url,
                         page_title=page_title,
                         chunk_index=idx,
                         content=text_chunk,
@@ -304,9 +415,9 @@ async def ingest_doc_urls_for_collection(
                         embedding=vector,
                     )
                 )
-                chunks_written += 1
+                row_titles.append(page_title)
 
-            urls_seen += 1
+            chunks_written += len(chunks)
 
     await session.commit()
-    return urls_seen, chunks_written
+    return pages_seen, chunks_written, row_titles

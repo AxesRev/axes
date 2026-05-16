@@ -41,9 +41,5 @@ class GitHubOAuthSettings(BaseSettings):
             path = Path(_ENV_FILE).parent / path
         return path.read_text(encoding="utf-8") if path.exists() else None
 
-    # Firecrawl (GitHub documentation scraper — see app_integrations.github.scraper).
-    FIRECRAWL_API_KEY: str = ""
-    FIRECRAWL_BASE_URL: str = "https://api.firecrawl.dev/v2"
-
 
 github_settings = GitHubOAuthSettings()

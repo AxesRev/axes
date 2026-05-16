@@ -14,10 +14,12 @@ Nothing is auto-imported by FastAPI yet; routers will `from ...core.db import ge
 from __future__ import annotations
 
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from datetime import datetime
+from typing import Any
 
-from pgvector.sqlalchemy import Vector
+from pgvector import Vector as PgVector
+from pgvector.sqlalchemy.vector import VECTOR
 from sqlalchemy import (
     TIMESTAMP,
     ForeignKey,
@@ -27,10 +29,32 @@ from sqlalchemy import (
     text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.engine import Dialect
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm import Mapped, declarative_base, mapped_column
 
 Base = declarative_base()
+
+
+class AsyncPgVector(VECTOR):
+    """``pgvector.sqlalchemy.Vector`` text-binds values; asyncpg's vector codec expects ``PgVector`` for binary."""
+
+    cache_ok = True
+
+    def bind_processor(self, dialect: Dialect) -> Callable[[Any], Any] | None:
+        impl = super().bind_processor(dialect)
+        if getattr(dialect, "driver", None) != "asyncpg":
+            return impl
+
+        def process(value: Any) -> PgVector | None:
+            if value is None:
+                return None
+            vec = value if isinstance(value, PgVector) else PgVector(value)
+            if self.dim is not None and vec.dimensions() != self.dim:
+                raise ValueError(f"expected {self.dim} dimensions, not {vec.dimensions()}")
+            return vec
+
+        return process
 
 
 class Assistant(Base):
@@ -163,7 +187,7 @@ class DocEmbeddingChunk(Base):
     chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
     metadata_dict: Mapped[dict] = mapped_column(JSONB, server_default=text("'{}'::jsonb"), name="metadata")
-    embedding: Mapped[list[float]] = mapped_column(Vector(1536), nullable=False)
+    embedding: Mapped[list[float]] = mapped_column(AsyncPgVector(1536), nullable=False)
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=text("now()"))
 
     __table_args__ = (
