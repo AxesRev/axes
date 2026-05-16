@@ -55,35 +55,6 @@ class Context:
         },
     )
 
-    neo4j_uri: str = field(
-        default="",
-        metadata={
-            "description": (
-                "Neo4j Bolt URI for the mcp-neo4j-cypher MCP server (e.g. bolt://localhost:7687). "
-                "Leave empty to disable Neo4j tools."
-            ),
-        },
-    )
-
-    neo4j_username: str = field(
-        default="",
-        metadata={
-            "description": "Neo4j username (NEO4J_USERNAME for mcp-neo4j-cypher). Ignored when neo4j_uri is empty.",
-        },
-    )
-
-    neo4j_password: str = field(
-        default="",
-        metadata={
-            "description": "Neo4j password. Ignored when neo4j_uri is empty.",
-        },
-    )
-
-    neo4j_database: str = field(
-        default="neo4j",
-        metadata={"description": "Neo4j database name (NEO4J_DATABASE). Ignored when neo4j_uri is empty."},
-    )
-
     reasoning_effort: str = field(
         default="",
         metadata={
