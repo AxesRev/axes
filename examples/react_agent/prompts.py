@@ -16,6 +16,9 @@ Never output questions directed at a user.
 Many requests are about GitHub access; you have the user's repo and organization lists from context when configured,
 and Neo4j tools for live graph data when configured.
 
+Documentation snippets semantically matched to the user's latest message:
+{doc_corpus_context}
+
 When access may depend on data stored in the Neo4j graph (organizations, repositories, members, app installs),
 use the Neo4j MCP tools against the live database: call `get_neo4j_schema` first so queries match current labels,
 properties, and relationship types; then use `read_neo4j_cypher` with read-only Cypher consistent with that schema.
@@ -51,6 +54,9 @@ If a field is implied but not explicit, capture the implication in the hint
 (e.g. "the only repository in the user's organization, identified by exact name").
 If a field is genuinely absent (e.g. no specific resource), say so explicitly.
 
+Documentation snippets semantically matched to the user's latest message:
+{doc_corpus_context}
+
 additional context about the user you should consider for extra information
 {github_user_context}"""
 
@@ -72,6 +78,10 @@ relationship types returned there.
 
 The `{field_name}` field describes:
 {field_description}
+
+Documentation snippets semantically matched to the user's latest message:
+{doc_corpus_context}
+
 additional context you should consider to narrow down the search for the information, but do not rely solely on it.
 {github_user_context}
 System time: {system_time}"""

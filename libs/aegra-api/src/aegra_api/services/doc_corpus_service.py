@@ -11,11 +11,12 @@ from typing import Any
 
 import httpx
 import structlog
-from openai import AsyncOpenAI
+from openai import AsyncOpenAI, OpenAIError
 from sqlalchemy import delete, select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from aegra_api.core.orm import DocEmbeddingChunk
+from aegra_api.core.orm import DocEmbeddingChunk, get_metadata_session_maker
 from aegra_api.models.doc_corpus import DocCorpusSearchHit
 from aegra_api.settings import settings
 
@@ -99,18 +100,14 @@ async def embed_texts_openai(*, texts: list[str], model: str, api_key: str) -> l
 async def search_doc_chunks(
     session: AsyncSession,
     *,
-    application: str,
     collection_key: str,
     query_embedding: list[float],
     limit: int,
 ) -> list[DocCorpusSearchHit]:
-    """Cosine-distance search over stored documentation chunks."""
+    """Cosine-distance search over stored documentation chunks (all ``application`` values)."""
     stmt = (
         select(DocEmbeddingChunk)
-        .where(
-            DocEmbeddingChunk.application == application,
-            DocEmbeddingChunk.collection_key == collection_key,
-        )
+        .where(DocEmbeddingChunk.collection_key == collection_key)
         .order_by(DocEmbeddingChunk.embedding.cosine_distance(query_embedding))
         .limit(limit)
     )
@@ -130,6 +127,62 @@ async def search_doc_chunks(
             )
         )
     return hits
+
+
+def format_doc_corpus_hits_for_prompt(hits: list[DocCorpusSearchHit]) -> str:
+    """Turn retrieval hits into a single block suitable for system prompts."""
+    if not hits:
+        return ""
+    parts: list[str] = []
+    for i, h in enumerate(hits, start=1):
+        title = h.page_title or "(no title)"
+        parts.append(
+            f"### Snippet {i} — {title}\n"
+            f"Application: {h.application}\n"
+            f"URL: {h.source_url}\n"
+            f"Relevance score: {h.score:.4f}\n\n"
+            f"{h.content.strip()}\n"
+        )
+    return "\n---\n".join(parts)
+
+
+async def retrieve_doc_corpus_prompt_block(
+    *,
+    collection_key: str,
+    query: str,
+    limit: int,
+) -> str:
+    """Embed ``query``, cosine-search ``doc_embedding_chunks``, return formatted text."""
+    cfg = settings.doc_corpus
+    if not cfg.OPENAI_API_KEY:
+        logger.warning("doc_corpus_retrieval_skipped", reason="OPENAI_API_KEY unset")
+        return ""
+    q = query.strip()
+    if not q:
+        return ""
+    try:
+        async with get_metadata_session_maker()() as session:
+            vectors = await embed_texts_openai(
+                texts=[q],
+                model=cfg.DOCS_EMBED_MODEL,
+                api_key=cfg.OPENAI_API_KEY,
+            )
+            if not vectors or len(vectors[0]) != cfg.DOCS_EMBED_DIMENSIONS:
+                logger.warning("doc_corpus_retrieval_bad_embedding_shape")
+                return ""
+            hits = await search_doc_chunks(
+                session,
+                collection_key=collection_key,
+                query_embedding=vectors[0],
+                limit=limit,
+            )
+    except (RuntimeError, SQLAlchemyError, OSError, ValueError, OpenAIError) as e:
+        logger.warning("doc_corpus_retrieval_failed", error=str(e))
+        return ""
+
+    block = format_doc_corpus_hits_for_prompt(hits)
+    logger.info("doc_corpus_retrieval_ok", hit_count=len(hits), char_count=len(block))
+    return block
 
 
 def cosine_distance_row(left: list[float], right: list[float]) -> float:

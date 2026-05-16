@@ -81,6 +81,18 @@ class Context:
         },
     )
 
+    doc_corpus_collection_key: str = field(
+        default="default",
+        metadata={
+            "description": "``collection_key`` for doc corpus search across all apps (env DOC_CORPUS_COLLECTION_KEY).",
+        },
+    )
+
+    doc_corpus_top_k: int = field(
+        default=6,
+        metadata={"description": "Max chunks to retrieve per user message (env DOC_CORPUS_TOP_K)."},
+    )
+
     def __post_init__(self) -> None:
         """Fetch env vars for attributes that were not passed as args."""
         for f in fields(self):

@@ -202,3 +202,6 @@ class State(InputState):
 
     revision_count: int = field(default=0)
     """Number of validator-driven re-run rounds performed so far (capped to bound the loop)."""
+
+    doc_corpus_context: str = field(default="")
+    """Semantically retrieved documentation snippets for the current user message (prompt injection)."""

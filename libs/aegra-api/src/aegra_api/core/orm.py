@@ -192,6 +192,15 @@ class DocEmbeddingChunk(Base):
 async_session_maker: async_sessionmaker[AsyncSession] | None = None
 
 
+def get_metadata_session_maker() -> async_sessionmaker[AsyncSession]:
+    """Return the SQLAlchemy async session factory for app metadata tables.
+
+    Used by LangGraph nodes (e.g. doc corpus retrieval) after
+    ``DatabaseManager.initialize()`` has run during Aegra startup.
+    """
+    return _get_session_maker()
+
+
 def _get_session_maker() -> async_sessionmaker[AsyncSession]:
     """Return a cached async_sessionmaker bound to db_manager.engine."""
     global async_session_maker
