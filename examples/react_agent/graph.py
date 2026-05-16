@@ -14,8 +14,8 @@ builder.add_node(load_doc_corpus_context)
 builder.add_node("permission_detection", permission_detection_graph)
 
 builder.add_edge("__start__", "load_github_context")
-builder.add_edge("load_github_context", load_doc_corpus_context)
-builder.add_edge(load_doc_corpus_context, "permission_detection")
+builder.add_edge("load_github_context", "load_doc_corpus_context")
+builder.add_edge("load_doc_corpus_context", "permission_detection")
 builder.add_edge("permission_detection", "__end__")
 
 graph = builder.compile(name="ReAct Agent")
