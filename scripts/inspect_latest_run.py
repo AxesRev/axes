@@ -4,7 +4,9 @@
 Includes: who sent each turn (human / assistant), assistant text output,
 and **tool call inputs** (names + arguments). Tool **results** are omitted (inputs are on the assistant turn).
 
-Writes UTF-8 text under ``.scratch/`` (gitignored) by default.
+Writes UTF-8 text under ``.scratch/`` (gitignored) by default. Includes per-field
+LLM ``justification`` strings (``domain_result`` / ``resource_result`` /
+``permission_result``) and validator feedback when present in checkpoint state.
 
 Run from repo root::
 
@@ -39,12 +41,112 @@ DEFAULT_OUTPUT_RELATIVE = Path(".scratch") / "latest-run-inspect.txt"
 _DEFAULT_CHECKPOINT_LIMIT: int = 60
 _TEXT_SOFT_LIMIT: int = 4000
 
+_JUSTIFICATION_KEYS_ORDER: tuple[str, ...] = (
+    "domain_result",
+    "resource_result",
+    "permission_result",
+    "domain_feedback",
+    "resource_feedback",
+    "permission_feedback",
+)
+
 
 def _trunc_text(text: str, limit: int = _TEXT_SOFT_LIMIT) -> str:
     text = text.strip()
     if len(text) <= limit:
         return text
     return text[:limit] + f"\n… [{len(text) - limit} more chars]"
+
+
+def _channel_values_dict(checkpoint: Any) -> dict[str, Any]:
+    if not isinstance(checkpoint, dict):
+        return {}
+    raw = checkpoint.get("channel_values")
+    return raw if isinstance(raw, dict) else {}
+
+
+def _normalize_field_result_snap(raw: Any) -> dict[str, Any] | None:
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        return {"value": None, "justification": f"(non-dict state: {raw!r})"}
+    if "justification" not in raw and "value" not in raw:
+        return None
+    return {"value": raw.get("value"), "justification": raw.get("justification")}
+
+
+def _justification_slice(channel_values: dict[str, Any]) -> dict[str, Any]:
+    out: dict[str, Any] = {}
+    for key in ("domain_result", "resource_result", "permission_result"):
+        if key not in channel_values:
+            continue
+        norm = _normalize_field_result_snap(channel_values[key])
+        if norm is not None:
+            out[key] = norm
+    for key in ("domain_feedback", "resource_feedback", "permission_feedback"):
+        if key not in channel_values:
+            continue
+        v = channel_values[key]
+        if v is not None and str(v).strip():
+            out[key] = str(v).strip()
+    return out
+
+
+def _snap_json(snap: dict[str, Any]) -> str:
+    return json.dumps(snap, sort_keys=True, ensure_ascii=False, default=str)
+
+
+def _format_justification_slice(snap: dict[str, Any]) -> list[str]:
+    lines: list[str] = ["  --- Structured justifications (FieldResult + validator feedback) ---"]
+    for key in _JUSTIFICATION_KEYS_ORDER:
+        if key not in snap:
+            continue
+        val = snap[key]
+        if isinstance(val, dict) and "justification" in val:
+            lines.append(f"  {key}:")
+            lines.append(f"    value: {val.get('value')!r}")
+            lines.append("    justification:")
+            body = _trunc_text(str(val.get("justification", "")), limit=8000)
+            for ln in body.splitlines():
+                lines.append(f"      {ln}")
+        else:
+            lines.append(f"  {key}:")
+            body = _trunc_text(str(val), limit=8000)
+            for ln in body.splitlines():
+                lines.append(f"    {ln}")
+    lines.append("")
+    return lines
+
+
+def _format_final_field_justifications(checkpoints: list[Any]) -> str:
+    if not checkpoints:
+        return ""
+    last_cv = _channel_values_dict(checkpoints[-1].checkpoint)
+    snap = _justification_slice(last_cv)
+    field_keys = ("domain_result", "resource_result", "permission_result")
+    if not any(k in snap for k in field_keys):
+        return ""
+    lines: list[str] = [
+        "=" * 72,
+        "FINAL FIELD JUSTIFICATIONS (last checkpoint; domain / resource / permission)",
+        "=" * 72,
+        "",
+    ]
+    for key in field_keys:
+        if key not in snap:
+            continue
+        val = snap[key]
+        if not isinstance(val, dict):
+            continue
+        lines.append(f"{key}:")
+        lines.append(f"  value: {val.get('value')!r}")
+        lines.append("  justification:")
+        body = _trunc_text(str(val.get("justification", "")), limit=12000)
+        for ln in body.splitlines():
+            lines.append(f"    {ln}")
+        lines.append("")
+    lines.append("")
+    return "\n".join(lines)
 
 
 def _content_to_text(content: Any) -> str:
@@ -222,7 +324,7 @@ async def _collect_checkpoints(*, thread_id: str, run_id: str | None, limit: int
 
 
 def _render_checkpoint_transcript(checkpoints: list[Any]) -> str:
-    """Turn ordered checkpoints into compact text (delta messages only)."""
+    """Turn ordered checkpoints into compact text (delta messages + justification state)."""
     lines: list[str] = [
         "=" * 72,
         "CHECKPOINT TRANSCRIPT (oldest → newest; only new messages per snapshot)",
@@ -231,14 +333,19 @@ def _render_checkpoint_transcript(checkpoints: list[Any]) -> str:
     ]
 
     prev_len = 0
+    prev_just_snap: dict[str, Any] = {}
     shown = 0
     for tup in checkpoints:
         ns = (tup.config.get("configurable") or {}).get("checkpoint_ns") or ""
-        channel_values = tup.checkpoint.get("channel_values") or {}
+        checkpoint = tup.checkpoint if isinstance(tup.checkpoint, dict) else {}
+        channel_values = _channel_values_dict(checkpoint)
         messages = channel_values.get("messages")
         serialized = _serialize_messages(messages)
         new_msgs = serialized[prev_len:]
         prev_len = len(serialized)
+
+        just_snap = _justification_slice(channel_values)
+        just_changed = _snap_json(just_snap) != _snap_json(prev_just_snap)
 
         rendered_blocks: list[list[str]] = []
         for msg in new_msgs:
@@ -246,11 +353,17 @@ def _render_checkpoint_transcript(checkpoints: list[Any]) -> str:
             if block_lines:
                 rendered_blocks.append(block_lines)
 
-        if not rendered_blocks:
+        if not rendered_blocks and not just_changed:
             continue
 
         shown += 1
         lines.append(f"[checkpoint {shown}] ns={ns!r}")
+
+        if just_changed:
+            if just_snap:
+                lines.extend(_format_justification_slice(just_snap))
+            prev_just_snap = dict(just_snap)
+
         for block_lines in rendered_blocks:
             for ln in block_lines:
                 if ln == "":
@@ -260,8 +373,11 @@ def _render_checkpoint_transcript(checkpoints: list[Any]) -> str:
             lines.append("")
 
     lines.append("=" * 72)
-    lines.append(f"Snapshots with new messages: {shown} (of {len(checkpoints)} checkpoints scanned)")
+    lines.append(f"Snapshots printed: {shown} (of {len(checkpoints)} checkpoints scanned)")
     lines.append("")
+    final_block = _format_final_field_justifications(checkpoints)
+    if final_block:
+        lines.append(final_block)
     return "\n".join(lines)
 
 
