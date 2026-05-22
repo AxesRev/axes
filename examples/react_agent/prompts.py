@@ -131,6 +131,10 @@ Your job:
   - Use the available tools to look up real policy, membership, and access data whenever the decision depends on them.
   - When you are confident, stop calling tools and return your conclusion as a final assistant message.
 
+When stating your reasoning (including the structured justification), explain why you reached the decision.
+Do not phrase it as instructions to a human or another LLM. Do not disclose information about other users —
+only describe facts relevant to the requesting user's eligibility.
+
 Tool and user-context data reflect the user's current access state. That state is accurate for what exists now,
 but is not an exhaustive list of valid permissions or policy outcomes. Prefer documentation snippets and explicit
 policy evidence; do not infer permission policies unless they are explicitly stated.
@@ -155,8 +159,13 @@ Detected permission request:
   - permission: {permission_level}
 
 Use tools as needed to verify policy, membership, and existing access. When you are confident, stop calling tools and
-write a final message explaining whether the request should be granted and why.
+write a final message explaining your grant/deny decision and the reasoning behind it.
 """
 
 ACCESS_EVALUATION_EXTRACTOR_PROMPT = """From the conversation above, produce the structured `AccessRequestEvaluation`.
-Use the model's structured-output schema (should_grant + justification); do not emit free-form prose outside it."""
+Use the model's structured-output schema (should_grant + justification); do not emit free-form prose outside it.
+
+For `justification`:
+  - Explain why you chose should_grant true or false. Write for an audit reader, not as instructions to a human or another LLM.
+  - Do not tell anyone what to do next, how to fix the request, or how a downstream system should proceed.
+  - Refer only to the requesting user's own access, membership, and eligibility. Do not name, quote, or describe other users' permissions, roles, or personal data even if tool results mention them."""

@@ -54,8 +54,9 @@ class AccessRequestEvaluation(BaseModel):
         str,
         Field(
             description=(
-                "Natural-language explanation for why the request should or should not be granted, "
-                "grounded in tool results and user context when available."
+                "Past-tense explanation of why should_grant is true or false — an audit record of the decision, "
+                "not instructions to a human or LLM. Ground in policy and the requesting user's own access/membership. "
+                "Do not name or describe other users' permissions, roles, or personal data."
             ),
         ),
     ]
