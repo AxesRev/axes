@@ -6,14 +6,19 @@ import logging
 from dataclasses import dataclass
 
 from github.GithubException import GithubException
+from github.MainClass import Github
 from github.NamedUser import NamedUser
 from github.Organization import Organization
 from github.Team import Team
 
-from integrations.github.ingestion.shared import merge_member_of, upsert_group
-from integrations.github.ingestion.users import get_or_create_identity_by_login
-from nodes.app_connection import AppConnection
-from nodes.group import Group
+from integrations.github.ingestion.shared import (
+    ConnectionRef,
+    GroupRow,
+    MemberOfRow,
+    merge_groups,
+    merge_member_of,
+)
+from integrations.github.ingestion.users import ensure_identities_for_logins
 
 logger = logging.getLogger(__name__)
 
@@ -43,41 +48,79 @@ def team_record_from_github(team: Team) -> TeamRecord:
     )
 
 
-def _build_subteam_member_of_rows(
-    records: list[TeamRecord],
-    groups_by_external_id: dict[str, Group],
-) -> list[dict[str, str]]:
-    rows: list[dict[str, str]] = []
+def group_row_from_record(record: TeamRecord, *, connection: ConnectionRef) -> GroupRow:
+    return GroupRow(
+        external_id=str(record.team_id),
+        name=record.slug,
+        description=record.description or record.name,
+        connection_app=connection["app"],
+        connection_external_id=connection["external_id"],
+    )
+
+
+def build_subteam_member_of_rows(records: list[TeamRecord]) -> list[MemberOfRow]:
+    team_ids = {str(record.team_id) for record in records}
+    rows: list[MemberOfRow] = []
     for record in records:
         if record.parent_team_id is None:
             continue
-        child = groups_by_external_id.get(str(record.team_id))
-        parent = groups_by_external_id.get(str(record.parent_team_id))
-        if child is None or parent is None:
+        child_external_id = str(record.team_id)
+        parent_external_id = str(record.parent_team_id)
+        if parent_external_id not in team_ids:
             logger.warning(
                 "teams_skip_subteam parent_team_id=%s child_team_id=%s",
                 record.parent_team_id,
                 record.team_id,
             )
             continue
-        child_id = child.element_id
-        parent_id = parent.element_id
-        if child_id is None or parent_id is None:
-            continue
-        rows.append({"member_id": child_id, "group_id": parent_id})
+        rows.append(
+            MemberOfRow(
+                member_kind="group",
+                member_external_id=child_external_id,
+                member_app="",
+                group_external_id=parent_external_id,
+            )
+        )
+    return rows
+
+
+def build_identity_member_of_rows(
+    records: list[TeamRecord],
+    *,
+    identity_external_ids: dict[str, str],
+    member_app: str,
+) -> list[MemberOfRow]:
+    rows: list[MemberOfRow] = []
+    for record in records:
+        group_external_id = str(record.team_id)
+        for login in record.member_logins:
+            member_external_id = identity_external_ids.get(login)
+            if member_external_id is None:
+                logger.warning("teams_skip_member missing_identity login=%s team=%s", login, record.slug)
+                continue
+            rows.append(
+                MemberOfRow(
+                    member_kind="identity",
+                    member_external_id=member_external_id,
+                    member_app=member_app,
+                    group_external_id=group_external_id,
+                )
+            )
     return rows
 
 
 async def ingest_teams(
-    gh: object,
+    gh: Github,
     account: Organization | NamedUser,
-    connection: AppConnection,
-) -> dict[str, Group]:
-    """Ingest org teams as Group nodes. Returns slug -> Group for permission lookup."""
+    *,
+    connection: ConnectionRef,
+    identity_external_ids: dict[str, str],
+) -> dict[str, str]:
+    """Ingest org teams as Group nodes. Returns slug -> team external_id."""
     if account.type != "Organization":
         return {}
 
-    org = gh.get_organization(account.login)  # type: ignore[union-attr]
+    org = gh.get_organization(account.login)
     records: list[TeamRecord] = []
     try:
         for team in org.get_teams():
@@ -86,34 +129,31 @@ async def ingest_teams(
         logger.warning("teams_fetch_failed login=%s error=%s", account.login, exc)
         return {}
 
-    groups_by_external_id: dict[str, Group] = {}
-    groups_by_slug: dict[str, Group] = {}
-    for record in records:
-        group = await upsert_group(
-            external_id=str(record.team_id),
-            name=record.slug,
-            connection=connection,
-            description=record.description or record.name,
-        )
-        groups_by_external_id[str(record.team_id)] = group
-        groups_by_slug[record.slug] = group
+    group_rows = [group_row_from_record(record, connection=connection) for record in records]
+    await merge_groups(group_rows)
 
-    subteam_rows = _build_subteam_member_of_rows(records, groups_by_external_id)
+    member_logins = {login for record in records for login in record.member_logins}
+    resolved_identities = await ensure_identities_for_logins(
+        gh,
+        member_logins,
+        connection=connection,
+        known_external_ids=identity_external_ids,
+    )
+
+    subteam_rows = build_subteam_member_of_rows(records)
+    member_rows = build_identity_member_of_rows(
+        records,
+        identity_external_ids=resolved_identities,
+        member_app=connection["app"],
+    )
     await merge_member_of(subteam_rows)
-
-    member_rows: list[dict[str, str]] = []
-    for record in records:
-        group = groups_by_external_id.get(str(record.team_id))
-        if group is None or group.element_id is None:
-            continue
-        for login in record.member_logins:
-            identity = await get_or_create_identity_by_login(gh, login, connection)  # type: ignore[arg-type]
-            if identity is None or identity.element_id is None:
-                continue
-            member_rows.append({"member_id": identity.element_id, "group_id": group.element_id})
-
     await merge_member_of(member_rows)
+
+    groups_by_slug = {record.slug: str(record.team_id) for record in records}
     logger.info(
-        "teams_merged teams=%s subteam_edges=%s member_edges=%s", len(records), len(subteam_rows), len(member_rows)
+        "merged_groups count=%s subteam_edges=%s member_edges=%s",
+        len(group_rows),
+        len(subteam_rows),
+        len(member_rows),
     )
     return groups_by_slug

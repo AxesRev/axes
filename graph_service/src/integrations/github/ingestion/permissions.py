@@ -11,15 +11,14 @@ from github.MainClass import Github
 from github.Repository import Repository
 
 from integrations.github.ingestion.shared import (
+    ConnectionRef,
+    GroupRow,
     PermissionEdgeRow,
     gql_string,
+    merge_groups,
     merge_resource_permissions,
-    upsert_group,
 )
-from integrations.github.ingestion.users import get_or_create_identity_by_login
-from nodes.app_connection import AppConnection
-from nodes.group import Group
-from nodes.resource import Resource
+from integrations.github.ingestion.users import ensure_identities_for_logins
 
 logger = logging.getLogger(__name__)
 
@@ -243,83 +242,103 @@ def fetch_repo_permissions(
     return grants
 
 
-async def resolve_team_group(
+async def ensure_team_external_ids(
     gh: Github,
+    slugs: set[str],
     *,
     org_login: str,
-    slug: str,
-    connection: AppConnection,
-    groups_by_slug: dict[str, Group],
-) -> Group | None:
-    existing = groups_by_slug.get(slug)
-    if existing is not None:
-        return existing
+    connection: ConnectionRef,
+    known_external_ids: dict[str, str],
+) -> dict[str, str]:
+    external_ids = dict(known_external_ids)
+    missing_slugs = sorted(slug for slug in slugs if slug not in external_ids)
+    if not missing_slugs:
+        return external_ids
 
-    try:
-        team = gh.get_organization(org_login).get_team_by_slug(slug)
-    except GithubException:
-        logger.warning("permissions_skip_unknown_team org=%s slug=%s", org_login, slug)
-        return None
+    org = gh.get_organization(org_login)
+    rows: list[GroupRow] = []
+    for slug in missing_slugs:
+        try:
+            team = org.get_team_by_slug(slug)
+        except GithubException:
+            logger.warning("permissions_skip_unknown_team org=%s slug=%s", org_login, slug)
+            continue
+        external_ids[slug] = str(team.id)
+        rows.append(
+            GroupRow(
+                external_id=str(team.id),
+                name=team.slug,
+                description=team.description or team.name,
+                connection_app=connection["app"],
+                connection_external_id=connection["external_id"],
+            )
+        )
 
-    group = await upsert_group(
-        external_id=str(team.id),
-        name=team.slug,
-        connection=connection,
-        description=team.description or team.name,
-    )
-    groups_by_slug[slug] = group
-    return group
+    if rows:
+        await merge_groups(rows)
+
+    return external_ids
 
 
 async def ingest_permissions(
     gh: Github,
     repos: list[Repository],
-    resources_by_uri: dict[str, Resource],
-    connection: AppConnection,
+    resources_by_uri: dict[str, str],
     *,
+    connection: ConnectionRef,
     org_login: str | None = None,
-    groups_by_slug: dict[str, Group] | None = None,
+    groups_by_slug: dict[str, str] | None = None,
+    identity_external_ids: dict[str, str] | None = None,
 ) -> None:
-    """Upsert teams/users and write HAS_PERMISSION edges for repository access."""
+    """Write HAS_PERMISSION edges for repository access."""
     grants = fetch_repo_permissions(gh, repos, org_login=org_login)
     logger.info("permissions_fetched grants=%s repos=%s", len(grants), len(repos))
 
-    team_groups = groups_by_slug or {}
+    user_logins = {grant.subject_key for grant in grants if grant.subject_kind == "user"}
+    team_slugs = {grant.subject_key for grant in grants if grant.subject_kind == "team"}
+
+    resolved_identities = await ensure_identities_for_logins(
+        gh,
+        user_logins,
+        connection=connection,
+        known_external_ids=identity_external_ids or {},
+    )
+    resolved_teams = dict(groups_by_slug or {})
+    if org_login is not None and team_slugs:
+        resolved_teams = await ensure_team_external_ids(
+            gh,
+            team_slugs,
+            org_login=org_login,
+            connection=connection,
+            known_external_ids=resolved_teams,
+        )
+
     edge_rows: list[PermissionEdgeRow] = []
     for grant in grants:
-        resource = resources_by_uri.get(grant.repo_full_name)
-        if resource is None:
+        resource_external_id = resources_by_uri.get(grant.repo_full_name)
+        if resource_external_id is None:
             logger.warning("permissions_skip_unknown_repo full_name=%s", grant.repo_full_name)
             continue
 
         if grant.subject_kind == "user":
-            identity = await get_or_create_identity_by_login(gh, grant.subject_key, connection)
-            if identity is None:
+            subject_external_id = resolved_identities.get(grant.subject_key)
+            if subject_external_id is None:
+                logger.warning("permissions_skip_unknown_user login=%s", grant.subject_key)
                 continue
-            subject_id = identity.element_id
         else:
             if org_login is None:
                 logger.warning("permissions_skip_team_non_org team=%s", grant.subject_key)
                 continue
-            group = await resolve_team_group(
-                gh,
-                org_login=org_login,
-                slug=grant.subject_key,
-                connection=connection,
-                groups_by_slug=team_groups,
-            )
-            if group is None:
+            subject_external_id = resolved_teams.get(grant.subject_key)
+            if subject_external_id is None:
+                logger.warning("permissions_skip_unknown_team slug=%s", grant.subject_key)
                 continue
-            subject_id = group.element_id
-
-        if subject_id is None:
-            logger.warning("permissions_skip_unsaved_subject kind=%s key=%s", grant.subject_kind, grant.subject_key)
-            continue
 
         edge_rows.append(
             PermissionEdgeRow(
-                subject_id=subject_id,
-                resource_external_id=resource.external_id,
+                subject_kind=grant.subject_kind,
+                subject_external_id=subject_external_id,
+                resource_external_id=resource_external_id,
                 permission=grant.permission,
             )
         )

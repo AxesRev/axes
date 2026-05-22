@@ -9,15 +9,18 @@ from github.MainClass import Github
 from github.NamedUser import NamedUser
 from github.Organization import Organization
 
-from integrations.github.ingestion.shared import GITHUB_APP, link_belongs_to
+from integrations.github.ingestion.shared import (
+    GITHUB_APP,
+    AppIdentityRow,
+    ConnectionRef,
+    merge_app_identities,
+)
 from integrations.github.models import GithubIdentityExtra
-from nodes.app_connection import AppConnection
-from nodes.app_identity import AppIdentity
 
 logger = logging.getLogger(__name__)
 
 
-async def upsert_identity(user: NamedUser, connection: AppConnection) -> AppIdentity:
+def identity_row_from_github(user: NamedUser, *, connection: ConnectionRef) -> AppIdentityRow:
     extra = GithubIdentityExtra(
         login=user.login,
         name=user.name,
@@ -26,50 +29,65 @@ async def upsert_identity(user: NamedUser, connection: AppConnection) -> AppIden
         html_url=user.html_url,
         avatar_url=user.avatar_url,
     )
-    identity = await AppIdentity.nodes.get_or_none(app=GITHUB_APP, external_id=str(user.id))
-    if identity is None:
-        identity = await AppIdentity(
-            app=GITHUB_APP,
-            external_id=str(user.id),
-            name=user.login,
-            extra=extra.model_dump(),
-        ).save()
-        logger.info("created_app_identity login=%s", user.login)
-    else:
-        identity.name = user.login
-        identity.extra = extra.model_dump()
-        await identity.save()
-
-    if identity.element_id is not None and connection.element_id is not None:
-        await link_belongs_to(child_id=identity.element_id, parent_id=connection.element_id)
-
-    return identity
+    return AppIdentityRow(
+        app=GITHUB_APP,
+        external_id=str(user.id),
+        name=user.login,
+        extra=extra.model_dump(),
+        connection_app=connection["app"],
+        connection_external_id=connection["external_id"],
+    )
 
 
-async def get_or_create_identity_by_login(
+async def merge_identities(
+    users: list[NamedUser],
+    *,
+    connection: ConnectionRef,
+) -> dict[str, str]:
+    rows = [identity_row_from_github(user, connection=connection) for user in users]
+    await merge_app_identities(rows)
+    return {user.login: str(user.id) for user in users}
+
+
+async def ensure_identities_for_logins(
     gh: Github,
-    login: str,
-    connection: AppConnection,
-) -> AppIdentity | None:
-    try:
-        user = gh.get_user(login)
-    except GithubException:
-        logger.warning("skip_unknown_user login=%s", login)
-        return None
+    logins: set[str],
+    *,
+    connection: ConnectionRef,
+    known_external_ids: dict[str, str] | None = None,
+) -> dict[str, str]:
+    """Fetch missing GitHub users and batch-merge AppIdentity nodes."""
+    external_ids = dict(known_external_ids or {})
+    missing_logins = sorted(login for login in logins if login not in external_ids)
+    if not missing_logins:
+        return external_ids
 
-    return await upsert_identity(user, connection)
+    users: list[NamedUser] = []
+    for login in missing_logins:
+        try:
+            users.append(gh.get_user(login))
+        except GithubException:
+            logger.warning("skip_unknown_user login=%s", login)
+
+    if users:
+        fetched = await merge_identities(users, connection=connection)
+        external_ids.update(fetched)
+
+    return external_ids
 
 
 async def ingest_users(
     gh: Github,
     account: Organization | NamedUser,
-    connection: AppConnection,
-) -> None:
+    *,
+    connection: ConnectionRef,
+) -> dict[str, str]:
     if account.type == "Organization":
         org = gh.get_organization(account.login)
-        for member in org.get_members():
-            await upsert_identity(member, connection)
-        return
+        members = list(org.get_members())
+    else:
+        members = [gh.get_user(account.login)]
 
-    user = gh.get_user(account.login)
-    await upsert_identity(user, connection)
+    external_ids = await merge_identities(members, connection=connection)
+    logger.info("merged_app_identities count=%s", len(external_ids))
+    return external_ids

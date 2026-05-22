@@ -7,18 +7,24 @@ import logging
 from github.NamedUser import NamedUser
 from github.Organization import Organization
 
-from integrations.github.ingestion.shared import GITHUB_APP, link_belongs_to
+from integrations.github.ingestion.shared import (
+    GITHUB_APP,
+    AppConnectionRow,
+    ConnectionRef,
+    ConnectionTenantRow,
+    merge_app_connections,
+    merge_connections_belong_to_tenants,
+)
 from integrations.github.models import GithubConnectionExtra
-from nodes.app_connection import AppConnection
-from nodes.tenant import Tenant
 
 logger = logging.getLogger(__name__)
 
 
 async def upsert_connection(
     account: Organization | NamedUser,
-    tenant: Tenant,
-) -> AppConnection:
+    *,
+    tenant_external_id: str,
+) -> ConnectionRef:
     extra = GithubConnectionExtra(
         org_id=account.id,
         login=account.login,
@@ -26,21 +32,22 @@ async def upsert_connection(
         html_url=account.html_url,
         avatar_url=account.avatar_url,
     )
-    connection = await AppConnection.nodes.get_or_none(app=GITHUB_APP, external_id=str(account.id))
-    if connection is None:
-        connection = await AppConnection(
-            app=GITHUB_APP,
-            external_id=str(account.id),
-            name=account.login,
-            extra=extra.model_dump(),
-        ).save()
-        logger.info("created_app_connection login=%s", account.login)
-    else:
-        connection.name = account.login
-        connection.extra = extra.model_dump()
-        await connection.save()
-
-    if connection.element_id is not None and tenant.element_id is not None:
-        await link_belongs_to(child_id=connection.element_id, parent_id=tenant.element_id)
-
-    return connection
+    connection_external_id = str(account.id)
+    connection_row = AppConnectionRow(
+        app=GITHUB_APP,
+        external_id=connection_external_id,
+        name=account.login,
+        extra=extra.model_dump(),
+    )
+    await merge_app_connections([connection_row])
+    await merge_connections_belong_to_tenants(
+        [
+            ConnectionTenantRow(
+                app=GITHUB_APP,
+                connection_external_id=connection_external_id,
+                tenant_external_id=tenant_external_id,
+            )
+        ]
+    )
+    logger.info("merged_app_connection login=%s", account.login)
+    return ConnectionRef(app=GITHUB_APP, external_id=connection_external_id)

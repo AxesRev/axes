@@ -6,9 +6,11 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from integrations.github.ingestion.shared import GITHUB_APP
 from integrations.github.ingestion.teams import (
     TeamRecord,
-    _build_subteam_member_of_rows,
+    build_identity_member_of_rows,
+    build_subteam_member_of_rows,
     team_record_from_github,
 )
 
@@ -77,23 +79,49 @@ def test_build_subteam_member_of_rows_links_child_to_parent() -> None:
         TeamRecord("parent", "Parent", None, 1, None, ()),
         TeamRecord("child", "Child", None, 2, 1, ()),
     ]
-    parent_group = MagicMock()
-    parent_group.element_id = "parent-id"
-    child_group = MagicMock()
-    child_group.element_id = "child-id"
-    groups_by_external_id = {"1": parent_group, "2": child_group}
 
-    rows = _build_subteam_member_of_rows(records, groups_by_external_id)
+    rows = build_subteam_member_of_rows(records)
 
-    assert rows == [{"member_id": "child-id", "group_id": "parent-id"}]
+    assert rows == [
+        {
+            "member_kind": "group",
+            "member_external_id": "2",
+            "member_app": "",
+            "group_external_id": "1",
+        }
+    ]
 
 
 @pytest.mark.unit
 def test_build_subteam_member_of_rows_skips_missing_parent() -> None:
     records = [TeamRecord("child", "Child", None, 2, 999, ())]
-    child_group = MagicMock()
-    child_group.element_id = "child-id"
 
-    rows = _build_subteam_member_of_rows(records, {"2": child_group})
+    rows = build_subteam_member_of_rows(records)
 
     assert rows == []
+
+
+@pytest.mark.unit
+def test_build_identity_member_of_rows_maps_team_members() -> None:
+    records = [TeamRecord("platform", "Platform", None, 42, None, ("alice", "bob"))]
+
+    rows = build_identity_member_of_rows(
+        records,
+        identity_external_ids={"alice": "100", "bob": "200"},
+        member_app=GITHUB_APP,
+    )
+
+    assert rows == [
+        {
+            "member_kind": "identity",
+            "member_external_id": "100",
+            "member_app": GITHUB_APP,
+            "group_external_id": "42",
+        },
+        {
+            "member_kind": "identity",
+            "member_external_id": "200",
+            "member_app": GITHUB_APP,
+            "group_external_id": "42",
+        },
+    ]
