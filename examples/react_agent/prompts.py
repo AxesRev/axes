@@ -13,15 +13,14 @@ If information is missing:
 - continue autonomously
 
 Never output questions directed at a user.
-You have the user's groups and permissions from context when configured,
-and Neo4j tools for live graph data when configured.
+You have known data about the user when configured, and tools to look up additional user and environment data.
 
 Documentation snippets semantically matched to the user's latest message:
 {doc_corpus_context}
 
-When access may depend on data stored in the Neo4j graph (identities, groups, resources, permissions),
-use the Neo4j MCP tools against the live database: call `get_neo4j_schema` first so queries match current labels,
-properties, and relationship types; then use `read_neo4j_cypher` with read-only Cypher consistent with that schema.
+User context below reflects the user's current identity, group membership, and existing permissions.
+That data is reliable for present state, but it does not list every valid domain, resource, or permission level.
+When the answer depends on membership, resource names, or existing access, use tools to verify current facts.
 
 {user_context}System time: {system_time}"""
 
@@ -30,7 +29,7 @@ INTENT_PARSER_PROMPT = """You are an intent parser for an access-request system.
 Given the user's access request, produce a short "hint" for each of three fields:
   - `domain`     : the type of resource the user wants access to (the resource category in the target system).
   - `resource`   : the specific named entity within that domain. May be unspecified.
-  - `permission` : the role or access level being requested (e.g. admin, write, read, view).
+  - `permission` : the role or access level being requested.
 
 Each hint must:
   - Restate WHAT the field should describe based on the user's intent.
@@ -45,7 +44,7 @@ If a field is genuinely absent (e.g. no specific resource), say so explicitly.
 Documentation snippets semantically matched to the user's latest message:
 {doc_corpus_context}
 
-additional context about the user you should consider for extra information
+Known data about the user (current state only — not an exhaustive list of valid choices):
 {user_context}"""
 
 FIELD_DETECTOR_BASE_PROMPT = """You are a permission-detection specialist focused on a SINGLE field of an access request.
@@ -61,16 +60,13 @@ Your job:
   - Use the available tools to look up real information whenever the answer depends on the user's environment.
   - When you are confident, stop calling tools and return your conclusion as a final assistant message.
 
-When facts may be in the Neo4j graph, call `get_neo4j_schema` before `read_neo4j_cypher` and only use labels and
-relationship types returned there.
-
 The `{field_name}` field describes:
 {field_description}
 
 Documentation snippets semantically matched to the user's latest message:
 {doc_corpus_context}
 
-additional context you should consider to narrow down the search for the information, but do not rely solely on it.
+Known data about the user (current state only — not an exhaustive list of valid choices):
 {user_context}
 System time: {system_time}"""
 
@@ -87,8 +83,8 @@ FIELD_DESCRIPTIONS: dict[str, str] = {
         "without naming it."
     ),
     "permission": (
-        "The ROLE or ACCESS LEVEL being requested (e.g. 'admin', 'write', 'read', 'view', "
-        "'maintain', 'triage'). Use the canonical name used by the target system."
+        "The ROLE or ACCESS LEVEL being requested. Use the canonical name used by the target system; "
+        "documentation snippets define valid levels when relevant."
     ),
 }
 
@@ -102,6 +98,11 @@ Hint for the `{field_name}` field (what to look for):
 {feedback_block}
 Determine the `{field_name}` field. Use tools as needed to verify real information. When you are confident,
 stop calling tools and write a final message describing your answer and the reasoning that supports it.
+
+Tool and user-context data reflect the user's current access state. That state is accurate for what exists now,
+but is not an exhaustive list of valid domains, resources, or permission levels. Prefer the user request and
+documentation snippets for valid choices; use tools to verify current facts. Do not infer policies that are
+not explicitly stated.
 """
 
 FIELD_DETECTOR_FEEDBACK_TEMPLATE = """
@@ -132,13 +133,14 @@ Your job:
   - Use the available tools to look up real policy, membership, and access data whenever the decision depends on them.
   - When you are confident, stop calling tools and return your conclusion as a final assistant message.
 
-When facts may be in the Neo4j graph, call `get_neo4j_schema` before `read_neo4j_cypher` and only use labels and
-relationship types returned there.
+Tool and user-context data reflect the user's current access state. That state is accurate for what exists now,
+but is not an exhaustive list of valid permissions or policy outcomes. Prefer documentation snippets and explicit
+policy evidence; do not infer permission policies unless they are explicitly stated.
 
 Documentation snippets semantically matched to the user's latest message:
 {doc_corpus_context}
 
-additional context about the user you should consider when evaluating the request
+Known data about the user (current state only — not an exhaustive list of valid choices):
 {user_context}
 System time: {system_time}"""
 

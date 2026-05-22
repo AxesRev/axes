@@ -49,8 +49,8 @@ def test_extra_detector_context_includes_groups_and_resource_permissions() -> No
     assert "AxesRev/Test_repo" in block
     assert "AxesRev/axes" in block
     assert "AxesRev - Main org" in block
-    assert "Groups this user belongs to" in block
-    assert "Resources this user already has access to" in block
+    assert "Groups this user currently belongs to" in block
+    assert "Resources this user currently has access to" in block
 
 
 def test_seed_resource_appends_user_context_lists() -> None:
@@ -76,4 +76,4 @@ def test_seed_domain_does_not_append_user_context_lists() -> None:
     msg = _seed(state, "domain", hint="h", feedback=None)
     text = msg.content if isinstance(msg.content, str) else ""
     assert "AxesRev/Test_repo" not in text
-    assert "Groups this user belongs to" not in text
+    assert "Groups this user currently belongs to" not in text

@@ -96,7 +96,7 @@ _field_detection_graph = _field_builder.compile()
 
 
 def _extra_detector_context(state: State, field_name: _FieldName) -> str:
-    """Add graph-backed group and permission lists when detecting `resource`."""
+    """Add the user's current group and resource-access data when detecting `resource`."""
     if field_name != "resource" or state.user_context is None:
         return ""
 
@@ -105,7 +105,7 @@ def _extra_detector_context(state: State, field_name: _FieldName) -> str:
         group_lines = "\n".join(
             group.format_for_context() for group in state.user_context.groups[:_RESOURCE_DETECTOR_GROUP_LIMIT]
         )
-        sections.append("Groups this user belongs to:\n" + group_lines)
+        sections.append("Groups this user currently belongs to:\n" + group_lines)
 
     resource_permissions = [
         permission for permission in state.user_context.permissions if permission.target_kind == "resource"
@@ -116,8 +116,8 @@ def _extra_detector_context(state: State, field_name: _FieldName) -> str:
             for permission in resource_permissions[:_RESOURCE_DETECTOR_PERMISSION_LIMIT]
         )
         sections.append(
-            "Resources this user already has access to (use for vague references to a shared resource; "
-            "prefer an exact identifier when possible):\n" + permission_lines
+            "Resources this user currently has access to (present state only — not all resources in the system):\n"
+            + permission_lines
         )
 
     if not sections:

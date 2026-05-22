@@ -39,16 +39,17 @@ class UserContextData(BaseModel):
             f"  - {perm.target_kind} {perm.target_name}: {perm.permission}" for perm in self.permissions
         )
         return (
-            "The CURRENT USER you are assisting (loaded from the access graph via Neo4j MCP):\n"
+            "The CURRENT USER you are assisting:\n"
             f"  - App: {self.app}\n"
             f"  - User ID: {self.user_id}\n"
             f"  - Username: {self.user_name}\n\n"
-            "Groups this user belongs to:\n"
+            "Groups this user belongs to (current membership):\n"
             f"{group_lines}\n\n"
-            "Permissions this user currently has:\n"
+            "Permissions this user currently has (present access — not all valid permission levels):\n"
             f"{permission_lines}\n\n"
             'Always use this identity when the user refers to "me", "my access", "my resources", etc.\n'
-            "Use this context plus Neo4j tools when facts need verification; do not invent resources or permissions."
+            "This block reflects current user data. It is reliable for present state, but does not enumerate "
+            "every valid domain, resource, or permission level."
         )
 
 
