@@ -18,7 +18,8 @@ You have known data about the user when configured, and tools to look up additio
 Documentation snippets semantically matched to the user's latest message:
 {doc_corpus_context}
 
-User context below reflects the user's current identity, group membership, and existing permissions.
+User context below reflects the user's current identity, group membership, and existing permission bindings.
+Those bindings show who has what now — they are NOT the catalog of grantable permission levels for new requests.
 That data is reliable for present state, but it does not list every valid domain, resource, or permission level.
 When the answer depends on membership, resource names, or existing access, use tools to verify current facts.
 
@@ -29,7 +30,8 @@ INTENT_PARSER_PROMPT = """You are an intent parser for an access-request system.
 Given the user's access request, produce a short "hint" for each of three fields:
   - `domain`     : the type of resource the user wants access to (the resource category in the target system).
   - `resource`   : the specific named entity within that domain. May be unspecified.
-  - `permission` : the role or access level being requested.
+  - `permission` : the access level the user is REQUESTING — restate the capability they asked for
+    (e.g. push/write/read), not an admin label inferred from existing bindings on a resource.
 
 Each hint must:
   - Restate WHAT the field should describe based on the user's intent.
@@ -45,7 +47,9 @@ Documentation snippets semantically matched to the user's latest message:
 {doc_corpus_context}
 
 Known data about the user (current state only — not an exhaustive list of valid choices):
-{user_context}"""
+{user_context}
+
+Permission bindings in user data show current access, not grantable levels. Do not infer permission hints from them."""
 
 FIELD_DETECTOR_BASE_PROMPT = """You are a permission-detection specialist focused on a SINGLE field of an access request.
 
@@ -68,6 +72,12 @@ Documentation snippets semantically matched to the user's latest message:
 
 Known data about the user (current state only — not an exhaustive list of valid choices):
 {user_context}
+
+When `{field_name}` is `permission`:
+  - Output the access level the user is REQUESTING, using canonical vocabulary from their wording and documentation.
+  - Do NOT output ADMIN unless the user explicitly asked for admin/administrator access.
+  - Do NOT pick a permission label because it is the only non-read binding on a resource in tool results or user data.
+  - Bindings you see (e.g. READ, ADMIN on a repo) describe current assignments — not the complete set of grantable levels.
 System time: {system_time}"""
 
 FIELD_DESCRIPTIONS: dict[str, str] = {
@@ -83,8 +93,12 @@ FIELD_DESCRIPTIONS: dict[str, str] = {
         "without naming it."
     ),
     "permission": (
-        "The ROLE or ACCESS LEVEL being requested. Use the canonical name used by the target system; "
-        "documentation snippets define valid levels when relevant."
+        "The access level the user is REQUESTING — not what they already have, and not a label chosen "
+        "because it appears among existing bindings on a resource. Derive the canonical name from the "
+        "user's wording and documentation snippets. If they ask to push or write code, output WRITE (or "
+        "the doc-backed equivalent) — not ADMIN unless they explicitly request admin access. Tool data "
+        "showing bindings on a resource describes current assignments only; it is not the catalog of "
+        "grantable permission levels."
     ),
 }
 
@@ -100,9 +114,15 @@ Determine the `{field_name}` field. Use tools as needed to verify real informati
 stop calling tools and write a final message describing your answer and the reasoning that supports it.
 
 Tool and user-context data reflect the user's current access state. That state is accurate for what exists now,
-but is not an exhaustive list of valid domains, resources, or permission levels. Prefer the user request and
-documentation snippets for valid choices; use tools to verify current facts. Do not infer policies that are
-not explicitly stated.
+but is not an exhaustive list of valid domains, resources, or permission levels. When tools return permission
+bindings on a resource, that shows who currently has what — not the complete set of grantable levels.
+Prefer the user request and documentation snippets for valid choices; use tools to verify current facts.
+Do not infer policies that are not explicitly stated.
+
+When `{field_name}` is `permission`:
+  - Map the user's stated capability to its canonical name (e.g. push/write code → WRITE).
+  - Do NOT choose ADMIN because it is the only non-read binding visible on the resource.
+  - Do NOT treat the permission labels present on a resource as the only valid options for this field.
 """
 
 FIELD_DETECTOR_FEEDBACK_TEMPLATE = """
@@ -112,13 +132,20 @@ Validator feedback (what was wrong and how to improve):
 """
 
 FIELD_EXTRACTOR_PROMPT = """From the conversation above, produce the structured `FieldResult` for `{field_name}`.
-Use the model's structured-output schema (value + justification); do not emit free-form prose outside it."""
+Use the model's structured-output schema (value + justification); do not emit free-form prose outside it.
+
+When `{field_name}` is `permission`, the value must name the permission the user requested (from their wording
+and documentation) — not a label chosen only because it appears among existing bindings on a resource."""
 
 VALIDATOR_PROMPT = """You validate three field results (`domain`, `resource`, `permission`) against the original user request.
 
 Return a `ValidationVerdict` only (no extra text). Field descriptions on that schema define acceptance criteria and
 feedback rules. Only mark `passed` true when all three fields are correct together; wrong fields get non-null
-feedback, correct fields stay null."""
+feedback, correct fields stay null.
+
+For `permission`: reject ADMIN (or equivalent admin labels) when the user asked for a narrower capability such as
+push, write, or contributor access and did not explicitly request admin/administrator access. Reject any permission
+value chosen solely because it was the only non-read binding visible on the resource in tool results."""
 
 ACCESS_EVALUATION_BASE_PROMPT = """You are an access-request evaluator for an IT administration system.
 
