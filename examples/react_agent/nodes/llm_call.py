@@ -1,6 +1,6 @@
 import logging
 from datetime import UTC, datetime
-from typing import cast
+from typing import Any, cast
 
 from langchain_core.messages import AIMessage
 from langgraph.runtime import Runtime
@@ -14,10 +14,16 @@ from examples.react_agent.utils import load_chat_model
 logger = logging.getLogger(__name__)
 
 
-async def call_model(state: State, runtime: Runtime[Context]) -> dict[str, list[AIMessage]]:
+async def call_model(
+    state: State,
+    runtime: Runtime[Context],
+    *,
+    tools: list[Any] | None = None,
+) -> dict[str, list[AIMessage]]:
     """Call the LLM powering our "agent"."""
     logger.info("Node call_model: starting (messages in state: %d)", len(state.messages))
-    tools = await _get_all_tools(runtime)
+    if tools is None:
+        tools = await _get_all_tools(runtime)
     logger.info("Node call_model: %d tool(s) available: %s", len(tools), [t.name for t in tools])
     model = load_chat_model(
         runtime.context.model,

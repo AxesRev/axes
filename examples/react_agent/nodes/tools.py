@@ -49,12 +49,18 @@ def _truncate_if_oversized(message: ToolMessage, encoder: tiktoken.Encoding) -> 
     )
 
 
-async def execute_tools(state: State, runtime: Runtime[Context]) -> dict[str, list[Any]]:
+async def execute_tools(
+    state: State,
+    runtime: Runtime[Context],
+    *,
+    tools: list[Any] | None = None,
+) -> dict[str, list[Any]]:
     """Execute tools (Neo4j MCP over HTTP when configured, plus static TOOLS)."""
     last_message = state.messages[-1]
     tool_names = [tc["name"] for tc in getattr(last_message, "tool_calls", [])]
     logger.info("Node tools: executing %d tool(s): %s", len(tool_names), tool_names)
-    tools = await _get_all_tools(runtime)
+    if tools is None:
+        tools = await _get_all_tools(runtime)
     tool_node = ToolNode(tools, handle_tool_errors=True)
     encoder = _get_encoder(runtime.context.model)
     result: dict[str, list[Any]] = await tool_node.ainvoke(state)  # type: ignore[return-value]

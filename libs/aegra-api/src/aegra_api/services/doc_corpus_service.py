@@ -20,7 +20,7 @@ import frontmatter
 import httpx
 import structlog
 import yaml
-from openai import AsyncOpenAI, OpenAIError
+from openai import APIConnectionError, AsyncOpenAI, InternalServerError, OpenAIError, RateLimitError
 from sqlalchemy import delete, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -33,6 +33,9 @@ from aegra_api.settings import settings
 logger = structlog.get_logger(__name__)
 
 _DEFAULT_EMBED_BATCH = 64
+_EMBED_MAX_ATTEMPTS = 30
+_EMBED_RETRY_BASE_DELAY_SEC = 1.0
+_EMBED_RETRY_MAX_DELAY_SEC = 60.0
 _FIRECRAWL_HTTP_TIMEOUT_SEC = 120.0
 
 _DOC_INGEST_APPLICATION = "github"
@@ -647,6 +650,62 @@ async def ingest_github_documentation_from_zip(
     return files_seen, chunks_written, row_titles
 
 
+def _openai_retry_wait_seconds(*, error: OpenAIError, attempt: int) -> float:
+    """Compute backoff before retrying an OpenAI embeddings request."""
+    if isinstance(error, RateLimitError) and error.response is not None:
+        retry_after = error.response.headers.get("retry-after")
+        if retry_after is not None:
+            try:
+                return min(max(float(retry_after), 0.1), _EMBED_RETRY_MAX_DELAY_SEC)
+            except ValueError:
+                pass
+
+    message = str(error)
+    ms_match = re.search(r"try again in (\d+(?:\.\d+)?)\s*ms", message, flags=re.IGNORECASE)
+    if ms_match is not None:
+        return min(max(float(ms_match.group(1)) / 1000.0, 0.1), _EMBED_RETRY_MAX_DELAY_SEC)
+
+    sec_match = re.search(r"try again in (\d+(?:\.\d+)?)\s*s(?:ec(?:ond)?s?)?", message, flags=re.IGNORECASE)
+    if sec_match is not None:
+        return min(max(float(sec_match.group(1)), 0.1), _EMBED_RETRY_MAX_DELAY_SEC)
+
+    delay = _EMBED_RETRY_BASE_DELAY_SEC * (2 ** max(attempt - 1, 0))
+    return min(delay, _EMBED_RETRY_MAX_DELAY_SEC)
+
+
+async def _create_embedding_batch_with_retry(
+    client: AsyncOpenAI,
+    *,
+    model: str,
+    batch: list[str],
+) -> list[list[float]]:
+    """Create embeddings for one batch, retrying transient OpenAI failures."""
+    last_error: OpenAIError | None = None
+    for attempt in range(1, _EMBED_MAX_ATTEMPTS + 1):
+        try:
+            result = await client.embeddings.create(model=model, input=batch)
+            sorted_items = sorted(result.data, key=lambda item: item.index)
+            return [list(item.embedding) for item in sorted_items]
+        except (RateLimitError, APIConnectionError, InternalServerError) as err:
+            last_error = err
+            if attempt >= _EMBED_MAX_ATTEMPTS:
+                raise
+            wait_seconds = _openai_retry_wait_seconds(error=err, attempt=attempt)
+            logger.warning(
+                "openai_embeddings_retry",
+                attempt=attempt,
+                wait_seconds=wait_seconds,
+                batch_size=len(batch),
+                error_type=type(err).__name__,
+            )
+            await asyncio.sleep(wait_seconds)
+
+    if last_error is not None:
+        raise last_error
+    msg = "embedding batch failed without a captured error"
+    raise RuntimeError(msg)
+
+
 async def embed_texts_openai(
     *,
     texts: list[str],
@@ -657,7 +716,8 @@ async def embed_texts_openai(
     """Return embedding vectors for each input string using the OpenAI API.
 
     Requests use batches of up to ``_DEFAULT_EMBED_BATCH`` texts each. ``progress_bar``, when set,
-    advances by the batch size after each API call.
+    advances by the batch size after each API call. Transient OpenAI rate limits and connection
+    errors are retried with exponential backoff.
     """
     if not texts:
         return []
@@ -666,10 +726,8 @@ async def embed_texts_openai(
     out: list[list[float]] = []
     for start in range(0, len(texts), _DEFAULT_EMBED_BATCH):
         batch = texts[start : start + _DEFAULT_EMBED_BATCH]
-        result = await client.embeddings.create(model=model, input=batch)
-        sorted_items = sorted(result.data, key=lambda item: item.index)
-        for item in sorted_items:
-            out.append(list(item.embedding))
+        vectors = await _create_embedding_batch_with_retry(client, model=model, batch=batch)
+        out.extend(vectors)
         if progress_bar is not None:
             progress_bar.update(len(batch))
     return out

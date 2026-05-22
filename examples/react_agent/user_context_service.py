@@ -14,6 +14,7 @@ MATCH (u:AppIdentity {app: $app, external_id: $user_id})
 OPTIONAL MATCH (u)-[:MEMBER_OF]->(g:Group)
 OPTIONAL MATCH (u)-[p:HAS_PERMISSION]->(target)
 WHERE target:Resource OR target:Group
+OPTIONAL MATCH (target)-[:BELONGS_TO]->(owner:AppConnection)
 RETURN u.app AS app,
        u.external_id AS user_id,
        u.name AS user_name,
@@ -26,7 +27,9 @@ RETURN u.app AS app,
            permission: p.permission,
            target_kind: head([label IN labels(target) WHERE label IN ['Resource', 'Group']]),
            target_name: target.name,
-           target_external_id: target.external_id
+           target_external_id: target.external_id,
+           owner_name: CASE WHEN target:Resource THEN owner.name ELSE null END,
+           owner_external_id: CASE WHEN target:Resource THEN owner.external_id ELSE null END
        }) AS permissions
 """
 

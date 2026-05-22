@@ -14,6 +14,7 @@ class IdentityLinked(BaseModel):
     slack_user_id: str
     github_user_id: str
     github_username: str
+    github_installation_id: str = ""
 
 
 class IdentityNotLinked(BaseModel):

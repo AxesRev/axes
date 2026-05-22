@@ -24,6 +24,46 @@ def test_parse_group_rows_skips_incomplete_entries() -> None:
     assert groups == [UserContextGroup(external_id="team-1", name="admins", description="Admin team")]
 
 
+def test_parse_permission_rows_includes_resource_owner() -> None:
+    permissions = parse_permission_rows(
+        [
+            {
+                "permission": "admin",
+                "target_kind": "Resource",
+                "target_name": "AxesRev/Test_repo",
+                "target_external_id": "repo-1",
+                "owner_name": "AxesRev",
+                "owner_external_id": "org-1",
+            },
+            {
+                "permission": "maintain",
+                "target_kind": "Group",
+                "target_name": "team-a",
+                "target_external_id": "g1",
+                "owner_name": "AxesRev",
+                "owner_external_id": "org-1",
+            },
+        ]
+    )
+
+    assert permissions == [
+        UserContextPermission(
+            permission="admin",
+            target_kind="resource",
+            target_name="AxesRev/Test_repo",
+            target_external_id="repo-1",
+            owner="AxesRev",
+            owner_external_id="org-1",
+        ),
+        UserContextPermission(
+            permission="maintain",
+            target_kind="group",
+            target_name="team-a",
+            target_external_id="g1",
+        ),
+    ]
+
+
 def test_parse_permission_rows_normalizes_target_kind() -> None:
     permissions = parse_permission_rows(
         [
@@ -96,6 +136,27 @@ async def test_fetch_user_context_returns_none_when_no_rows() -> None:
         user_context = await fetch_user_context(app="github", user_id="missing")
 
     assert user_context is None
+
+
+def test_format_for_prompt_includes_resource_owner() -> None:
+    user_context = UserContextData(
+        app="github",
+        user_id="123",
+        user_name="alice",
+        permissions=[
+            UserContextPermission(
+                permission="admin",
+                target_kind="resource",
+                target_name="AxesRev/Test_repo",
+                target_external_id="repo-1",
+                owner="AxesRev",
+            )
+        ],
+    )
+
+    prompt = user_context.format_for_prompt()
+
+    assert "resource AxesRev/Test_repo, owner: AxesRev: admin" in prompt
 
 
 def test_format_for_prompt_includes_group_descriptions() -> None:

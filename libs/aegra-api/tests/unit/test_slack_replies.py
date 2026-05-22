@@ -48,3 +48,35 @@ def test_slack_replies_ignore_unlisted_nodes() -> None:
     }
 
     assert slack_replies_from_updates(data) == ['{"domain":"github_repository","resource":null,"permission":"read"}']
+
+
+def test_slack_replies_from_grant_execution_uses_final_ai_message_only() -> None:
+    data = {
+        "access_grant_execution": {
+            "call_model": {
+                "messages": [
+                    {"type": "ai", "content": "Looking up the endpoint...", "tool_calls": [{"name": "json_explorer"}]},
+                    {
+                        "type": "ai",
+                        "content": "Granted write access by adding the user as a repository collaborator.",
+                    },
+                ]
+            }
+        }
+    }
+
+    assert slack_replies_from_updates(data) == ["Granted write access by adding the user as a repository collaborator."]
+
+
+def test_slack_replies_from_grant_execution_skips_tool_call_only_update() -> None:
+    data = {
+        "access_grant_execution": {
+            "call_model": {
+                "messages": [
+                    {"type": "ai", "content": "Calling GitHub...", "tool_calls": [{"name": "requests_put"}]},
+                ]
+            }
+        }
+    }
+
+    assert slack_replies_from_updates(data) == []

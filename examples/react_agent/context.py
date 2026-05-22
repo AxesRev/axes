@@ -57,6 +57,15 @@ class Context:
         },
     )
 
+    github_installation_id: str = field(
+        default="",
+        metadata={
+            "description": (
+                "GitHub App installation ID for the org/user. Used to mint installation access tokens for grant execution."
+            ),
+        },
+    )
+
     reasoning_effort: str = field(
         default="",
         metadata={
