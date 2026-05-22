@@ -8,10 +8,13 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from openai import APIConnectionError, RateLimitError
 
 from aegra_api.services import doc_corpus_service as doc_corpus_service_module
 from aegra_api.services.doc_corpus_service import (
+    _openai_retry_wait_seconds,
     cosine_distance_row,
+    embed_texts_openai,
     ingest_documentation_source,
     ingest_github_documentation_from_zip,
     iter_github_docs_zip_markdown_members,
@@ -182,6 +185,79 @@ def test_cosine_distance_row_length_mismatch_raises() -> None:
 def test_cosine_distance_row_zero_vector_handled() -> None:
     assert cosine_distance_row([0.0, 0.0], [1.0, 0.0]) == pytest.approx(1.0)
     assert math.isfinite(cosine_distance_row([0.0, 0.0], [0.0, 0.0]))
+
+
+def test_openai_retry_wait_seconds_uses_retry_after_header() -> None:
+    response = MagicMock()
+    response.headers = {"retry-after": "2.5"}
+    err = RateLimitError("rate limit", response=response, body=None)
+    assert _openai_retry_wait_seconds(error=err, attempt=1) == pytest.approx(2.5)
+
+
+def test_openai_retry_wait_seconds_parses_try_again_in_ms_from_message() -> None:
+    response = MagicMock()
+    response.headers = {}
+    err = RateLimitError(
+        "Rate limit reached ... Please try again in 207ms.",
+        response=response,
+        body=None,
+    )
+    assert _openai_retry_wait_seconds(error=err, attempt=1) == pytest.approx(0.207)
+
+
+def test_openai_retry_wait_seconds_exponential_backoff_without_hints() -> None:
+    err = APIConnectionError(request=MagicMock())
+    assert _openai_retry_wait_seconds(error=err, attempt=1) == pytest.approx(1.0)
+    assert _openai_retry_wait_seconds(error=err, attempt=3) == pytest.approx(4.0)
+
+
+@pytest.mark.asyncio
+async def test_embed_texts_openai_retries_on_rate_limit(monkeypatch: pytest.MonkeyPatch) -> None:
+    sleep = AsyncMock()
+    monkeypatch.setattr(doc_corpus_service_module.asyncio, "sleep", sleep)
+
+    call_count = 0
+    response = MagicMock()
+    response.headers = {"retry-after": "0.01"}
+
+    async def create_side_effect(*_args: object, **_kwargs: object) -> MagicMock:
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            raise RateLimitError("429", response=response, body=None)
+        return MagicMock(data=[MagicMock(index=0, embedding=[0.1, 0.2, 0.3])])
+
+    client = MagicMock()
+    client.embeddings.create = AsyncMock(side_effect=create_side_effect)
+    monkeypatch.setattr(doc_corpus_service_module, "AsyncOpenAI", lambda **_: client)
+
+    vectors = await embed_texts_openai(texts=["hello"], model="text-embedding-3-small", api_key="test")
+
+    assert vectors == [[0.1, 0.2, 0.3]]
+    assert call_count == 2
+    sleep.assert_awaited_once_with(0.1)
+
+
+@pytest.mark.asyncio
+async def test_embed_texts_openai_raises_after_max_rate_limit_retries(monkeypatch: pytest.MonkeyPatch) -> None:
+    sleep = AsyncMock()
+    monkeypatch.setattr(doc_corpus_service_module.asyncio, "sleep", sleep)
+    monkeypatch.setattr(doc_corpus_service_module, "_EMBED_MAX_ATTEMPTS", 2)
+
+    response = MagicMock()
+    response.headers = {}
+
+    async def create_side_effect(*_args: object, **_kwargs: object) -> MagicMock:
+        raise RateLimitError("429", response=response, body=None)
+
+    client = MagicMock()
+    client.embeddings.create = AsyncMock(side_effect=create_side_effect)
+    monkeypatch.setattr(doc_corpus_service_module, "AsyncOpenAI", lambda **_: client)
+
+    with pytest.raises(RateLimitError):
+        await embed_texts_openai(texts=["hello"], model="text-embedding-3-small", api_key="test")
+
+    assert sleep.await_count == 1
 
 
 @pytest.mark.asyncio
