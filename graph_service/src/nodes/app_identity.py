@@ -19,12 +19,14 @@ class AppIdentity(BaseNode):
 
     ``app`` names the integration ("github", "slack", "jira", …).
     ``external_id`` is that integration's own stable identifier for this user.
+    ``name`` is the human-readable handle shown in graph UIs (e.g. GitHub login).
     ``extra`` is a schemaless JSON blob — integrations store whatever
     app-specific fields they need there without touching the graph schema.
     """
 
     app = StringProperty(required=True)
     external_id = StringProperty(required=True)
+    name = StringProperty(required=True)
     extra = JSONProperty()
 
     identity = AsyncRelationshipFrom(

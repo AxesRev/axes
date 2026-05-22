@@ -132,10 +132,12 @@ async def _upsert_identity(user: NamedUser, connection: AppConnection) -> AppIde
         identity = await AppIdentity(
             app=_GITHUB_APP,
             external_id=str(user.id),
+            name=user.login,
             extra=extra.model_dump(),
         ).save()
         logger.info("created_app_identity login=%s", user.login)
     else:
+        identity.name = user.login
         identity.extra = extra.model_dump()
         await identity.save()
 
