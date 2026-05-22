@@ -32,6 +32,7 @@ from neomodel import adb
 
 import nodes as _nodes_pkg  # noqa: F401 — registers all node classes with neomodel
 from integrations.github.models import GithubConnectionExtra, GithubIdentityExtra, GithubResourceExtra
+from integrations.github.permissions import sync_repo_permissions
 from integrations.github.settings import RunnerSettings, get_github_settings, get_runner_settings
 from nodes.app_connection import AppConnection
 from nodes.app_identity import AppIdentity
@@ -166,8 +167,11 @@ async def fetch_installation(installation_id: int) -> None:
     connection = await _upsert_connection(account, tenant)
 
     logger.info("fetching_repos login=%s", account.login)
-    for repo in installation.get_repos():
-        await _upsert_resource(repo, connection)
+    repos = list(installation.get_repos())
+    resources_by_uri: dict[str, Resource] = {}
+    for repo in repos:
+        resource = await _upsert_resource(repo, connection)
+        resources_by_uri[repo.full_name] = resource
 
     logger.info("fetching_members login=%s", account.login)
     if account.type == "Organization":
@@ -177,6 +181,10 @@ async def fetch_installation(installation_id: int) -> None:
     else:
         user: NamedUser = gh.get_user(account.login)
         await _upsert_identity(user, connection)
+
+    logger.info("fetching_permissions login=%s repos=%s", account.login, len(repos))
+    org_login = account.login if account.type == "Organization" else None
+    await sync_repo_permissions(gh, repos, resources_by_uri, connection, org_login=org_login)
 
     logger.info("fetch_complete installation_id=%s login=%s", installation_id, account.login)
 
