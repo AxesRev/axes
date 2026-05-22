@@ -51,11 +51,6 @@ async def get_or_create_identity_by_login(
     login: str,
     connection: AppConnection,
 ) -> AppIdentity | None:
-    candidates = await AppIdentity.nodes.filter(app=GITHUB_APP, name=login).all()
-    for identity in candidates:
-        if await identity.connection.is_connected(connection):
-            return identity
-
     try:
         user = gh.get_user(login)
     except GithubException:

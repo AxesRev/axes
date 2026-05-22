@@ -6,6 +6,7 @@ import logging
 from dataclasses import dataclass
 from typing import Literal
 
+from github import GithubException
 from github.MainClass import Github
 from github.Repository import Repository
 
@@ -17,6 +18,7 @@ from integrations.github.ingestion.shared import (
 )
 from integrations.github.ingestion.users import get_or_create_identity_by_login
 from nodes.app_connection import AppConnection
+from nodes.group import Group
 from nodes.resource import Resource
 
 logger = logging.getLogger(__name__)
@@ -241,6 +243,34 @@ def fetch_repo_permissions(
     return grants
 
 
+async def resolve_team_group(
+    gh: Github,
+    *,
+    org_login: str,
+    slug: str,
+    connection: AppConnection,
+    groups_by_slug: dict[str, Group],
+) -> Group | None:
+    existing = groups_by_slug.get(slug)
+    if existing is not None:
+        return existing
+
+    try:
+        team = gh.get_organization(org_login).get_team_by_slug(slug)
+    except GithubException:
+        logger.warning("permissions_skip_unknown_team org=%s slug=%s", org_login, slug)
+        return None
+
+    group = await upsert_group(
+        external_id=str(team.id),
+        name=team.slug,
+        connection=connection,
+        description=team.description or team.name,
+    )
+    groups_by_slug[slug] = group
+    return group
+
+
 async def ingest_permissions(
     gh: Github,
     repos: list[Repository],
@@ -248,14 +278,17 @@ async def ingest_permissions(
     connection: AppConnection,
     *,
     org_login: str | None = None,
+    groups_by_slug: dict[str, Group] | None = None,
 ) -> None:
     """Upsert teams/users and write HAS_PERMISSION edges for repository access."""
     grants = fetch_repo_permissions(gh, repos, org_login=org_login)
     logger.info("permissions_fetched grants=%s repos=%s", len(grants), len(repos))
 
+    team_groups = groups_by_slug or {}
     edge_rows: list[PermissionEdgeRow] = []
     for grant in grants:
-        if resources_by_uri.get(grant.repo_full_name) is None:
+        resource = resources_by_uri.get(grant.repo_full_name)
+        if resource is None:
             logger.warning("permissions_skip_unknown_repo full_name=%s", grant.repo_full_name)
             continue
 
@@ -265,7 +298,18 @@ async def ingest_permissions(
                 continue
             subject_id = identity.element_id
         else:
-            group = await upsert_group(grant.subject_key, connection)
+            if org_login is None:
+                logger.warning("permissions_skip_team_non_org team=%s", grant.subject_key)
+                continue
+            group = await resolve_team_group(
+                gh,
+                org_login=org_login,
+                slug=grant.subject_key,
+                connection=connection,
+                groups_by_slug=team_groups,
+            )
+            if group is None:
+                continue
             subject_id = group.element_id
 
         if subject_id is None:
@@ -275,7 +319,7 @@ async def ingest_permissions(
         edge_rows.append(
             PermissionEdgeRow(
                 subject_id=subject_id,
-                resource_uri=grant.repo_full_name,
+                resource_external_id=resource.external_id,
                 permission=grant.permission,
             )
         )

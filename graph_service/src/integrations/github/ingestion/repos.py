@@ -7,7 +7,6 @@ import logging
 from github.Installation import Installation
 from github.Repository import Repository
 
-from integrations.github.models import GithubResourceExtra
 from nodes.app_connection import AppConnection
 from nodes.resource import Resource
 
@@ -15,26 +14,19 @@ logger = logging.getLogger(__name__)
 
 
 async def upsert_resource(repo: Repository, connection: AppConnection) -> Resource:
-    extra = GithubResourceExtra(
-        repo_id=repo.id,
-        full_name=repo.full_name,
-        private=repo.private,
-        default_branch=repo.default_branch,
-        html_url=repo.html_url,
-        visibility=repo.visibility,
-    )
-    resource = await Resource.nodes.get_or_none(uri=repo.full_name)
+    external_id = str(repo.id)
+    resource = await Resource.nodes.get_or_none(external_id=external_id)
     if resource is None:
         resource = await Resource(
+            external_id=external_id,
             uri=repo.full_name,
             name=repo.name,
             kind="repository",
-            extra=extra.model_dump(),
         ).save()
-        logger.info("created_resource full_name=%s", repo.full_name)
+        logger.info("created_resource external_id=%s full_name=%s", external_id, repo.full_name)
     else:
         resource.name = repo.name
-        resource.extra = extra.model_dump()
+        resource.uri = repo.full_name
         await resource.save()
 
     if not await resource.connection.is_connected(connection):

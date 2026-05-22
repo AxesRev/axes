@@ -12,6 +12,7 @@ from integrations.github.ingestion.org import upsert_connection
 from integrations.github.ingestion.permissions import ingest_permissions
 from integrations.github.ingestion.repos import ingest_repos
 from integrations.github.ingestion.shared import make_github_integration
+from integrations.github.ingestion.teams import ingest_teams
 from integrations.github.ingestion.tenant import get_or_create_tenant
 from integrations.github.ingestion.users import ingest_users
 
@@ -30,7 +31,7 @@ async def fetch_installation(installation_id: int) -> None:
 
     gh = gi.get_github_for_installation(installation_id)
 
-    tenant = await get_or_create_tenant(f"github:{account.login}")
+    tenant = await get_or_create_tenant(external_id=str(account.id), name=account.login)
     connection = await upsert_connection(account, tenant)
 
     logger.info("ingest_repos login=%s", account.login)
@@ -39,8 +40,18 @@ async def fetch_installation(installation_id: int) -> None:
     logger.info("ingest_users login=%s", account.login)
     await ingest_users(gh, account, connection)
 
+    logger.info("ingest_teams login=%s", account.login)
+    groups_by_slug = await ingest_teams(gh, account, connection)
+
     logger.info("ingest_permissions login=%s repos=%s", account.login, len(repos))
     org_login = account.login if account.type == "Organization" else None
-    await ingest_permissions(gh, repos, resources_by_uri, connection, org_login=org_login)
+    await ingest_permissions(
+        gh,
+        repos,
+        resources_by_uri,
+        connection,
+        org_login=org_login,
+        groups_by_slug=groups_by_slug,
+    )
 
     logger.info("fetch_complete installation_id=%s login=%s", installation_id, account.login)

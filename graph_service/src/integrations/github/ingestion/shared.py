@@ -21,8 +21,13 @@ PERMISSION_BATCH_SIZE = 500
 
 class PermissionEdgeRow(TypedDict):
     subject_id: str
-    resource_uri: str
+    resource_external_id: str
     permission: str
+
+
+class MemberOfRow(TypedDict):
+    member_id: str
+    group_id: str
 
 
 def make_github_integration() -> GithubIntegration:
@@ -47,7 +52,7 @@ async def merge_resource_permissions(
     query = """
     UNWIND $rows AS row
     MATCH (subject) WHERE elementId(subject) = row.subject_id
-    MATCH (resource:Resource {uri: row.resource_uri})
+    MATCH (resource:Resource {external_id: row.resource_external_id})
     MERGE (subject)-[hp:HAS_PERMISSION]->(resource)
     SET hp.permission = row.permission
     """
@@ -57,13 +62,49 @@ async def merge_resource_permissions(
         await adb.cypher_query(query, {"rows": batch})
 
 
-async def upsert_group(slug: str, connection: AppConnection) -> Group:
-    candidates = await Group.nodes.filter(name=slug).all()
-    for group in candidates:
-        if await group.connection.is_connected(connection):
-            return group
+async def merge_member_of(
+    rows: list[MemberOfRow],
+    *,
+    batch_size: int = PERMISSION_BATCH_SIZE,
+) -> None:
+    """Upsert MEMBER_OF edges in batches (AppIdentity or Group → Group)."""
+    if not rows:
+        return
 
-    group = await Group(name=slug).save()
-    await group.connection.connect(connection)
-    logger.info("created_group slug=%s", slug)
+    query = """
+    UNWIND $rows AS row
+    MATCH (member) WHERE elementId(member) = row.member_id
+    MATCH (group:Group) WHERE elementId(group) = row.group_id
+    MERGE (member)-[:MEMBER_OF]->(group)
+    """
+
+    for start in range(0, len(rows), batch_size):
+        batch = rows[start : start + batch_size]
+        await adb.cypher_query(query, {"rows": batch})
+
+
+async def upsert_group(
+    *,
+    external_id: str,
+    name: str,
+    connection: AppConnection,
+    description: str | None = None,
+) -> Group:
+    group = await Group.nodes.get_or_none(external_id=external_id)
+    if group is None:
+        group = await Group(
+            external_id=external_id,
+            name=name,
+            description=description or "",
+        ).save()
+        await group.connection.connect(connection)
+        logger.info("created_group external_id=%s name=%s", external_id, name)
+        return group
+
+    group.name = name
+    if description is not None:
+        group.description = description
+    await group.save()
+    if not await group.connection.is_connected(connection):
+        await group.connection.replace(connection)
     return group
