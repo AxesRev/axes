@@ -2,23 +2,23 @@
 
 from __future__ import annotations
 
-import json
 import logging
 from dataclasses import dataclass
 from typing import Literal
 
-from github import GithubException
 from github.MainClass import Github
 from github.Repository import Repository
 
+from integrations.github.ingestion.shared import (
+    connect_resource_permission,
+    gql_string,
+    upsert_group,
+)
+from integrations.github.ingestion.users import get_or_create_identity_by_login
 from nodes.app_connection import AppConnection
-from nodes.app_identity import AppIdentity
-from nodes.group import Group
 from nodes.resource import Resource
 
 logger = logging.getLogger(__name__)
-
-_GITHUB_APP = "github"
 
 DEFAULT_REPO_BATCH_SIZE = 25
 _COLLABORATORS_FRAGMENT = """
@@ -83,7 +83,7 @@ def build_repo_collaborators_graphql(repos: list[Repository]) -> str:
         alias = repo_alias(index)
         blocks.append(
             f"""
-  {alias}: repository(owner: {_gql_string(owner)}, name: {_gql_string(name)}) {{
+  {alias}: repository(owner: {gql_string(owner)}, name: {gql_string(name)}) {{
 {_COLLABORATORS_FRAGMENT}
   }}"""
         )
@@ -94,7 +94,7 @@ def build_repo_collaborators_graphql(repos: list[Repository]) -> str:
 def build_org_team_permissions_graphql(org_login: str) -> str:
     """Build a GraphQL query for team → repository permissions via the org."""
     return f"""query {{
-  organization(login: {_gql_string(org_login)}) {{
+  organization(login: {gql_string(org_login)}) {{
 {_ORG_TEAMS_FRAGMENT}
   }}
 }}"""
@@ -240,7 +240,7 @@ def fetch_repo_permissions(
     return grants
 
 
-async def sync_repo_permissions(
+async def ingest_permissions(
     gh: Github,
     repos: list[Repository],
     resources_by_uri: dict[str, Resource],
@@ -259,18 +259,14 @@ async def sync_repo_permissions(
             continue
 
         if grant.subject_kind == "user":
-            identity = await _get_or_create_identity_by_login(gh, grant.subject_key, connection)
+            identity = await get_or_create_identity_by_login(gh, grant.subject_key, connection)
             if identity is None:
                 continue
-            await _connect_resource_permission(identity, resource, grant.permission)
+            await connect_resource_permission(identity, resource, grant.permission)
             continue
 
-        group = await _upsert_group(grant.subject_key, connection)
-        await _connect_resource_permission(group, resource, grant.permission)
-
-
-def _gql_string(value: str) -> str:
-    return json.dumps(value)
+        group = await upsert_group(grant.subject_key, connection)
+        await connect_resource_permission(group, resource, grant.permission)
 
 
 def _parse_collaborator_grants(repo_full_name: str, repo_data: dict[str, object]) -> list[RepoPermissionGrant]:
@@ -302,45 +298,3 @@ def _parse_collaborator_grants(repo_full_name: str, repo_data: dict[str, object]
             )
         )
     return grants
-
-
-async def _get_or_create_identity_by_login(
-    gh: Github,
-    login: str,
-    connection: AppConnection,
-) -> AppIdentity | None:
-    candidates = await AppIdentity.nodes.filter(app=_GITHUB_APP, name=login).all()
-    for identity in candidates:
-        if await identity.connection.is_connected(connection):
-            return identity
-
-    try:
-        user = gh.get_user(login)
-    except GithubException:
-        logger.warning("permissions_skip_unknown_user login=%s", login)
-        return None
-
-    from integrations.github.fetcher import _upsert_identity
-
-    return await _upsert_identity(user, connection)
-
-
-async def _upsert_group(slug: str, connection: AppConnection) -> Group:
-    candidates = await Group.nodes.filter(name=slug).all()
-    for group in candidates:
-        if await group.connection.is_connected(connection):
-            return group
-
-    group = await Group(name=slug).save()
-    await group.connection.connect(connection)
-    logger.info("created_group slug=%s", slug)
-    return group
-
-
-async def _connect_resource_permission(
-    subject: AppIdentity | Group,
-    resource: Resource,
-    permission: str,
-) -> None:
-    rel = subject.permitted_resources
-    await rel.connect(resource, {"permission": permission})

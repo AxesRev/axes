@@ -6,7 +6,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from integrations.github.permissions import (
+from integrations.github.ingestion.permissions import (
     RepoPermissionGrant,
     build_org_team_permissions_graphql,
     build_repo_collaborators_graphql,
