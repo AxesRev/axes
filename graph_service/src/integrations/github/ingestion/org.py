@@ -7,7 +7,7 @@ import logging
 from github.NamedUser import NamedUser
 from github.Organization import Organization
 
-from integrations.github.ingestion.shared import GITHUB_APP
+from integrations.github.ingestion.shared import GITHUB_APP, link_belongs_to
 from integrations.github.models import GithubConnectionExtra
 from nodes.app_connection import AppConnection
 from nodes.tenant import Tenant
@@ -40,7 +40,7 @@ async def upsert_connection(
         connection.extra = extra.model_dump()
         await connection.save()
 
-    if not await connection.tenant.is_connected(tenant):
-        await connection.tenant.replace(tenant)
+    if connection.element_id is not None and tenant.element_id is not None:
+        await link_belongs_to(child_id=connection.element_id, parent_id=tenant.element_id)
 
     return connection

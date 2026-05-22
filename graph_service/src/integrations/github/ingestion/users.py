@@ -9,7 +9,7 @@ from github.MainClass import Github
 from github.NamedUser import NamedUser
 from github.Organization import Organization
 
-from integrations.github.ingestion.shared import GITHUB_APP
+from integrations.github.ingestion.shared import GITHUB_APP, link_belongs_to
 from integrations.github.models import GithubIdentityExtra
 from nodes.app_connection import AppConnection
 from nodes.app_identity import AppIdentity
@@ -40,8 +40,8 @@ async def upsert_identity(user: NamedUser, connection: AppConnection) -> AppIden
         identity.extra = extra.model_dump()
         await identity.save()
 
-    if not await identity.connection.is_connected(connection):
-        await identity.connection.replace(connection)
+    if identity.element_id is not None and connection.element_id is not None:
+        await link_belongs_to(child_id=identity.element_id, parent_id=connection.element_id)
 
     return identity
 

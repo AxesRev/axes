@@ -7,6 +7,7 @@ import logging
 from github.Installation import Installation
 from github.Repository import Repository
 
+from integrations.github.ingestion.shared import link_belongs_to
 from nodes.app_connection import AppConnection
 from nodes.resource import Resource
 
@@ -29,8 +30,8 @@ async def upsert_resource(repo: Repository, connection: AppConnection) -> Resour
         resource.uri = repo.full_name
         await resource.save()
 
-    if not await resource.connection.is_connected(connection):
-        await resource.connection.replace(connection)
+    if resource.element_id is not None and connection.element_id is not None:
+        await link_belongs_to(child_id=resource.element_id, parent_id=connection.element_id)
 
     return resource
 

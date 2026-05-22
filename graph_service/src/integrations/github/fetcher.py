@@ -24,6 +24,12 @@ from integrations.github.settings import RunnerSettings, get_runner_settings
 logger = logging.getLogger(__name__)
 
 
+async def wipe_graph() -> None:
+    """Remove all nodes and relationships from the graph database."""
+    await adb.cypher_query("MATCH (n) DETACH DELETE n")
+    logger.info("graph_wiped")
+
+
 async def _installation_ids_from_postgres(runner: RunnerSettings) -> list[int]:
     """Return sorted distinct installation IDs from ``user_identities``."""
     pg_conn = await asyncpg.connect(runner.postgres_url)
@@ -63,6 +69,7 @@ async def _run_once() -> None:
         logger.info("resolved_installation_ids=%s", installation_ids)
 
     await adb.set_connection(runner.neomodel_url)
+    await wipe_graph()
     await adb.install_all_labels()
 
     try:

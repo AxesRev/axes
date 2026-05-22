@@ -30,6 +30,11 @@ class MemberOfRow(TypedDict):
     group_id: str
 
 
+class BelongsToRow(TypedDict):
+    child_id: str
+    parent_id: str
+
+
 def make_github_integration() -> GithubIntegration:
     settings = get_github_settings()
     auth = Auth.AppAuth(settings.GITHUB_APP_ID, settings.private_key)
@@ -83,6 +88,31 @@ async def merge_member_of(
         await adb.cypher_query(query, {"rows": batch})
 
 
+async def merge_belongs_to(
+    rows: list[BelongsToRow],
+    *,
+    batch_size: int = PERMISSION_BATCH_SIZE,
+) -> None:
+    """Upsert BELONGS_TO edges in batches without neomodel cartesian MATCH."""
+    if not rows:
+        return
+
+    query = """
+    UNWIND $rows AS row
+    MATCH (child) WHERE elementId(child) = row.child_id
+    MATCH (parent) WHERE elementId(parent) = row.parent_id
+    MERGE (child)-[:BELONGS_TO]->(parent)
+    """
+
+    for start in range(0, len(rows), batch_size):
+        batch = rows[start : start + batch_size]
+        await adb.cypher_query(query, {"rows": batch})
+
+
+async def link_belongs_to(*, child_id: str, parent_id: str) -> None:
+    await merge_belongs_to([BelongsToRow(child_id=child_id, parent_id=parent_id)])
+
+
 async def upsert_group(
     *,
     external_id: str,
@@ -97,7 +127,8 @@ async def upsert_group(
             name=name,
             description=description or "",
         ).save()
-        await group.connection.connect(connection)
+        if group.element_id is not None and connection.element_id is not None:
+            await link_belongs_to(child_id=group.element_id, parent_id=connection.element_id)
         logger.info("created_group external_id=%s name=%s", external_id, name)
         return group
 
@@ -105,6 +136,6 @@ async def upsert_group(
     if description is not None:
         group.description = description
     await group.save()
-    if not await group.connection.is_connected(connection):
-        await group.connection.replace(connection)
+    if group.element_id is not None and connection.element_id is not None:
+        await link_belongs_to(child_id=group.element_id, parent_id=connection.element_id)
     return group
