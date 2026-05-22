@@ -11,6 +11,8 @@ from langgraph.graph import add_messages
 from langgraph.managed import IsLastStep
 from pydantic import BaseModel, Field, model_validator
 
+from examples.react_agent.user_context_models import UserContextData
+
 
 class Permission(BaseModel):
     domain: Annotated[str, Field(description="The type of resource to gain access to")]
@@ -188,11 +190,8 @@ class State(InputState):
     access_evaluation: AccessRequestEvaluation | None = field(default=None)
     """Evaluation of whether the detected permission request should be granted."""
 
-    github_repos: list[str] = field(default_factory=list)
-    """Full names (owner/repo) of GitHub repositories accessible to the authenticated user."""
-
-    github_orgs: list[str] = field(default_factory=list)
-    """Logins of GitHub organizations the authenticated user belongs to."""
+    user_context: UserContextData | None = field(default=None)
+    """User, group, and permission context loaded from the graph via Neo4j MCP."""
 
     domain_hint: str | None = field(default=None)
     """Hint describing what the `domain` field should capture (produced by the intent parser)."""

@@ -1,9 +1,11 @@
+import json
 import logging
 import os
 from typing import Any
 
 import tiktoken
 from langchain_core.messages import ToolMessage
+from langchain_core.tools import BaseTool
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from langgraph.prebuilt import ToolNode
 from langgraph.runtime import Runtime
@@ -14,6 +16,7 @@ from examples.react_agent.state import State
 logger = logging.getLogger(__name__)
 
 TOOLS: list[Any] = []
+_READ_TOOL_NAME = "read_neo4j_cypher"
 
 _MAX_TOOL_RESULT_TOKENS = 10_000
 _TOO_LARGE_MESSAGE = (
@@ -82,3 +85,49 @@ async def _get_all_tools(_runtime: Runtime[Context]) -> list[Any]:
     client = MultiServerMCPClient(servers)
     mcp_tools = await client.get_tools()
     return [*TOOLS, *mcp_tools]
+
+
+def _extract_tool_text(result: Any) -> str:
+    content = result[0] if isinstance(result, tuple) else result
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts: list[str] = []
+        for block in content:
+            if isinstance(block, dict) and block.get("type") == "text":
+                parts.append(str(block.get("text", "")))
+            elif isinstance(block, str):
+                parts.append(block)
+        return "".join(parts)
+    return str(content)
+
+
+async def _get_read_neo4j_tool() -> BaseTool | None:
+    servers = _mcp_servers()
+    if not servers:
+        return None
+
+    client = MultiServerMCPClient(servers)
+    tools = await client.get_tools()
+    for tool in tools:
+        if tool.name == _READ_TOOL_NAME:
+            return tool
+    logger.warning("%s tool not found on Neo4j MCP server", _READ_TOOL_NAME)
+    return None
+
+
+async def read_neo4j_cypher(query: str, params: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+    """Execute a read Cypher query via the configured Neo4j MCP server."""
+    read_tool = await _get_read_neo4j_tool()
+    if read_tool is None:
+        raise RuntimeError("NEO4J_MCP_HOST is not configured or read_neo4j_cypher is unavailable")
+
+    result = await read_tool.ainvoke({"query": query, "params": params or {}})
+    text = _extract_tool_text(result).strip()
+    if not text:
+        return []
+
+    parsed = json.loads(text)
+    if not isinstance(parsed, list):
+        raise ValueError("read_neo4j_cypher returned non-list JSON")
+    return parsed

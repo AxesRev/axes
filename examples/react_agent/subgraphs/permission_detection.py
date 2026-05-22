@@ -33,8 +33,8 @@ MAX_REVISIONS: int = 3
 
 _FieldName = Literal["domain", "resource", "permission"]
 
-_RESOURCE_DETECTOR_REPO_LIMIT: int = 50
-_RESOURCE_DETECTOR_ORG_LIMIT: int = 20
+_RESOURCE_DETECTOR_GROUP_LIMIT: int = 20
+_RESOURCE_DETECTOR_PERMISSION_LIMIT: int = 50
 
 
 # ---------------------------------------------------------------------------
@@ -51,7 +51,7 @@ class FieldDetectionState(State):
 
 
 def _partial_system_prompt(field_name: _FieldName) -> str:
-    """Pre-fill {field_name}/{field_description}; leave {github_user_context}/{system_time} for call_model."""
+    """Pre-fill {field_name}/{field_description}; leave {user_context}/{system_time} for call_model."""
 
     class _Keep(dict):
         def __missing__(self, key: str) -> str:
@@ -96,24 +96,29 @@ _field_detection_graph = _field_builder.compile()
 
 
 def _extra_detector_context(state: State, field_name: _FieldName) -> str:
-    """Add GitHub repo/org lists to the seeded task when detecting `resource`.
-
-    Keeps concrete owner/repo candidates in the message transcript so resolution does not depend solely on
-    system-template placeholders or external graph data.
-    """
-    if field_name != "resource":
+    """Add graph-backed group and permission lists when detecting `resource`."""
+    if field_name != "resource" or state.user_context is None:
         return ""
 
     sections: list[str] = []
-    if state.github_repos:
-        repo_lines = "\n".join(f"- {name}" for name in state.github_repos[:_RESOURCE_DETECTOR_REPO_LIMIT])
-        sections.append(
-            'Repositories linked to this user (use for vague references like "our test repo"; '
-            "prefer an exact owner/repo string):\n" + repo_lines
+    if state.user_context.groups:
+        group_lines = "\n".join(
+            group.format_for_context() for group in state.user_context.groups[:_RESOURCE_DETECTOR_GROUP_LIMIT]
         )
-    if state.github_orgs:
-        org_lines = "\n".join(f"- {login}" for login in state.github_orgs[:_RESOURCE_DETECTOR_ORG_LIMIT])
-        sections.append("Organizations linked to this user:\n" + org_lines)
+        sections.append("Groups this user belongs to:\n" + group_lines)
+
+    resource_permissions = [
+        permission for permission in state.user_context.permissions if permission.target_kind == "resource"
+    ]
+    if resource_permissions:
+        permission_lines = "\n".join(
+            f"- {permission.target_name}: {permission.permission}"
+            for permission in resource_permissions[:_RESOURCE_DETECTOR_PERMISSION_LIMIT]
+        )
+        sections.append(
+            'Resources this user already has access to (use for vague references like "our test repo"; '
+            "prefer an exact identifier when possible):\n" + permission_lines
+        )
 
     if not sections:
         return ""
@@ -148,8 +153,7 @@ async def _detect(
     sub_input = FieldDetectionState(
         messages=[_seed(state, field_name, hint, feedback)],
         field_name=field_name,
-        github_repos=state.github_repos,
-        github_orgs=state.github_orgs,
+        user_context=state.user_context,
         doc_corpus_context=state.doc_corpus_context,
     )
     field_context = dataclasses.replace(

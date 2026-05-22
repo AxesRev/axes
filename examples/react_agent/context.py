@@ -38,8 +38,7 @@ class Context:
         default="",
         metadata={
             "description": (
-                "GitHub PAT used only to load the current user's repos/orgs into state (see github_context). "
-                "Not used for MCP tools."
+                "Legacy GitHub PAT setting retained for compatibility. User context is loaded via Neo4j MCP."
             ),
         },
     )

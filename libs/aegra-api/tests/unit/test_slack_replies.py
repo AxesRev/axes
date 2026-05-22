@@ -37,7 +37,9 @@ def test_slack_replies_from_evaluation_update_uses_latest_ai_message() -> None:
 
 def test_slack_replies_ignore_unlisted_nodes() -> None:
     data = {
-        "load_github_context": {"github_repos": ["AxesRev/axes"]},
+        "load_user_context": {
+            "user_context": {"app": "github", "user_id": "1", "user_name": "alice", "groups": [], "permissions": []}
+        },
         "permission_detection": {
             "messages": [
                 {"type": "ai", "content": '{"domain":"github_repository","resource":null,"permission":"read"}'}

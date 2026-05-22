@@ -13,7 +13,7 @@ If information is missing:
 - continue autonomously
 
 Never output questions directed at a user.
-Many requests are about GitHub access; you have the user's repo and organization lists from context when configured,
+Many requests are about GitHub access; you have the user's groups and permissions from context when configured,
 and Neo4j tools for live graph data when configured.
 
 Documentation snippets semantically matched to the user's latest message:
@@ -23,19 +23,7 @@ When access may depend on data stored in the Neo4j graph (organizations, reposit
 use the Neo4j MCP tools against the live database: call `get_neo4j_schema` first so queries match current labels,
 properties, and relationship types; then use `read_neo4j_cypher` with read-only Cypher consistent with that schema.
 
-{github_user_context}System time: {system_time}"""
-
-GITHUB_USER_CONTEXT = """IMPORTANT: A background job loaded GitHub context using a service PAT that may belong to a different account.
-The CURRENT USER you are assisting is:
-  - GitHub username: {github_username} - The user name of the user you are assisting.
-  - GitHub user ID: {github_user_id} - The user ID of the user you are assisting.
-  - Repositories: {github_repos} - The repositories that the user is directly part of.
-  - Organizations: {github_orgs} - The organizations that the user belongs to, the ogranization may contain resources that the user has access to.
-
-Always use this identity when the user refers to "me", "my repositories", "my issues", etc.
-Never assume the PAT owner is the current user.
-Use the lists above plus Neo4j tools (when available) for facts; do not invent repository or org names.
-"""
+{user_context}System time: {system_time}"""
 
 INTENT_PARSER_PROMPT = """You are an intent parser for an access-request system.
 
@@ -58,7 +46,7 @@ Documentation snippets semantically matched to the user's latest message:
 {doc_corpus_context}
 
 additional context about the user you should consider for extra information
-{github_user_context}"""
+{user_context}"""
 
 FIELD_DETECTOR_BASE_PROMPT = """You are a permission-detection specialist focused on a SINGLE field of an access request.
 
@@ -83,7 +71,7 @@ Documentation snippets semantically matched to the user's latest message:
 {doc_corpus_context}
 
 additional context you should consider to narrow down the search for the information, but do not rely solely on it.
-{github_user_context}
+{user_context}
 System time: {system_time}"""
 
 FIELD_DESCRIPTIONS: dict[str, str] = {
@@ -151,7 +139,7 @@ Documentation snippets semantically matched to the user's latest message:
 {doc_corpus_context}
 
 additional context about the user you should consider when evaluating the request
-{github_user_context}
+{user_context}
 System time: {system_time}"""
 
 ACCESS_EVALUATION_TASK_TEMPLATE = """Evaluate whether this access request should be granted to the current user.

@@ -7,8 +7,8 @@ from langgraph.runtime import Runtime
 
 from examples.react_agent.context import Context
 from examples.react_agent.nodes.tools import _get_all_tools
-from examples.react_agent.prompts import GITHUB_USER_CONTEXT
 from examples.react_agent.state import State
+from examples.react_agent.user_context_prompt import build_user_context_block
 from examples.react_agent.utils import load_chat_model
 
 logger = logging.getLogger(__name__)
@@ -27,16 +27,7 @@ async def call_model(state: State, runtime: Runtime[Context]) -> dict[str, list[
 
     system_message = runtime.context.system_prompt.format(
         system_time=datetime.now(tz=UTC).isoformat(),
-        github_user_context=(
-            GITHUB_USER_CONTEXT.format(
-                github_username=runtime.context.github_username,
-                github_user_id=runtime.context.github_user_id,
-                github_repos=", ".join(state.github_repos[:50]) if state.github_repos else "none",
-                github_orgs=", ".join(state.github_orgs[:20]) if state.github_orgs else "none",
-            )
-            if runtime.context.github_username
-            else ""
-        ),
+        user_context=build_user_context_block(state.user_context),
         doc_corpus_context=state.doc_corpus_context.strip(),
     )
 
