@@ -11,6 +11,8 @@ from langgraph.graph import add_messages
 from langgraph.managed import IsLastStep
 from pydantic import BaseModel, Field, model_validator
 
+from examples.react_agent.user_context_models import UserContextData
+
 
 class Permission(BaseModel):
     domain: Annotated[str, Field(description="The type of resource to gain access to")]
@@ -26,7 +28,7 @@ class FieldResult(BaseModel):
         Field(
             description=(
                 "Canonical value for this field. For `resource`, use null only when the request truly does not "
-                "name a specific resource; otherwise use an exact identifier (e.g. owner/repo)."
+                "name a specific resource; otherwise use an exact identifier from the target system."
             ),
         ),
     ] = None
@@ -41,24 +43,22 @@ class FieldResult(BaseModel):
     ]
 
 
-class IntentHints(BaseModel):
-    """Per-field hints derived from the user's request.
+class AccessRequestEvaluation(BaseModel):
+    """Whether a detected permission request should be granted to the user."""
 
-    Each hint is a clarifying restatement of WHAT the field should describe
-    in the user's intent — not HOW to find it.
-    """
-
-    domain_hint: Annotated[
-        str,
-        Field(description="What the `domain` field should describe (the WHAT, not the HOW)."),
+    should_grant: Annotated[
+        bool,
+        Field(description="True if the requested permission should be granted to the user; false otherwise."),
     ]
-    resource_hint: Annotated[
+    justification: Annotated[
         str,
-        Field(description="What the `resource` field should describe (the WHAT, not the HOW)."),
-    ]
-    permission_hint: Annotated[
-        str,
-        Field(description="What the `permission` field should describe (the WHAT, not the HOW)."),
+        Field(
+            description=(
+                "Past-tense explanation of why should_grant is true or false — an audit record of the decision, "
+                "not instructions to a human or LLM. Ground in policy and the requesting user's own access/membership. "
+                "Do not name or describe other users' permissions, roles, or personal data."
+            ),
+        ),
     ]
 
 
@@ -167,20 +167,11 @@ class State(InputState):
     permission: Permission | None = field(default=None)
     """The structured permission model extracted from the conversation."""
 
-    github_repos: list[str] = field(default_factory=list)
-    """Full names (owner/repo) of GitHub repositories accessible to the authenticated user."""
+    access_evaluation: AccessRequestEvaluation | None = field(default=None)
+    """Evaluation of whether the detected permission request should be granted."""
 
-    github_orgs: list[str] = field(default_factory=list)
-    """Logins of GitHub organizations the authenticated user belongs to."""
-
-    domain_hint: str | None = field(default=None)
-    """Hint describing what the `domain` field should capture (produced by the intent parser)."""
-
-    resource_hint: str | None = field(default=None)
-    """Hint describing what the `resource` field should capture (produced by the intent parser)."""
-
-    permission_hint: str | None = field(default=None)
-    """Hint describing what the `permission` field should capture (produced by the intent parser)."""
+    user_context: UserContextData | None = field(default=None)
+    """User, group, and permission context loaded from the graph via Neo4j MCP."""
 
     domain_result: FieldResult | None = field(default=None)
     """Result produced by the domain detector."""

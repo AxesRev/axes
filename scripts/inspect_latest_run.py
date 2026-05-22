@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Fetch the latest ``runs`` row and a compact checkpoint transcript.
 
-Includes: who sent each turn (human / assistant), assistant text output,
-and **tool call inputs** (names + arguments). Tool **results** are omitted (inputs are on the assistant turn).
+Includes: who sent each turn (human / assistant), assistant text output, and
+semantic doc corpus chunks (``doc_corpus_context``) when present in checkpoint state.
+Tool calls and tool results are omitted.
 
 Writes UTF-8 text under ``.scratch/`` (gitignored) by default. Includes per-field
 LLM ``justification`` strings (``domain_result`` / ``resource_result`` /
@@ -118,6 +119,41 @@ def _format_justification_slice(snap: dict[str, Any]) -> list[str]:
     return lines
 
 
+def _doc_corpus_context_text(channel_values: dict[str, Any]) -> str:
+    raw = channel_values.get("doc_corpus_context")
+    if raw is None:
+        return ""
+    return str(raw).strip()
+
+
+def _format_doc_corpus_context_block(text: str, *, limit: int = 12000) -> list[str]:
+    if not text:
+        return []
+    lines: list[str] = ["  --- Semantic doc corpus chunks ---"]
+    body = _trunc_text(text, limit=limit)
+    for ln in body.splitlines():
+        lines.append(f"  {ln}")
+    lines.append("")
+    return lines
+
+
+def _format_final_doc_corpus_context(checkpoints: list[Any]) -> str:
+    if not checkpoints:
+        return ""
+    last_cv = _channel_values_dict(checkpoints[-1].checkpoint)
+    text = _doc_corpus_context_text(last_cv)
+    if not text:
+        return ""
+    lines: list[str] = [
+        "=" * 72,
+        "SEMANTIC DOC CORPUS CHUNKS (last checkpoint; injected into prompts)",
+        "=" * 72,
+        "",
+    ]
+    lines.extend(_format_doc_corpus_context_block(text, limit=20000))
+    return "\n".join(lines)
+
+
 def _format_final_field_justifications(checkpoints: list[Any]) -> str:
     if not checkpoints:
         return ""
@@ -167,33 +203,6 @@ def _content_to_text(content: Any) -> str:
     return json.dumps(content, ensure_ascii=False, default=str)
 
 
-def _normalize_tool_calls(data: dict[str, Any]) -> list[dict[str, Any]]:
-    raw = data.get("tool_calls")
-    if not raw or not isinstance(raw, list):
-        return []
-    out: list[dict[str, Any]] = []
-    for tc in raw:
-        if not isinstance(tc, dict):
-            continue
-        name = tc.get("name")
-        args = tc.get("args")
-        fn = tc.get("function")
-        if isinstance(fn, dict):
-            name = name or fn.get("name")
-            if args is None and fn.get("arguments") is not None:
-                arg_raw = fn["arguments"]
-                if isinstance(arg_raw, str):
-                    try:
-                        args = json.loads(arg_raw)
-                    except json.JSONDecodeError:
-                        args = arg_raw
-                else:
-                    args = arg_raw
-        if name:
-            out.append({"name": name, "args": args})
-    return out
-
-
 def _serialize_messages(msgs: Any) -> list[dict[str, Any]]:
     if msgs is None:
         return []
@@ -228,25 +237,16 @@ def _format_compact_message_lines(msg: dict[str, Any]) -> list[str]:
         return lines
 
     if mtype == "ai":
-        lines.append("From: assistant")
         text = _trunc_text(_content_to_text(data.get("content")))
-        if text:
-            lines.append("Output:")
-            lines.extend(text.splitlines())
-        for tc in _normalize_tool_calls(data):
-            name = tc["name"]
-            args = tc["args"]
-            arg_str = json.dumps(args, ensure_ascii=False, indent=2, default=str) if args is not None else "null"
-            if len(arg_str) > _TEXT_SOFT_LIMIT:
-                arg_str = arg_str[:_TEXT_SOFT_LIMIT] + f"\n… [{len(arg_str) - _TEXT_SOFT_LIMIT} more chars]"
-            lines.append(f"Tool call: {name}")
-            lines.append("Input:")
-            lines.extend(arg_str.splitlines())
+        if not text.strip():
+            return []
+        lines.append("From: assistant")
+        lines.append("Output:")
+        lines.extend(text.splitlines())
         lines.append("")
         return lines
 
     if mtype == "tool":
-        # Tool inputs appear on the preceding assistant message as tool_calls; omit bulky results.
         return []
 
     lines.append(f"From: {mtype} (summary only)")
@@ -334,6 +334,7 @@ def _render_checkpoint_transcript(checkpoints: list[Any]) -> str:
 
     prev_len = 0
     prev_just_snap: dict[str, Any] = {}
+    prev_doc_corpus = ""
     shown = 0
     for tup in checkpoints:
         ns = (tup.config.get("configurable") or {}).get("checkpoint_ns") or ""
@@ -346,6 +347,8 @@ def _render_checkpoint_transcript(checkpoints: list[Any]) -> str:
 
         just_snap = _justification_slice(channel_values)
         just_changed = _snap_json(just_snap) != _snap_json(prev_just_snap)
+        doc_corpus = _doc_corpus_context_text(channel_values)
+        doc_corpus_changed = doc_corpus != prev_doc_corpus
 
         rendered_blocks: list[list[str]] = []
         for msg in new_msgs:
@@ -353,11 +356,15 @@ def _render_checkpoint_transcript(checkpoints: list[Any]) -> str:
             if block_lines:
                 rendered_blocks.append(block_lines)
 
-        if not rendered_blocks and not just_changed:
+        if not rendered_blocks and not just_changed and not doc_corpus_changed:
             continue
 
         shown += 1
         lines.append(f"[checkpoint {shown}] ns={ns!r}")
+
+        if doc_corpus_changed and doc_corpus:
+            lines.extend(_format_doc_corpus_context_block(doc_corpus))
+            prev_doc_corpus = doc_corpus
 
         if just_changed:
             if just_snap:
@@ -375,6 +382,9 @@ def _render_checkpoint_transcript(checkpoints: list[Any]) -> str:
     lines.append("=" * 72)
     lines.append(f"Snapshots printed: {shown} (of {len(checkpoints)} checkpoints scanned)")
     lines.append("")
+    doc_corpus_block = _format_final_doc_corpus_context(checkpoints)
+    if doc_corpus_block:
+        lines.append(doc_corpus_block)
     final_block = _format_final_field_justifications(checkpoints)
     if final_block:
         lines.append(final_block)
