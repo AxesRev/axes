@@ -19,7 +19,7 @@ from examples.react_agent.prompts import (
     ACCESS_EVALUATION_EXTRACTOR_PROMPT,
     ACCESS_EVALUATION_TASK_TEMPLATE,
 )
-from examples.react_agent.state import AccessRequestEvaluation, InputState, Permission, State
+from examples.react_agent.state import AccessRequestEvaluation, Permission, State
 from examples.react_agent.utils import get_message_text, load_chat_model
 
 logger = logging.getLogger(__name__)
@@ -77,7 +77,7 @@ async def extract_evaluation(state: State, runtime: Runtime[Context]) -> dict[st
     }
 
 
-builder = StateGraph(State, input_schema=InputState, context_schema=Context)
+builder = StateGraph(State, context_schema=Context)
 
 builder.add_node("seed_evaluation", seed_evaluation)
 builder.add_node("call_model", call_evaluation_model)

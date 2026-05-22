@@ -68,7 +68,7 @@ def _mcp_servers() -> dict[str, dict[str, Any]]:
 
     neo4j_host = os.environ.get("NEO4J_MCP_HOST", "").strip()
     if neo4j_host:
-        servers["neo4j"] = {"transport": "http", "url": f"{neo4j_host.rstrip('/')}/mcp"}
+        servers["neo4j"] = {"transport": "http", "url": f"{neo4j_host.rstrip('/')}/mcp/"}
 
     return servers
 
