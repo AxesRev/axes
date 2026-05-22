@@ -43,27 +43,6 @@ class FieldResult(BaseModel):
     ]
 
 
-class IntentHints(BaseModel):
-    """Per-field hints derived from the user's request.
-
-    Each hint is a clarifying restatement of WHAT the field should describe
-    in the user's intent — not HOW to find it.
-    """
-
-    domain_hint: Annotated[
-        str,
-        Field(description="What the `domain` field should describe (the WHAT, not the HOW)."),
-    ]
-    resource_hint: Annotated[
-        str,
-        Field(description="What the `resource` field should describe (the WHAT, not the HOW)."),
-    ]
-    permission_hint: Annotated[
-        str,
-        Field(description="What the `permission` field should describe (the WHAT, not the HOW)."),
-    ]
-
-
 class AccessRequestEvaluation(BaseModel):
     """Whether a detected permission request should be granted to the user."""
 
@@ -192,15 +171,6 @@ class State(InputState):
 
     user_context: UserContextData | None = field(default=None)
     """User, group, and permission context loaded from the graph via Neo4j MCP."""
-
-    domain_hint: str | None = field(default=None)
-    """Hint describing what the `domain` field should capture (produced by the intent parser)."""
-
-    resource_hint: str | None = field(default=None)
-    """Hint describing what the `resource` field should capture (produced by the intent parser)."""
-
-    permission_hint: str | None = field(default=None)
-    """Hint describing what the `permission` field should capture (produced by the intent parser)."""
 
     domain_result: FieldResult | None = field(default=None)
     """Result produced by the domain detector."""

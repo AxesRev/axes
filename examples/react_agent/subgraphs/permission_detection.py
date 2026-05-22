@@ -13,7 +13,6 @@ from langgraph.runtime import Runtime
 
 from examples.react_agent.context import Context
 from examples.react_agent.edges.end import route_model_output
-from examples.react_agent.nodes.intent_parser import parse_intent
 from examples.react_agent.nodes.llm_call import call_model
 from examples.react_agent.nodes.tools import execute_tools
 from examples.react_agent.nodes.validator import validate_results
@@ -126,7 +125,7 @@ def _extra_detector_context(state: State, field_name: _FieldName) -> str:
     return "\n\n" + "\n\n".join(sections)
 
 
-def _seed(state: State, field_name: _FieldName, hint: str | None, feedback: str | None) -> HumanMessage:
+def _seed(state: State, field_name: _FieldName, feedback: str | None) -> HumanMessage:
     user_request = next((get_message_text(m) for m in state.messages if isinstance(m, HumanMessage)), "")
     feedback_block = (
         FIELD_DETECTOR_FEEDBACK_TEMPLATE.format(field_name=field_name, feedback=feedback) if feedback else ""
@@ -134,7 +133,6 @@ def _seed(state: State, field_name: _FieldName, hint: str | None, feedback: str 
     base_content = FIELD_DETECTOR_TASK_TEMPLATE.format(
         user_request=user_request,
         field_name=field_name,
-        hint=hint or "(no hint — infer from the request)",
         feedback_block=feedback_block,
     )
     return HumanMessage(content=base_content + _extra_detector_context(state, field_name))
@@ -145,13 +143,12 @@ async def _detect(
     runtime: Runtime[Context],
     *,
     field_name: _FieldName,
-    hint: str | None,
     feedback: str | None,
     result_key: str,
     model: str | None = None,
 ) -> dict[str, Any]:
     sub_input = FieldDetectionState(
-        messages=[_seed(state, field_name, hint, feedback)],
+        messages=[_seed(state, field_name, feedback)],
         field_name=field_name,
         user_context=state.user_context,
         doc_corpus_context=state.doc_corpus_context,
@@ -175,7 +172,6 @@ async def detect_domain(state: State, runtime: Runtime[Context]) -> dict[str, An
         state,
         runtime,
         field_name="domain",
-        hint=state.domain_hint,
         feedback=state.domain_feedback,
         result_key="domain_result",
         model="openai/gpt-5.4-nano",
@@ -187,7 +183,6 @@ async def detect_resource(state: State, runtime: Runtime[Context]) -> dict[str, 
         state,
         runtime,
         field_name="resource",
-        hint=state.resource_hint,
         feedback=state.resource_feedback,
         result_key="resource_result",
     )
@@ -198,7 +193,6 @@ async def detect_permission(state: State, runtime: Runtime[Context]) -> dict[str
         state,
         runtime,
         field_name="permission",
-        hint=state.permission_hint,
         feedback=state.permission_feedback,
         result_key="permission_result",
         model="openai/gpt-5.4-nano",
@@ -262,18 +256,15 @@ async def finalize(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
 
 builder = StateGraph(State, input_schema=InputState, context_schema=Context)
 
-builder.add_node("parse_intent", parse_intent)
 builder.add_node("detect_domain", detect_domain)
 builder.add_node("detect_resource", detect_resource)
 builder.add_node("detect_permission", detect_permission)
 builder.add_node("validator", validate_results)
 builder.add_node("finalize", finalize)
 
-builder.add_edge("__start__", "parse_intent")
-
-builder.add_edge("parse_intent", "detect_domain")
-builder.add_edge("parse_intent", "detect_resource")
-builder.add_edge("parse_intent", "detect_permission")
+builder.add_edge("__start__", "detect_domain")
+builder.add_edge("__start__", "detect_resource")
+builder.add_edge("__start__", "detect_permission")
 
 builder.add_edge("detect_domain", "validator")
 builder.add_edge("detect_resource", "validator")

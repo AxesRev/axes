@@ -25,32 +25,6 @@ When the answer depends on membership, resource names, or existing access, use t
 
 {user_context}System time: {system_time}"""
 
-INTENT_PARSER_PROMPT = """You are an intent parser for an access-request system.
-
-Given the user's access request, produce a short "hint" for each of three fields:
-  - `domain`     : the type of resource the user wants access to (the resource category in the target system).
-  - `resource`   : the specific named entity within that domain. May be unspecified.
-  - `permission` : the access level the user is REQUESTING — restate the capability they asked for
-    (e.g. push/write/read), not an admin label inferred from existing bindings on a resource.
-
-Each hint must:
-  - Restate WHAT the field should describe based on the user's intent.
-  - NOT describe HOW to find or look it up.
-  - Be self-contained (it will be sent to a downstream agent that does NOT see the original message).
-  - Stay short (one or two sentences).
-
-If a field is implied but not explicit, capture the implication in the hint
-(e.g. "the only resource in the user's group, identified by exact name").
-If a field is genuinely absent (e.g. no specific resource), say so explicitly.
-
-Documentation snippets semantically matched to the user's latest message:
-{doc_corpus_context}
-
-Known data about the user (current state only — not an exhaustive list of valid choices):
-{user_context}
-
-Permission bindings in user data show current access, not grantable levels. Do not infer permission hints from them."""
-
 FIELD_DETECTOR_BASE_PROMPT = """You are a permission-detection specialist focused on a SINGLE field of an access request.
 
 You operate in a fully autonomous runtime:
@@ -106,9 +80,6 @@ FIELD_DETECTOR_TASK_TEMPLATE = """Original user request:
 \"\"\"
 {user_request}
 \"\"\"
-
-Hint for the `{field_name}` field (what to look for):
-{hint}
 {feedback_block}
 Determine the `{field_name}` field. Use tools as needed to verify real information. When you are confident,
 stop calling tools and write a final message describing your answer and the reasoning that supports it.

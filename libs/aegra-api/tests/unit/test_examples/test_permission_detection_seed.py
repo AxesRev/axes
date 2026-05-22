@@ -57,14 +57,10 @@ def test_seed_resource_appends_user_context_lists() -> None:
     state = State(
         messages=[HumanMessage(content="I want to become the admin in our test repo.")],
         user_context=_sample_user_context(),
-        domain_hint="x",
-        resource_hint="y",
-        permission_hint="z",
     )
-    msg = _seed(state, "resource", hint="which repo", feedback=None)
+    msg = _seed(state, "resource", feedback=None)
     text = msg.content if isinstance(msg.content, str) else ""
     assert "I want to become the admin" in text
-    assert "which repo" in text
     assert "AxesRev/Test_repo" in text
 
 
@@ -73,7 +69,7 @@ def test_seed_domain_does_not_append_user_context_lists() -> None:
         messages=[HumanMessage(content="repo access")],
         user_context=_sample_user_context(),
     )
-    msg = _seed(state, "domain", hint="h", feedback=None)
+    msg = _seed(state, "domain", feedback=None)
     text = msg.content if isinstance(msg.content, str) else ""
     assert "AxesRev/Test_repo" not in text
     assert "Groups this user currently belongs to" not in text
