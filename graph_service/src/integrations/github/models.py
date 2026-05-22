@@ -33,3 +33,15 @@ class GithubResourceExtra(BaseModel):
     default_branch: str
     html_url: str
     visibility: str
+
+
+class GithubTeamExtra(BaseModel):
+    """Metadata for a GitHub team mapped to a Group node."""
+
+    team_id: int
+    slug: str
+    name: str
+    description: str | None = None
+    html_url: str | None = None
+    privacy: str | None = None
+    parent_slug: str | None = None

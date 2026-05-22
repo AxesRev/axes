@@ -8,12 +8,11 @@ from nodes.base import BaseNode
 class Tenant(BaseNode):
     """Top-level organisational boundary.
 
-    A Tenant owns a set of app-agnostic Identity nodes. All app-specific
-    data (AppConnection, AppIdentity, Resource, Group, Profile) hangs off
-    those Identities rather than the Tenant directly, keeping the Tenant
-    layer free of integration concerns.
+    ``external_id`` is the stable identifier from the owning system of record.
+    ``name`` is a human-readable label that may change over time.
     """
 
+    external_id = StringProperty(required=True, unique_index=True)
     name = StringProperty(required=True)
 
     identities = AsyncRelationshipFrom(
