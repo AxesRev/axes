@@ -9,6 +9,7 @@ from langgraph_sdk import get_client
 
 from slack_app.client import post_message
 from slack_app.config import slack_settings
+from slack_app.replies import slack_replies_from_updates
 
 logger = logging.getLogger(__name__)
 
@@ -126,12 +127,13 @@ async def handle_message_event(event: dict[str, Any]) -> None:
         )
 
     try:
-        run = await client.runs.create(
+        posted_replies = 0
+        run_status: str | None = None
+
+        async for chunk in client.runs.stream(
             thread_id=thread_id,
             assistant_id="agent",
             input={"messages": [{"role": "user", "content": text}]},
-            # Pass the verified GitHub identity via configurable so the agent's
-            # Context picks it up and includes it in the system prompt.
             config={
                 "configurable": {
                     "slack_user_id": user_id,
@@ -139,28 +141,24 @@ async def handle_message_event(event: dict[str, Any]) -> None:
                     "github_user_id": github_user_id,
                 }
             },
-        )
-        result = await client.runs.join(thread_id, run["run_id"])
+            stream_mode=["updates"],
+        ):
+            if chunk.event == "updates":
+                for reply_text in slack_replies_from_updates(chunk.data):
+                    await post_message(
+                        channel=channel,
+                        text=reply_text,
+                        thread_ts=reply_thread_ts,
+                    )
+                    posted_replies += 1
+            elif chunk.event == "end":
+                run_status = chunk.data.get("status")
 
-        response_text: str | None = None
-        if result and "messages" in result:
-            messages = result["messages"]
-            if messages and messages[-1]["type"] == "ai":
-                response_text = messages[-1]["content"]
-
-        if response_text:
-            await post_message(
-                channel=channel,
-                text=response_text,
-                thread_ts=reply_thread_ts,
-            )
-        else:
-            # Run failed or produced no AI message (e.g. tool error, empty output).
+        if posted_replies == 0:
             logger.warning(
-                "Run %s produced no AI response for user %s (result keys: %s)",
-                run["run_id"],
+                "Run produced no Slack replies for user %s (status=%r)",
                 user_id,
-                list(result.keys()) if result else [],
+                run_status,
             )
             await post_message(
                 channel=channel,
