@@ -19,6 +19,9 @@ def test_build_openapi_toolkit_requires_pat() -> None:
 
 def test_build_openapi_toolkit_configures_auth_headers(monkeypatch: pytest.MonkeyPatch) -> None:
     openapi_tools_module._toolkit_cache.clear()
+    monkeypatch.setenv("GITHUB_PAT", "ghp_test")
+    monkeypatch.setenv("GITHUB_API_VERSION", "2022-11-28")
+    monkeypatch.setenv("GITHUB_OPENAPI_ALLOW_DANGEROUS_REQUESTS", "true")
     monkeypatch.setattr(
         openapi_tools_module,
         "_load_openapi_dict",
@@ -32,11 +35,7 @@ def test_build_openapi_toolkit_configures_auth_headers(monkeypatch: pytest.Monke
     ):
         mock_toolkit_cls.from_llm.return_value = fake_toolkit
         runtime = MagicMock()
-        runtime.context = Context(
-            github_pat="ghp_test",
-            github_api_version="2022-11-28",
-            github_openapi_allow_dangerous_requests=True,
-        )
+        runtime.context = Context()
         toolkit = build_openapi_toolkit(runtime)
 
     assert toolkit is fake_toolkit
@@ -49,6 +48,7 @@ def test_build_openapi_toolkit_configures_auth_headers(monkeypatch: pytest.Monke
 
 def test_build_openapi_toolkit_get_tools_returns_http_tools(monkeypatch: pytest.MonkeyPatch) -> None:
     openapi_tools_module._toolkit_cache.clear()
+    monkeypatch.setenv("GITHUB_PAT", "ghp_test")
     monkeypatch.setattr(
         openapi_tools_module,
         "_load_openapi_dict",
@@ -63,7 +63,7 @@ def test_build_openapi_toolkit_get_tools_returns_http_tools(monkeypatch: pytest.
     ):
         mock_toolkit_cls.from_llm.return_value = fake_toolkit
         runtime = MagicMock()
-        runtime.context = Context(github_pat="ghp_test")
+        runtime.context = Context()
         tools = build_openapi_toolkit(runtime).get_tools()
 
     assert len(tools) == 2
