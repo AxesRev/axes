@@ -12,6 +12,10 @@ from langgraph.runtime import Runtime
 
 from examples.react_agent.context import Context
 from examples.react_agent.edges.end import route_model_output
+from examples.react_agent.nodes.doc_corpus_context import (
+    grant_execution_doc_corpus_search_phrase,
+    make_load_doc_corpus_context,
+)
 from examples.react_agent.nodes.github_openapi_tools import build_openapi_toolkit
 from examples.react_agent.nodes.llm_call import call_model
 from examples.react_agent.nodes.tools import execute_tools
@@ -75,11 +79,17 @@ async def run_grant_tools(state: State, runtime: Runtime[Context]) -> dict[str, 
 
 builder = StateGraph(State, context_schema=Context)
 
+load_grant_doc_corpus_context = make_load_doc_corpus_context(
+    search_phrase_resolver=grant_execution_doc_corpus_search_phrase,
+)
+
+builder.add_node("load_doc_corpus_context", load_grant_doc_corpus_context)
 builder.add_node("seed_grant", seed_grant)
 builder.add_node("call_model", call_grant_model)
 builder.add_node("tools", run_grant_tools)
 
-builder.add_edge("__start__", "seed_grant")
+builder.add_edge("__start__", "load_doc_corpus_context")
+builder.add_edge("load_doc_corpus_context", "seed_grant")
 builder.add_edge("seed_grant", "call_model")
 builder.add_conditional_edges(
     "call_model",
