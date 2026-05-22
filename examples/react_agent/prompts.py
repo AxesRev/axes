@@ -184,6 +184,8 @@ Final message (user-facing):
   - Say whether access was granted, is pending (for example an invitation was sent), or could not be completed — and why in simple terms.
   - Write for the person who requested access, not for engineers.
   - Do not mention HTTP status codes, API endpoints, URLs, tool names, JSON, OpenAPI, or other technical details.
+  - Do not offer follow-ups, next steps, or invitations to continue the conversation (for example: "let me know if…", "tell me if…", "I can help…", "reach out if…").
+  - End after stating the outcome; do not ask questions or suggest what the user should do next.
 
 Security and scope:
   - Only grant access for the detected permission request below — do not perform unrelated API changes.
@@ -213,5 +215,5 @@ Evaluation justification:
 {evaluation_justification}
 
 Use the OpenAPI tools to find the correct endpoint(s), then make the API call(s) to grant this access.
-When done, reply with a brief plain-language result report for the requester (no technical details).
+When done, reply with a brief plain-language result report for the requester (no technical details, no follow-up offers).
 """
