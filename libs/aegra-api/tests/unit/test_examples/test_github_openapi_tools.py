@@ -7,7 +7,11 @@ from unittest.mock import MagicMock, patch
 import pytest
 from examples.react_agent.context import Context
 from examples.react_agent.nodes import github_openapi_tools as openapi_tools_module
-from examples.react_agent.nodes.github_openapi_tools import build_openapi_toolkit
+from examples.react_agent.nodes.github_openapi_tools import (
+    GitHubHttpRequestsWrapper,
+    _format_http_tool_output,
+    build_openapi_toolkit,
+)
 
 
 def test_build_openapi_toolkit_requires_installation_id() -> None:
@@ -45,9 +49,32 @@ def test_build_openapi_toolkit_configures_auth_headers(monkeypatch: pytest.Monke
     assert toolkit is fake_toolkit
     call_kwargs = mock_toolkit_cls.from_llm.call_args.kwargs
     assert call_kwargs["allow_dangerous_requests"] is True
+    assert isinstance(call_kwargs["requests_wrapper"], GitHubHttpRequestsWrapper)
     headers = call_kwargs["requests_wrapper"].headers
     assert headers["Authorization"] == "Bearer ghs_installation_token"
     assert headers["X-GitHub-Api-Version"] == "2022-11-28"
+
+
+def test_format_http_tool_output_includes_status_for_empty_body() -> None:
+    assert _format_http_tool_output(status_code=204, body="") == "HTTP 204\n\n(empty body)"
+
+
+def test_format_http_tool_output_includes_status_and_body() -> None:
+    body = '{"message": "Forbidden"}'
+    assert _format_http_tool_output(status_code=403, body=body) == f"HTTP 403\n\n{body}"
+
+
+@pytest.mark.asyncio
+async def test_github_http_requests_wrapper_includes_status_on_get() -> None:
+    class FakeResponse:
+        status = 204
+
+        async def text(self) -> str:
+            return ""
+
+    wrapper = GitHubHttpRequestsWrapper(headers={})
+    formatted = await wrapper._aget_resp_content(FakeResponse())  # type: ignore[arg-type]
+    assert formatted == "HTTP 204\n\n(empty body)"
 
 
 def test_build_openapi_toolkit_get_tools_returns_http_tools(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -3,7 +3,8 @@
 
 Includes: who sent each turn (human / assistant), assistant text output, and
 semantic doc corpus chunks (``doc_corpus_context``) when present in checkpoint state.
-Tool calls and tool results are omitted.
+In the ``access_grant_execution`` subgraph, tool calls are shown with ``url``,
+``payload``, and ``response`` only. Other subgraphs omit tool traffic.
 
 Writes UTF-8 text under ``.scratch/`` (gitignored) by default. Includes per-field
 LLM ``justification`` strings (``domain_result`` / ``resource_result`` /
@@ -41,6 +42,7 @@ from aegra_api.settings import settings  # noqa: E402
 DEFAULT_OUTPUT_RELATIVE = Path(".scratch") / "latest-run-inspect.txt"
 _DEFAULT_CHECKPOINT_LIMIT: int = 60
 _TEXT_SOFT_LIMIT: int = 4000
+_GRANT_EXECUTION_NS_PREFIX: str = "access_grant_execution"
 
 _JUSTIFICATION_KEYS_ORDER: tuple[str, ...] = (
     "domain_result",
@@ -222,6 +224,187 @@ def _coerce_data(msg: dict[str, Any]) -> dict[str, Any]:
     return msg
 
 
+def _is_grant_execution_ns(ns: str) -> bool:
+    return ns.startswith(_GRANT_EXECUTION_NS_PREFIX)
+
+
+def _parse_tool_call_args(tool_name: str, args: Any) -> tuple[str | None, Any | None]:
+    if not isinstance(args, dict):
+        return None, args
+
+    url_raw = args.get("url")
+    if url_raw is not None:
+        payload = args.get("data")
+        if payload is None:
+            payload = args.get("params")
+        return str(url_raw), payload
+
+    text = args.get("text")
+    if isinstance(text, str) and text.strip():
+        try:
+            parsed = json.loads(text)
+        except json.JSONDecodeError:
+            parsed = None
+        if isinstance(parsed, dict):
+            parsed_url = parsed.get("url")
+            url = str(parsed_url) if parsed_url is not None else None
+            return url, parsed.get("data")
+
+    if tool_name == "json_explorer":
+        payload = args.get("__arg1")
+        if payload is None:
+            payload = args.get("query")
+        return None, payload
+
+    return None, args or None
+
+
+def _format_json_field(value: Any) -> str:
+    if value is None:
+        return "(none)"
+    if isinstance(value, str):
+        return _trunc_text(value)
+    return _trunc_text(json.dumps(value, ensure_ascii=False, indent=2, default=str))
+
+
+def _tool_response_text(data: dict[str, Any]) -> str:
+    content = _content_to_text(data.get("content"))
+    if content.strip():
+        return _trunc_text(content)
+    status = data.get("status")
+    if status:
+        return f"(empty body; status={status})"
+    return "(empty)"
+
+
+def _format_grant_tool_call_block(*, url: str | None, payload: Any, response: str) -> list[str]:
+    lines: list[str] = ["--- Tool call ---"]
+    lines.append(f"url: {url if url else '(none)'}")
+    lines.append("payload:")
+    for ln in _format_json_field(payload).splitlines():
+        lines.append(f"  {ln}")
+    lines.append("response:")
+    for ln in response.splitlines():
+        lines.append(f"  {ln}")
+    lines.append("")
+    return lines
+
+
+def _format_grant_execution_new_messages(
+    new_msgs: list[dict[str, Any]],
+    pending: dict[str, tuple[str | None, Any]],
+) -> tuple[list[list[str]], dict[str, tuple[str | None, Any]]]:
+    blocks: list[list[str]] = []
+    for msg in new_msgs:
+        mtype = str(msg.get("type", "?")).lower()
+        data = _coerce_data(msg)
+
+        if mtype == "ai":
+            for tc in data.get("tool_calls") or []:
+                if not isinstance(tc, dict):
+                    continue
+                tc_id = tc.get("id")
+                if not tc_id:
+                    continue
+                name = str(tc.get("name", ""))
+                url, payload = _parse_tool_call_args(name, tc.get("args") or {})
+                pending[str(tc_id)] = (url, payload)
+            if not data.get("tool_calls"):
+                block_lines = _format_compact_message_lines(msg)
+                if block_lines:
+                    blocks.append(block_lines)
+            continue
+
+        if mtype == "tool":
+            tc_id = str(data.get("tool_call_id") or "")
+            url, payload = pending.pop(tc_id, (None, None))
+            response = _tool_response_text(data)
+            blocks.append(
+                _format_grant_tool_call_block(url=url, payload=payload, response=response),
+            )
+            continue
+
+        block_lines = _format_compact_message_lines(msg)
+        if block_lines:
+            blocks.append(block_lines)
+
+    return blocks, pending
+
+
+def _collect_grant_execution_tool_calls(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    pending: dict[str, tuple[str | None, Any]] = {}
+    collected: list[dict[str, Any]] = []
+    seen_ids: set[str] = set()
+
+    for msg in messages:
+        mtype = str(msg.get("type", "?")).lower()
+        data = _coerce_data(msg)
+
+        if mtype == "ai":
+            for tc in data.get("tool_calls") or []:
+                if not isinstance(tc, dict):
+                    continue
+                tc_id = tc.get("id")
+                if not tc_id:
+                    continue
+                name = str(tc.get("name", ""))
+                url, payload = _parse_tool_call_args(name, tc.get("args") or {})
+                pending[str(tc_id)] = (url, payload)
+            continue
+
+        if mtype != "tool":
+            continue
+
+        tc_id = str(data.get("tool_call_id") or "")
+        if not tc_id or tc_id in seen_ids:
+            continue
+        seen_ids.add(tc_id)
+        url, payload = pending.get(tc_id, (None, None))
+        collected.append(
+            {
+                "tool_call_id": tc_id,
+                "url": url,
+                "payload": payload,
+                "response": _tool_response_text(data),
+            },
+        )
+
+    return collected
+
+
+def _format_final_grant_execution_tool_calls(checkpoints: list[Any]) -> str:
+    best_messages: list[dict[str, Any]] = []
+    for tup in checkpoints:
+        ns = (tup.config.get("configurable") or {}).get("checkpoint_ns") or ""
+        if not _is_grant_execution_ns(ns):
+            continue
+        channel_values = _channel_values_dict(tup.checkpoint)
+        serialized = _serialize_messages(channel_values.get("messages"))
+        if len(serialized) > len(best_messages):
+            best_messages = serialized
+
+    tool_calls = _collect_grant_execution_tool_calls(best_messages)
+    if not tool_calls:
+        return ""
+
+    lines: list[str] = [
+        "=" * 72,
+        "GRANT EXECUTION TOOL CALLS (access_grant_execution subgraph)",
+        "=" * 72,
+        "",
+    ]
+    for idx, call in enumerate(tool_calls, start=1):
+        lines.append(f"[tool call {idx}]")
+        lines.extend(
+            _format_grant_tool_call_block(
+                url=call["url"],
+                payload=call["payload"],
+                response=call["response"],
+            ),
+        )
+    return "\n".join(lines)
+
+
 def _format_compact_message_lines(msg: dict[str, Any]) -> list[str]:
     mtype = str(msg.get("type", "?")).lower()
     data = _coerce_data(msg)
@@ -332,9 +515,10 @@ def _render_checkpoint_transcript(checkpoints: list[Any]) -> str:
         "",
     ]
 
-    prev_len = 0
+    prev_len_by_ns: dict[str, int] = {}
     prev_just_snap: dict[str, Any] = {}
     prev_doc_corpus = ""
+    grant_pending_tool_calls: dict[str, tuple[str | None, Any]] = {}
     shown = 0
     for tup in checkpoints:
         ns = (tup.config.get("configurable") or {}).get("checkpoint_ns") or ""
@@ -342,8 +526,9 @@ def _render_checkpoint_transcript(checkpoints: list[Any]) -> str:
         channel_values = _channel_values_dict(checkpoint)
         messages = channel_values.get("messages")
         serialized = _serialize_messages(messages)
+        prev_len = prev_len_by_ns.get(ns, 0)
         new_msgs = serialized[prev_len:]
-        prev_len = len(serialized)
+        prev_len_by_ns[ns] = len(serialized)
 
         just_snap = _justification_slice(channel_values)
         just_changed = _snap_json(just_snap) != _snap_json(prev_just_snap)
@@ -351,10 +536,16 @@ def _render_checkpoint_transcript(checkpoints: list[Any]) -> str:
         doc_corpus_changed = doc_corpus != prev_doc_corpus
 
         rendered_blocks: list[list[str]] = []
-        for msg in new_msgs:
-            block_lines = _format_compact_message_lines(msg)
-            if block_lines:
-                rendered_blocks.append(block_lines)
+        if _is_grant_execution_ns(ns):
+            rendered_blocks, grant_pending_tool_calls = _format_grant_execution_new_messages(
+                new_msgs,
+                grant_pending_tool_calls,
+            )
+        else:
+            for msg in new_msgs:
+                block_lines = _format_compact_message_lines(msg)
+                if block_lines:
+                    rendered_blocks.append(block_lines)
 
         if not rendered_blocks and not just_changed and not doc_corpus_changed:
             continue
@@ -388,6 +579,9 @@ def _render_checkpoint_transcript(checkpoints: list[Any]) -> str:
     final_block = _format_final_field_justifications(checkpoints)
     if final_block:
         lines.append(final_block)
+    grant_tool_block = _format_final_grant_execution_tool_calls(checkpoints)
+    if grant_tool_block:
+        lines.append(grant_tool_block)
     return "\n".join(lines)
 
 

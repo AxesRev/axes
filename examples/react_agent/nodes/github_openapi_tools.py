@@ -8,11 +8,13 @@ import os
 from pathlib import Path
 from typing import Any
 
+import aiohttp
 import httpx
 from langchain_community.agent_toolkits.openapi.toolkit import OpenAPIToolkit
 from langchain_community.tools.json.tool import JsonSpec
 from langchain_community.utilities.requests import TextRequestsWrapper
 from langgraph.runtime import Runtime
+from requests import Response
 
 from app_integrations.github.installation_token import get_installation_access_token
 from examples.react_agent.context import Context
@@ -25,6 +27,32 @@ _GITHUB_OPENAPI_SPEC_URL = (
 )
 
 _toolkit_cache: dict[tuple[Any, ...], OpenAPIToolkit] = {}
+
+
+def _format_http_tool_output(*, status_code: int, body: str) -> str:
+    normalized = body.strip()
+    if normalized:
+        return f"HTTP {status_code}\n\n{normalized}"
+    return f"HTTP {status_code}\n\n(empty body)"
+
+
+class GitHubHttpRequestsWrapper(TextRequestsWrapper):
+    """TextRequestsWrapper that includes HTTP status in tool output for the LLM."""
+
+    def _format_response(self, *, status_code: int, body: str | dict[str, Any]) -> str:
+        if isinstance(body, dict):
+            text = json.dumps(body, ensure_ascii=False, indent=2)
+        else:
+            text = body
+        return _format_http_tool_output(status_code=status_code, body=text)
+
+    def _get_resp_content(self, response: Response) -> str | dict[str, Any]:
+        content = super()._get_resp_content(response)
+        return self._format_response(status_code=response.status_code, body=content)
+
+    async def _aget_resp_content(self, response: aiohttp.ClientResponse) -> str | dict[str, Any]:
+        content = await super()._aget_resp_content(response)
+        return self._format_response(status_code=response.status, body=content)
 
 
 def _env_bool(name: str, default: bool) -> bool:
@@ -88,7 +116,7 @@ def build_openapi_toolkit(runtime: Runtime[Context]) -> OpenAPIToolkit:
         thinking_budget_tokens=ctx.thinking_budget_tokens,
         reasoning_effort=ctx.reasoning_effort,
     )
-    requests_wrapper = TextRequestsWrapper(
+    requests_wrapper = GitHubHttpRequestsWrapper(
         headers={
             "Authorization": f"Bearer {access_token}",
             "X-GitHub-Api-Version": api_version,
