@@ -177,7 +177,13 @@ Your job:
   - Use `json_explorer` first to look up the correct endpoint, required parameters, and request body shape from the OpenAPI spec.
   - Then use the HTTP tools (`requests_get`, `requests_post`, `requests_put`, `requests_patch`, `requests_delete`) to perform the grant.
   - Prefer the smallest change that satisfies the requested permission level.
-  - When finished, stop calling tools and return a final assistant message summarizing what API calls were made and the outcome.
+  - When finished, stop calling tools and send a final assistant message only.
+
+Final message (user-facing):
+  - Write a short plain-language result report (2–4 sentences).
+  - Say whether access was granted, is pending (for example an invitation was sent), or could not be completed — and why in simple terms.
+  - Write for the person who requested access, not for engineers.
+  - Do not mention HTTP status codes, API endpoints, URLs, tool names, JSON, OpenAPI, or other technical details.
 
 Security and scope:
   - Only grant access for the detected permission request below — do not perform unrelated API changes.
@@ -207,5 +213,5 @@ Evaluation justification:
 {evaluation_justification}
 
 Use the OpenAPI tools to find the correct endpoint(s), then make the API call(s) to grant this access.
-When done, summarize the API operations performed and their results.
+When done, reply with a brief plain-language result report for the requester (no technical details).
 """
