@@ -14,6 +14,7 @@ from langchain_community.tools.json.tool import JsonSpec
 from langchain_community.utilities.requests import TextRequestsWrapper
 from langgraph.runtime import Runtime
 
+from app_integrations.github.installation_token import get_installation_access_token
 from examples.react_agent.context import Context
 from examples.react_agent.utils import load_chat_model
 
@@ -53,9 +54,9 @@ def _load_openapi_dict(*, spec_path: str, spec_url: str) -> dict[str, Any]:
 def build_openapi_toolkit(runtime: Runtime[Context]) -> OpenAPIToolkit:
     """Build (or return cached) OpenAPIToolkit for GitHub REST API calls."""
     ctx = runtime.context
-    pat = os.environ.get("GITHUB_PAT", "").strip() or ctx.github_pat.strip()
-    if not pat:
-        msg = "GITHUB_PAT (or github_pat) is required for GitHub API tools"
+    installation_id = ctx.github_installation_id.strip()
+    if not installation_id:
+        msg = "github_installation_id is required for GitHub API tools"
         raise ValueError(msg)
 
     spec_path = os.environ.get("GITHUB_OPENAPI_SPEC_PATH", "").strip()
@@ -64,10 +65,12 @@ def build_openapi_toolkit(runtime: Runtime[Context]) -> OpenAPIToolkit:
     json_agent_max_iterations = int(os.environ.get("GITHUB_OPENAPI_JSON_AGENT_MAX_ITERATIONS", "15"))
     json_spec_max_value_length = int(os.environ.get("GITHUB_OPENAPI_JSON_SPEC_MAX_VALUE_LENGTH", "200"))
     verbose = _env_bool("GITHUB_OPENAPI_VERBOSE", False)
+    access_token = get_installation_access_token(installation_id, api_version=api_version)
 
     cache_key = (
         ctx.model,
-        pat,
+        installation_id,
+        access_token,
         spec_path,
         api_version,
         allow_dangerous,
@@ -87,7 +90,7 @@ def build_openapi_toolkit(runtime: Runtime[Context]) -> OpenAPIToolkit:
     )
     requests_wrapper = TextRequestsWrapper(
         headers={
-            "Authorization": f"Bearer {pat}",
+            "Authorization": f"Bearer {access_token}",
             "X-GitHub-Api-Version": api_version,
             "Accept": "application/vnd.github+json",
         },

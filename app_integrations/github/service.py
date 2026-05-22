@@ -93,6 +93,7 @@ async def get_github_identity(
             slack_user_id=slack_user_id,
             github_user_id=identity.github_user_id,
             github_username=identity.github_username,
+            github_installation_id=identity.github_installation_id or "",
         )
 
     token = await _create_oauth_state_token(slack_user_id, session)

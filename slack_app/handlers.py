@@ -104,6 +104,7 @@ async def handle_message_event(event: dict[str, Any]) -> None:
     assert access_result.identity is not None
     github_username: str = access_result.identity.github_username
     github_user_id: str = access_result.identity.github_user_id
+    github_installation_id: str = access_result.identity.github_installation_id
 
     # --- Agent invocation ------------------------------------------------------
     client = get_client(url=slack_settings.LANGGRAPH_API_URL, headers={"X-Slack-User-ID": user_id})
@@ -139,6 +140,7 @@ async def handle_message_event(event: dict[str, Any]) -> None:
                     "slack_user_id": user_id,
                     "github_username": github_username,
                     "github_user_id": github_user_id,
+                    "github_installation_id": github_installation_id,
                 }
             },
             stream_mode=["updates"],

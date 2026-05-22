@@ -181,7 +181,7 @@ Your job:
 
 Security and scope:
   - Only grant access for the detected permission request below — do not perform unrelated API changes.
-  - Authentication headers are pre-configured on the HTTP tools; do not invent tokens.
+  - Authentication uses a GitHub App installation token; headers are pre-configured on the HTTP tools.
   - If the API returns an error, report it clearly and do not retry blindly.
 
 Documentation snippets semantically matched to the user's latest message:

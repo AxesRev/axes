@@ -10,22 +10,26 @@ from examples.react_agent.nodes import github_openapi_tools as openapi_tools_mod
 from examples.react_agent.nodes.github_openapi_tools import build_openapi_toolkit
 
 
-def test_build_openapi_toolkit_requires_pat() -> None:
+def test_build_openapi_toolkit_requires_installation_id() -> None:
     runtime = MagicMock()
-    runtime.context = Context(github_pat="")
-    with pytest.raises(ValueError, match="GITHUB_PAT"):
+    runtime.context = Context(github_installation_id="")
+    with pytest.raises(ValueError, match="github_installation_id"):
         build_openapi_toolkit(runtime)
 
 
 def test_build_openapi_toolkit_configures_auth_headers(monkeypatch: pytest.MonkeyPatch) -> None:
     openapi_tools_module._toolkit_cache.clear()
-    monkeypatch.setenv("GITHUB_PAT", "ghp_test")
     monkeypatch.setenv("GITHUB_API_VERSION", "2022-11-28")
     monkeypatch.setenv("GITHUB_OPENAPI_ALLOW_DANGEROUS_REQUESTS", "true")
     monkeypatch.setattr(
         openapi_tools_module,
         "_load_openapi_dict",
         lambda *, spec_path, spec_url: {"openapi": "3.0.0", "paths": {}},
+    )
+    monkeypatch.setattr(
+        openapi_tools_module,
+        "get_installation_access_token",
+        lambda installation_id, *, api_version: "ghs_installation_token",
     )
 
     fake_toolkit = MagicMock()
@@ -35,24 +39,28 @@ def test_build_openapi_toolkit_configures_auth_headers(monkeypatch: pytest.Monke
     ):
         mock_toolkit_cls.from_llm.return_value = fake_toolkit
         runtime = MagicMock()
-        runtime.context = Context()
+        runtime.context = Context(github_installation_id="12345")
         toolkit = build_openapi_toolkit(runtime)
 
     assert toolkit is fake_toolkit
     call_kwargs = mock_toolkit_cls.from_llm.call_args.kwargs
     assert call_kwargs["allow_dangerous_requests"] is True
     headers = call_kwargs["requests_wrapper"].headers
-    assert headers["Authorization"] == "Bearer ghp_test"
+    assert headers["Authorization"] == "Bearer ghs_installation_token"
     assert headers["X-GitHub-Api-Version"] == "2022-11-28"
 
 
 def test_build_openapi_toolkit_get_tools_returns_http_tools(monkeypatch: pytest.MonkeyPatch) -> None:
     openapi_tools_module._toolkit_cache.clear()
-    monkeypatch.setenv("GITHUB_PAT", "ghp_test")
     monkeypatch.setattr(
         openapi_tools_module,
         "_load_openapi_dict",
         lambda *, spec_path, spec_url: {"openapi": "3.0.0", "paths": {}},
+    )
+    monkeypatch.setattr(
+        openapi_tools_module,
+        "get_installation_access_token",
+        lambda installation_id, *, api_version: "ghs_installation_token",
     )
 
     fake_toolkit = MagicMock()
@@ -63,7 +71,7 @@ def test_build_openapi_toolkit_get_tools_returns_http_tools(monkeypatch: pytest.
     ):
         mock_toolkit_cls.from_llm.return_value = fake_toolkit
         runtime = MagicMock()
-        runtime.context = Context()
+        runtime.context = Context(github_installation_id="12345")
         tools = build_openapi_toolkit(runtime).get_tools()
 
     assert len(tools) == 2
