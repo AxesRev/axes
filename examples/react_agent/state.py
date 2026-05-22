@@ -28,7 +28,7 @@ class FieldResult(BaseModel):
         Field(
             description=(
                 "Canonical value for this field. For `resource`, use null only when the request truly does not "
-                "name a specific resource; otherwise use an exact identifier (e.g. owner/repo)."
+                "name a specific resource; otherwise use an exact identifier from the target system."
             ),
         ),
     ] = None

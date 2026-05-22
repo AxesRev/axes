@@ -47,7 +47,7 @@ class UserContextData(BaseModel):
             f"{group_lines}\n\n"
             "Permissions this user currently has:\n"
             f"{permission_lines}\n\n"
-            'Always use this identity when the user refers to "me", "my access", "my repositories", etc.\n'
+            'Always use this identity when the user refers to "me", "my access", "my resources", etc.\n'
             "Use this context plus Neo4j tools when facts need verification; do not invent resources or permissions."
         )
 

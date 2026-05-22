@@ -116,7 +116,7 @@ def _extra_detector_context(state: State, field_name: _FieldName) -> str:
             for permission in resource_permissions[:_RESOURCE_DETECTOR_PERMISSION_LIMIT]
         )
         sections.append(
-            'Resources this user already has access to (use for vague references like "our test repo"; '
+            "Resources this user already has access to (use for vague references to a shared resource; "
             "prefer an exact identifier when possible):\n" + permission_lines
         )
 

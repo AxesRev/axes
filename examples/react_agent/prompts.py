@@ -13,13 +13,13 @@ If information is missing:
 - continue autonomously
 
 Never output questions directed at a user.
-Many requests are about GitHub access; you have the user's groups and permissions from context when configured,
+You have the user's groups and permissions from context when configured,
 and Neo4j tools for live graph data when configured.
 
 Documentation snippets semantically matched to the user's latest message:
 {doc_corpus_context}
 
-When access may depend on data stored in the Neo4j graph (organizations, repositories, members, app installs),
+When access may depend on data stored in the Neo4j graph (identities, groups, resources, permissions),
 use the Neo4j MCP tools against the live database: call `get_neo4j_schema` first so queries match current labels,
 properties, and relationship types; then use `read_neo4j_cypher` with read-only Cypher consistent with that schema.
 
@@ -28,9 +28,9 @@ properties, and relationship types; then use `read_neo4j_cypher` with read-only 
 INTENT_PARSER_PROMPT = """You are an intent parser for an access-request system.
 
 Given the user's access request, produce a short "hint" for each of three fields:
-  - `domain`     : the type of resource the user wants access to (e.g. GitHub repository, GitHub organization, Slack workspace).
-  - `resource`   : the specific named entity within that domain (e.g. a particular repository name). May be unspecified.
-  - `permission` : the role / access level being requested (e.g. admin, write, read, push, pull).
+  - `domain`     : the type of resource the user wants access to (the resource category in the target system).
+  - `resource`   : the specific named entity within that domain. May be unspecified.
+  - `permission` : the role or access level being requested (e.g. admin, write, read, view).
 
 Each hint must:
   - Restate WHAT the field should describe based on the user's intent.
@@ -39,7 +39,7 @@ Each hint must:
   - Stay short (one or two sentences).
 
 If a field is implied but not explicit, capture the implication in the hint
-(e.g. "the only repository in the user's organization, identified by exact name").
+(e.g. "the only resource in the user's group, identified by exact name").
 If a field is genuinely absent (e.g. no specific resource), say so explicitly.
 
 Documentation snippets semantically matched to the user's latest message:
@@ -76,18 +76,18 @@ System time: {system_time}"""
 
 FIELD_DESCRIPTIONS: dict[str, str] = {
     "domain": (
-        "The TYPE of resource the user wants access to (e.g. 'github_repository', 'github_organization', "
-        "'slack_workspace'). Pick the most specific, conventional name. Do not include a specific resource "
+        "The TYPE of resource the user wants access to — the resource category used by the target system. "
+        "Pick the most specific, conventional name for that system. Do not include a specific resource "
         "identifier here — that belongs to the `resource` field."
     ),
     "resource": (
-        "The specific NAMED entity within the domain (e.g. an exact repository full-name like 'owner/repo', "
-        "an exact organization login, an exact channel name). If the request does not refer to a specific "
-        "named entity, the value MUST be null. Always verify the exact name with the available tools when "
-        "the user implies a specific resource without naming it."
+        "The specific NAMED entity within the domain (an exact identifier used by the target system). "
+        "If the request does not refer to a specific named entity, the value MUST be null. "
+        "Always verify the exact name with the available tools when the user implies a specific resource "
+        "without naming it."
     ),
     "permission": (
-        "The ROLE or ACCESS LEVEL being requested (e.g. 'admin', 'write', 'read', 'push', 'pull', "
+        "The ROLE or ACCESS LEVEL being requested (e.g. 'admin', 'write', 'read', 'view', "
         "'maintain', 'triage'). Use the canonical name used by the target system."
     ),
 }
