@@ -62,6 +62,24 @@ class IntentHints(BaseModel):
     ]
 
 
+class AccessRequestEvaluation(BaseModel):
+    """Whether a detected permission request should be granted to the user."""
+
+    should_grant: Annotated[
+        bool,
+        Field(description="True if the requested permission should be granted to the user; false otherwise."),
+    ]
+    justification: Annotated[
+        str,
+        Field(
+            description=(
+                "Natural-language explanation for why the request should or should not be granted, "
+                "grounded in tool results and user context when available."
+            ),
+        ),
+    ]
+
+
 class ValidationVerdict(BaseModel):
     """Validator's assessment of the per-field results."""
 
@@ -166,6 +184,9 @@ class State(InputState):
 
     permission: Permission | None = field(default=None)
     """The structured permission model extracted from the conversation."""
+
+    access_evaluation: AccessRequestEvaluation | None = field(default=None)
+    """Evaluation of whether the detected permission request should be granted."""
 
     github_repos: list[str] = field(default_factory=list)
     """Full names (owner/repo) of GitHub repositories accessible to the authenticated user."""
