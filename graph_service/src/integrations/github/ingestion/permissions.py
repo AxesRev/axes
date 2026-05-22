@@ -10,8 +10,9 @@ from github.MainClass import Github
 from github.Repository import Repository
 
 from integrations.github.ingestion.shared import (
-    connect_resource_permission,
+    PermissionEdgeRow,
     gql_string,
+    merge_resource_permissions,
     upsert_group,
 )
 from integrations.github.ingestion.users import get_or_create_identity_by_login
@@ -252,9 +253,9 @@ async def ingest_permissions(
     grants = fetch_repo_permissions(gh, repos, org_login=org_login)
     logger.info("permissions_fetched grants=%s repos=%s", len(grants), len(repos))
 
+    edge_rows: list[PermissionEdgeRow] = []
     for grant in grants:
-        resource = resources_by_uri.get(grant.repo_full_name)
-        if resource is None:
+        if resources_by_uri.get(grant.repo_full_name) is None:
             logger.warning("permissions_skip_unknown_repo full_name=%s", grant.repo_full_name)
             continue
 
@@ -262,11 +263,25 @@ async def ingest_permissions(
             identity = await get_or_create_identity_by_login(gh, grant.subject_key, connection)
             if identity is None:
                 continue
-            await connect_resource_permission(identity, resource, grant.permission)
+            subject_id = identity.element_id
+        else:
+            group = await upsert_group(grant.subject_key, connection)
+            subject_id = group.element_id
+
+        if subject_id is None:
+            logger.warning("permissions_skip_unsaved_subject kind=%s key=%s", grant.subject_kind, grant.subject_key)
             continue
 
-        group = await upsert_group(grant.subject_key, connection)
-        await connect_resource_permission(group, resource, grant.permission)
+        edge_rows.append(
+            PermissionEdgeRow(
+                subject_id=subject_id,
+                resource_uri=grant.repo_full_name,
+                permission=grant.permission,
+            )
+        )
+
+    await merge_resource_permissions(edge_rows)
+    logger.info("permissions_merged edges=%s", len(edge_rows))
 
 
 def _parse_collaborator_grants(repo_full_name: str, repo_data: dict[str, object]) -> list[RepoPermissionGrant]:
