@@ -9,9 +9,8 @@ from nodes.relationships import HasPermissionRel
 class Profile(BaseNode):
     """A reusable bundle of access rights that can be assigned to subjects.
 
-    Both AppIdentity and Group nodes can hold an ASSIGNED_PROFILE edge to
-    this node. ASSIGNED_PROFILE is kept distinct from HAS_PROFILE
-    (Identity → AppIdentity) to avoid ambiguity in the graph.
+    Both AppIdentity and Group nodes link via ASSIGNED_PROFILE.
+    ASSIGNED_PROFILE is kept distinct from HAS_PROFILE (Identity → AppIdentity).
     """
 
     name = StringProperty(required=True)
