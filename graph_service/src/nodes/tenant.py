@@ -8,11 +8,10 @@ from nodes.base import BaseNode
 class Tenant(BaseNode):
     """Top-level organisational boundary.
 
-    ``external_id`` is the stable identifier from the owning system of record.
-    ``name`` is a human-readable label that may change over time.
+    ``external_id`` (from BaseNode) is the stable identifier from the owning
+    system of record when available. ``name`` is a human-readable label.
     """
 
-    external_id = StringProperty(required=True, unique_index=True)
     name = StringProperty(required=True)
 
     identities = AsyncRelationshipFrom(

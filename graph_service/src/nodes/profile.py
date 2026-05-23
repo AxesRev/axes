@@ -16,6 +16,9 @@ from nodes.relationships import HasPermissionRel
 class Profile(BaseNode):
     """A reusable bundle of access rights that can be assigned to subjects.
 
+    ``app`` and ``external_id`` (from BaseNode) identify the profile in the
+    source system when available (e.g. Salesforce Profile or PermissionSet Id).
+
     AppIdentity and Group nodes link via ASSIGNED_PROFILE when a bundle is
     assigned directly to them. Profile nodes may belong to another Profile via
     MEMBER_OF (e.g. permission sets grouped into a permission set group).

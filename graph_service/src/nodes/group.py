@@ -16,15 +16,15 @@ from nodes.relationships import HasPermissionRel
 class Group(BaseNode):
     """A named container of AppIdentity nodes and/or other Groups.
 
-    ``external_id`` is the stable identifier from the external system (e.g. GitHub team id).
-    ``name`` is a human-readable handle (e.g. team slug) that may change on rename.
+    ``external_id`` (from BaseNode) is the stable identifier from the external
+    system when the group maps to one (e.g. GitHub team id). ``name`` is a
+    human-readable handle that may change on rename.
 
     Group acts as both a subject (can hold HAS_PERMISSION edges to Resource
     and other Group nodes) and a target (subjects can hold HAS_PERMISSION
     edges pointing at this Group).
     """
 
-    external_id = StringProperty(required=True, unique_index=True)
     name = StringProperty(required=True)
     description = StringProperty()
     extra = JSONProperty()
