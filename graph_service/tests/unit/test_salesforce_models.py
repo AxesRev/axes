@@ -45,9 +45,18 @@ def test_object_permission_extra_rejects_fields() -> None:
 
 
 @pytest.mark.unit
-def test_salesforce_group_extra_accepts_permission_set_group_kind() -> None:
+def test_salesforce_group_extra_accepts_public_group_kind() -> None:
     from integrations.salesforce.models import SalesforceGroupExtra  # noqa: PLC0415
 
-    extra = SalesforceGroupExtra(kind="permission_set_group")
+    extra = SalesforceGroupExtra(kind="public_group")
+
+    assert extra.kind == "public_group"
+
+
+@pytest.mark.unit
+def test_salesforce_profile_extra_accepts_permission_set_group_kind() -> None:
+    from integrations.salesforce.models import SalesforceProfileExtra  # noqa: PLC0415
+
+    extra = SalesforceProfileExtra(kind="permission_set_group")
 
     assert extra.kind == "permission_set_group"

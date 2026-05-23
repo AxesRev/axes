@@ -1,6 +1,13 @@
 from __future__ import annotations
 
-from neomodel import AsyncRelationshipFrom, AsyncRelationshipTo, AsyncZeroOrMore, AsyncZeroOrOne, StringProperty
+from neomodel import (
+    AsyncRelationshipFrom,
+    AsyncRelationshipTo,
+    AsyncZeroOrMore,
+    AsyncZeroOrOne,
+    JSONProperty,
+    StringProperty,
+)
 
 from nodes.base import BaseNode
 from nodes.relationships import HasPermissionRel
@@ -10,7 +17,7 @@ class Profile(BaseNode):
     """A reusable bundle of access rights that can be assigned to subjects.
 
     AppIdentity and Group nodes link via ASSIGNED_PROFILE when a bundle is
-    assigned directly to them. Profile nodes may also belong to a Group via
+    assigned directly to them. Profile nodes may belong to another Profile via
     MEMBER_OF (e.g. permission sets grouped into a permission set group).
 
     ASSIGNED_PROFILE is kept distinct from HAS_PROFILE (Identity → AppIdentity).
@@ -18,6 +25,7 @@ class Profile(BaseNode):
 
     name = StringProperty(required=True)
     description = StringProperty()
+    extra = JSONProperty()
 
     permitted_resources = AsyncRelationshipTo(
         "nodes.resource.Resource",
@@ -42,7 +50,12 @@ class Profile(BaseNode):
         cardinality=AsyncZeroOrMore,
     )
     groups = AsyncRelationshipTo(
-        "nodes.group.Group",
+        "nodes.profile.Profile",
+        "MEMBER_OF",
+        cardinality=AsyncZeroOrMore,
+    )
+    profile_members = AsyncRelationshipFrom(
+        "nodes.profile.Profile",
         "MEMBER_OF",
         cardinality=AsyncZeroOrMore,
     )
