@@ -9,7 +9,10 @@ from nodes.relationships import HasPermissionRel
 class Profile(BaseNode):
     """A reusable bundle of access rights that can be assigned to subjects.
 
-    Both AppIdentity and Group nodes link via ASSIGNED_PROFILE.
+    AppIdentity and Group nodes link via ASSIGNED_PROFILE when a bundle is
+    assigned directly to them. Profile nodes may also belong to a Group via
+    MEMBER_OF (e.g. permission sets grouped into a permission set group).
+
     ASSIGNED_PROFILE is kept distinct from HAS_PROFILE (Identity → AppIdentity).
     """
 
@@ -36,6 +39,11 @@ class Profile(BaseNode):
     assigned_groups = AsyncRelationshipFrom(
         "nodes.group.Group",
         "ASSIGNED_PROFILE",
+        cardinality=AsyncZeroOrMore,
+    )
+    groups = AsyncRelationshipTo(
+        "nodes.group.Group",
+        "MEMBER_OF",
         cardinality=AsyncZeroOrMore,
     )
     connection = AsyncRelationshipTo(

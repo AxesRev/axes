@@ -1,13 +1,20 @@
 from __future__ import annotations
 
-from neomodel import AsyncRelationshipFrom, AsyncRelationshipTo, AsyncZeroOrMore, AsyncZeroOrOne, StringProperty
+from neomodel import (
+    AsyncRelationshipFrom,
+    AsyncRelationshipTo,
+    AsyncZeroOrMore,
+    AsyncZeroOrOne,
+    JSONProperty,
+    StringProperty,
+)
 
 from nodes.base import BaseNode
 from nodes.relationships import HasPermissionRel
 
 
 class Group(BaseNode):
-    """A named container of AppIdentity nodes and/or other Groups.
+    """A named container of AppIdentity nodes, Profile nodes, and/or other Groups.
 
     ``external_id`` is the stable identifier from the external system (e.g. GitHub team id).
     ``name`` is a human-readable handle (e.g. team slug) that may change on rename.
@@ -20,6 +27,7 @@ class Group(BaseNode):
     external_id = StringProperty(required=True, unique_index=True)
     name = StringProperty(required=True)
     description = StringProperty()
+    extra = JSONProperty()
 
     identity_members = AsyncRelationshipFrom(
         "nodes.app_identity.AppIdentity",
@@ -28,6 +36,11 @@ class Group(BaseNode):
     )
     group_members = AsyncRelationshipFrom(
         "nodes.group.Group",
+        "MEMBER_OF",
+        cardinality=AsyncZeroOrMore,
+    )
+    profile_members = AsyncRelationshipFrom(
+        "nodes.profile.Profile",
         "MEMBER_OF",
         cardinality=AsyncZeroOrMore,
     )

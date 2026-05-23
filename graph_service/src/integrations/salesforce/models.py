@@ -41,3 +41,13 @@ def build_field_permission_extra(*fields: str) -> dict[str, object]:
         access_type="field",
         fields=list(fields),
     ).model_dump()
+
+
+class SalesforceGroupExtra(BaseModel):
+    """Optional shape stored on Group.extra for Salesforce-backed groups.
+
+    ``permission_set_group`` marks a group that bundles permission-set profiles.
+    Other group kinds (e.g. public groups) use integration-specific values.
+    """
+
+    kind: Literal["permission_set_group", "public_group"]

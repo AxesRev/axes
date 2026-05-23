@@ -1,3 +1,3 @@
-from integrations.salesforce.models import SalesforcePermissionExtra
+from integrations.salesforce.models import SalesforceGroupExtra, SalesforcePermissionExtra
 
-__all__ = ["SalesforcePermissionExtra"]
+__all__ = ["SalesforceGroupExtra", "SalesforcePermissionExtra"]

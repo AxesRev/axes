@@ -42,3 +42,12 @@ def test_field_permission_extra_rejects_empty_fields() -> None:
 def test_object_permission_extra_rejects_fields() -> None:
     with pytest.raises(ValidationError, match="fields must be omitted"):
         SalesforcePermissionExtra(access_type="object", fields=["AnnualRevenue"])
+
+
+@pytest.mark.unit
+def test_salesforce_group_extra_accepts_permission_set_group_kind() -> None:
+    from integrations.salesforce.models import SalesforceGroupExtra  # noqa: PLC0415
+
+    extra = SalesforceGroupExtra(kind="permission_set_group")
+
+    assert extra.kind == "permission_set_group"
