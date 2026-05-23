@@ -1,3 +1,13 @@
-from integrations.salesforce.models import SalesforceGroupExtra, SalesforcePermissionExtra, SalesforceProfileExtra
+from integrations.salesforce.models import (
+    SalesforceAppIdentityExtra,
+    SalesforceGroupExtra,
+    SalesforcePermissionExtra,
+    SalesforceProfileExtra,
+)
 
-__all__ = ["SalesforceGroupExtra", "SalesforcePermissionExtra", "SalesforceProfileExtra"]
+__all__ = [
+    "SalesforceAppIdentityExtra",
+    "SalesforceGroupExtra",
+    "SalesforcePermissionExtra",
+    "SalesforceProfileExtra",
+]

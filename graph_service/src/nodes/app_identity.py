@@ -21,6 +21,10 @@ class AppIdentity(BaseNode):
     stable user identifier. ``name`` is the human-readable handle shown in graph
     UIs (e.g. GitHub login). ``extra`` is a schemaless JSON blob for
     app-specific fields without touching the graph schema.
+
+    ``MANAGER_OF`` links a manager AppIdentity to a direct-report AppIdentity.
+    Each user has at most one manager (``manager``) and may have many direct
+    reports (``direct_reports``).
     """
 
     name = StringProperty(required=True)
@@ -40,6 +44,16 @@ class AppIdentity(BaseNode):
         "nodes.profile.Profile",
         "ASSIGNED_PROFILE",
         cardinality=AsyncZeroOrMore,
+    )
+    direct_reports = AsyncRelationshipTo(
+        "nodes.app_identity.AppIdentity",
+        "MANAGER_OF",
+        cardinality=AsyncZeroOrMore,
+    )
+    manager = AsyncRelationshipFrom(
+        "nodes.app_identity.AppIdentity",
+        "MANAGER_OF",
+        cardinality=AsyncOne,
     )
     permitted_resources = AsyncRelationshipTo(
         "nodes.resource.Resource",

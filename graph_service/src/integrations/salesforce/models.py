@@ -49,6 +49,13 @@ class SalesforceGroupExtra(BaseModel):
     kind: Literal["public_group"]
 
 
+class SalesforceAppIdentityExtra(BaseModel):
+    """Optional shape stored on AppIdentity.extra for Salesforce users."""
+
+    role_id: str | None = None
+    role_name: str | None = None
+
+
 class SalesforceProfileExtra(BaseModel):
     """Optional shape stored on Profile.extra for Salesforce-backed profiles."""
 

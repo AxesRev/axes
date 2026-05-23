@@ -69,3 +69,13 @@ def test_salesforce_profile_extra_accepts_muting_permission_set_kind() -> None:
     extra = SalesforceProfileExtra(kind="muting_permission_set")
 
     assert extra.kind == "muting_permission_set"
+
+
+@pytest.mark.unit
+def test_salesforce_app_identity_extra_accepts_role_fields() -> None:
+    from integrations.salesforce.models import SalesforceAppIdentityExtra  # noqa: PLC0415
+
+    extra = SalesforceAppIdentityExtra(role_id="00Efj000001abc", role_name="Sales Rep")
+
+    assert extra.role_id == "00Efj000001abc"
+    assert extra.role_name == "Sales Rep"
