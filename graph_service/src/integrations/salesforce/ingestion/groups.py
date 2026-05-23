@@ -8,6 +8,7 @@ from typing import Any
 from simple_salesforce import Salesforce
 
 from integrations.salesforce.client import query_all
+from integrations.salesforce.ids import graph_subject_from_user_or_group_id
 from integrations.salesforce.ingestion.shared import (
     SALESFORCE_APP,
     ConnectionRef,
@@ -62,24 +63,21 @@ def build_group_member_rows(
     for member in members:
         group_id = str(member["GroupId"])
         member_id = str(member["UserOrGroupId"])
-        if member_id.startswith("005") and member_id in known_user_ids:
-            rows.append(
-                MemberOfRow(
-                    member_kind="identity",
-                    member_external_id=member_id,
-                    member_app=SALESFORCE_APP,
-                    group_external_id=group_id,
-                )
+        subject = graph_subject_from_user_or_group_id(member_id)
+        if subject is None:
+            continue
+        if subject.kind == "identity" and subject.external_id not in known_user_ids:
+            continue
+        if subject.kind == "group" and subject.external_id not in known_group_ids:
+            continue
+        rows.append(
+            MemberOfRow(
+                member_kind=subject.kind,
+                member_external_id=subject.external_id,
+                member_app=SALESFORCE_APP,
+                group_external_id=group_id,
             )
-        elif member_id.startswith("00G") and member_id in known_group_ids:
-            rows.append(
-                MemberOfRow(
-                    member_kind="group",
-                    member_external_id=member_id,
-                    member_app=SALESFORCE_APP,
-                    group_external_id=group_id,
-                )
-            )
+        )
     return rows
 
 

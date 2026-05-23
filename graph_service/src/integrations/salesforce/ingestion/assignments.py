@@ -8,6 +8,7 @@ from typing import Any
 from simple_salesforce import Salesforce
 
 from integrations.salesforce.client import query_all
+from integrations.salesforce.ids import graph_subject_from_user_or_group_id
 from integrations.salesforce.ingestion.shared import (
     SALESFORCE_APP,
     AssignedProfileRow,
@@ -29,26 +30,18 @@ def build_assignment_rows(
     for assignment in assignments:
         assignee_id = str(assignment["AssigneeId"])
         profile_id = str(assignment["PermissionSetId"])
-        if assignee_id.startswith("005"):
-            rows.append(
-                AssignedProfileRow(
-                    subject_kind="identity",
-                    subject_external_id=assignee_id,
-                    subject_app=SALESFORCE_APP,
-                    profile_app=SALESFORCE_APP,
-                    profile_external_id=profile_id,
-                )
+        subject = graph_subject_from_user_or_group_id(assignee_id)
+        if subject is None:
+            continue
+        rows.append(
+            AssignedProfileRow(
+                subject_kind=subject.kind,
+                subject_external_id=subject.external_id,
+                subject_app=SALESFORCE_APP,
+                profile_app=SALESFORCE_APP,
+                profile_external_id=profile_id,
             )
-        elif assignee_id.startswith("00G"):
-            rows.append(
-                AssignedProfileRow(
-                    subject_kind="group",
-                    subject_external_id=assignee_id,
-                    subject_app=SALESFORCE_APP,
-                    profile_app=SALESFORCE_APP,
-                    profile_external_id=profile_id,
-                )
-            )
+        )
     for user in users:
         rows.append(
             AssignedProfileRow(

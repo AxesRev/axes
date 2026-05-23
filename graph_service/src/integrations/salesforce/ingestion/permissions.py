@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
 from typing import Any
 
 from simple_salesforce import Salesforce
@@ -45,17 +44,6 @@ FROM FieldPermissions
 _MUTING_GROUP_SOQL = """
 SELECT PermissionSetId FROM PermissionSetGroupMutingPermissionSet
 """
-
-
-@dataclass(frozen=True)
-class ObjectPermissionFlags:
-    read: bool
-    create: bool
-    edit: bool
-    delete: bool
-    view_all: bool
-    modify_all: bool
-
 
 _OBJECT_FLAG_MAP: tuple[tuple[str, str], ...] = (
     ("PermissionsRead", PERMISSION_READ),
