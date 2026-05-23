@@ -6,9 +6,12 @@ import pytest
 from pydantic import ValidationError
 
 from integrations.salesforce.models import (
+    SalesforceConnectionExtra,
     SalesforcePermissionExtra,
+    SalesforceRecordPermissionExtra,
     build_field_permission_extra,
     build_object_permission_extra,
+    build_record_permission_extra,
 )
 
 
@@ -79,3 +82,33 @@ def test_salesforce_app_identity_extra_accepts_role_fields() -> None:
 
     assert extra.role_id == "00Efj000001abc"
     assert extra.role_name == "Sales Rep"
+
+
+@pytest.mark.unit
+def test_salesforce_connection_extra_accepts_owd_map() -> None:
+    extra = SalesforceConnectionExtra(
+        org_id="00Dxx",
+        instance_url="https://example.my.salesforce.com",
+        owd={"Account": "Private", "Contact": "ControlledByParent"},
+    )
+
+    assert extra.owd["Account"] == "Private"
+
+
+@pytest.mark.unit
+def test_salesforce_record_permission_extra_requires_record_fields() -> None:
+    extra = SalesforceRecordPermissionExtra(
+        record_id="001xx",
+        row_cause="Rule",
+        access_level="read",
+    )
+
+    assert extra.access_type == "record"
+    assert (
+        build_record_permission_extra(
+            record_id="001xx",
+            row_cause="Rule",
+            access_level="read",
+        )
+        == extra.model_dump()
+    )

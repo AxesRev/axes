@@ -1,7 +1,7 @@
 [project]
 name = "aegra-graph-service"
-version = "0.1.0"
-description = "Neo4j graph domain models and GitHub → graph ingestion"
+version = "0.1.1"
+description = "Neo4j graph domain models and GitHub/Salesforce → graph ingestion"
 requires-python = ">=3.12"
 license = "Apache-2.0"
 
@@ -11,6 +11,7 @@ dependencies = [
     "structlog>=25.0.0",
     "neomodel>=6.1.0",
     "pygithub>=2.9.1",
+    "simple-salesforce>=1.12.6",
     "asyncpg>=0.31.0",
     "mcp-neo4j-cypher>=0.6.0",
     "python-dotenv>=1.0.0",
