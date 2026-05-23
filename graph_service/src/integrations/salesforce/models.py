@@ -52,4 +52,8 @@ class SalesforceGroupExtra(BaseModel):
 class SalesforceProfileExtra(BaseModel):
     """Optional shape stored on Profile.extra for Salesforce-backed profiles."""
 
-    kind: Literal["profile", "permission_set", "permission_set_group"]
+    kind: Literal["profile", "permission_set", "permission_set_group", "muting_permission_set"]
+
+
+PERMISSION_EFFECT_GRANT = "grant"
+PERMISSION_EFFECT_MUTE = "mute"

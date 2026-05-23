@@ -60,3 +60,12 @@ def test_salesforce_profile_extra_accepts_permission_set_group_kind() -> None:
     extra = SalesforceProfileExtra(kind="permission_set_group")
 
     assert extra.kind == "permission_set_group"
+
+
+@pytest.mark.unit
+def test_salesforce_profile_extra_accepts_muting_permission_set_kind() -> None:
+    from integrations.salesforce.models import SalesforceProfileExtra  # noqa: PLC0415
+
+    extra = SalesforceProfileExtra(kind="muting_permission_set")
+
+    assert extra.kind == "muting_permission_set"
