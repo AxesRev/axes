@@ -36,6 +36,7 @@ htmlcov/
 
 # Private keys
 *.pem
+graph_service/certs/salesforce/AxesRev.key
 
 # Local inspect / debug output (scripts/inspect_latest_run.py)
 .scratch/

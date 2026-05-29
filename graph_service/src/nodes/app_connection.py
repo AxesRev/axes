@@ -15,17 +15,14 @@ from nodes.base import BaseNode
 class AppConnection(BaseNode):
     """A workspace or tenant context within an external app.
 
-    ``app`` identifies the integration ("github", "slack", …).
-    ``external_id`` is the app's own stable identifier for this workspace.
-    ``extra`` is a schemaless JSON blob for any app-specific fields that do
-    not belong in the common schema.
+    ``app`` and ``external_id`` (from BaseNode) identify the integration and
+    workspace. ``name`` is a human-readable label. ``extra`` holds any
+    app-specific fields outside the common schema.
 
     All nodes that are scoped to this workspace — AppIdentity, Resource,
     Group, Profile — point here via a BELONGS_TO edge.
     """
 
-    app = StringProperty(required=True)
-    external_id = StringProperty(required=True)
     name = StringProperty(required=True)
     extra = JSONProperty()
 

@@ -15,6 +15,9 @@ _IDENTITY_KINDS: dict[str, str] = {
 class Identity(BaseNode):
     """A canonical identity anchor, independent of any external system.
 
+    ``app`` and ``external_id`` (from BaseNode) may be set when this identity
+    is anchored to an external record; otherwise leave them unset.
+
     The ``kind`` field discriminates between identity subtypes without
     requiring subclassing (which breaks neomodel queryset traversals).
     App-specific data — GitHub username, Slack user ID, etc. — lives in

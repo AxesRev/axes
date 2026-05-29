@@ -9,17 +9,17 @@ from nodes.relationships import HasPermissionRel
 class Resource(BaseNode):
     """An object that access control applies to.
 
-    ``external_id`` is the stable identifier from the external system.
-    ``name`` and ``uri`` are display/locator fields that may change (e.g. on rename).
-    ``kind`` describes the type of resource without coupling the schema to any
-    specific integration.
+    ``external_id`` (from BaseNode) is set when the resource maps to a concrete
+    object in an external system. Leave it unset for synthetic or type-level
+    targets (e.g. a Salesforce SObject name). ``name`` and ``uri`` are display
+    fields that may change. ``kind`` describes the resource type without coupling
+    the schema to any specific integration.
 
     Access is expressed as a HAS_PERMISSION edge from the subject to this node.
     The permission type is carried as a property on the edge itself so that new
     permission types require no schema change.
     """
 
-    external_id = StringProperty(required=True, unique_index=True)
     name = StringProperty(required=True)
     kind = StringProperty(required=True)
     uri = StringProperty()
