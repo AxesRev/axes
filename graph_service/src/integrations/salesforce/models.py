@@ -10,6 +10,7 @@ PERMISSION_EDIT = "edit"
 PERMISSION_DELETE = "delete"
 PERMISSION_VIEW_ALL = "view_all"
 PERMISSION_MODIFY_ALL = "modify_all"
+PERMISSION_OWNER = "owner"
 
 PERMISSION_EFFECT_GRANT = "grant"
 PERMISSION_EFFECT_MUTE = "mute"
@@ -67,6 +68,15 @@ def build_field_permission_extra(*fields: str) -> dict[str, object]:
     return SalesforcePermissionExtra(
         access_type="field",
         fields=list(fields),
+    ).model_dump()
+
+
+def build_owner_permission_extra(*, record_id: str) -> dict[str, object]:
+    """Return serialized extra for record ownership."""
+    return SalesforceRecordPermissionExtra(
+        record_id=record_id,
+        row_cause="Owner",
+        access_level="all",
     ).model_dump()
 
 
