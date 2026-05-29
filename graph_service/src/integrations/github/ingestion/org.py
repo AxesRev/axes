@@ -36,7 +36,7 @@ async def upsert_connection(
     connection_row = AppConnectionRow(
         app=GITHUB_APP,
         external_id=connection_external_id,
-        name=account.login,
+        name=GITHUB_APP,
         extra=extra.model_dump(),
     )
     await merge_app_connections([connection_row])
@@ -49,5 +49,5 @@ async def upsert_connection(
             )
         ]
     )
-    logger.info("merged_app_connection login=%s", account.login)
+    logger.info("merged_app_connection login=%s name=%s", account.login, GITHUB_APP)
     return ConnectionRef(app=GITHUB_APP, external_id=connection_external_id)

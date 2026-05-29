@@ -58,7 +58,7 @@ def identity_row_from_user(
     return AppIdentityRow(
         app=SALESFORCE_APP,
         external_id=str(user["Id"]),
-        name=str(user.get("Username") or user.get("Name") or user["Id"]),
+        name=str(user.get("Name") or user.get("Username") or user["Id"]),
         extra=extra.model_dump(),
         connection_app=connection["app"],
         connection_external_id=connection["external_id"],

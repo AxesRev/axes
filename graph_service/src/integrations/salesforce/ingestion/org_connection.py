@@ -53,7 +53,6 @@ async def upsert_connection(
 ) -> ConnectionRef:
     org = fetch_organization(sf)
     org_id = str(org["Id"])
-    org_name = str(org.get("Name") or org_id)
     instance_url = str(getattr(sf, "sf_instance", "") or "")
     if instance_url and not instance_url.startswith("http"):
         instance_url = f"https://{instance_url}"
@@ -66,7 +65,7 @@ async def upsert_connection(
     connection_row = AppConnectionRow(
         app=SALESFORCE_APP,
         external_id=org_id,
-        name=org_name,
+        name=SALESFORCE_APP,
         extra=extra.model_dump(),
     )
     await merge_app_connections([connection_row])
@@ -79,5 +78,5 @@ async def upsert_connection(
             )
         ]
     )
-    logger.info("merged_app_connection org_id=%s name=%s", org_id, org_name)
+    logger.info("merged_app_connection org_id=%s name=%s", org_id, SALESFORCE_APP)
     return ConnectionRef(app=SALESFORCE_APP, external_id=org_id)
