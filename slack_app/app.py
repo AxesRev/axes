@@ -1,8 +1,7 @@
-"""FastAPI app with Slack routes, Auth0 tenant API, and GitHub identity linking."""
+"""FastAPI app with Slack routes and Auth0 tenant API."""
 
 from fastapi import FastAPI
 
-from app_integrations.github.router import router as github_auth_router
 from slack_app.routes import router as slack_router
 from slack_app.tenant_routes import router as tenant_router
 
@@ -12,7 +11,6 @@ app = FastAPI(
 )
 
 app.include_router(slack_router)
-app.include_router(github_auth_router)
 app.include_router(tenant_router)
 
 

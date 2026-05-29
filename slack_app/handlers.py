@@ -7,6 +7,8 @@ from typing import Any
 
 from langgraph_sdk import get_client
 
+from aegra_api.core.orm import get_session
+from app_integrations.slack.service import get_or_create_slack_user_identity_for_team
 from slack_app.client import post_message
 from slack_app.config import slack_settings
 from slack_app.replies import slack_replies_from_updates
@@ -20,8 +22,7 @@ SLACK_THREAD_MAP: dict[str, str] = {}
 
 
 async def handle_message_event(event: dict[str, Any], *, team_id: str | None = None) -> None:
-    """Handle an incoming Slack message by resolving the sender's GitHub identity
-    and then invoking the LangGraph agent.
+    """Handle an incoming Slack message by invoking the LangGraph agent.
 
     Threading behaviour:
     - A **top-level message** (no ``thread_ts`` in the event) always starts a
@@ -29,13 +30,6 @@ async def handle_message_event(event: dict[str, Any], *, team_id: str | None = N
     - A **thread reply** (``thread_ts`` present) continues the LangGraph thread
       that was created when the parent Slack message arrived.  If no mapping
       exists (e.g. the thread pre-dates this bot), the reply is silently ignored.
-
-    Flow:
-    1. Extract the Slack ``user_id`` from the event.
-    2. Resolve the GitHub identity via ``handle_access_request``.
-    3. If the identity is not yet linked, reply with a connect link and stop.
-    4. If linked, invoke the agent with the verified ``github_username`` so the
-       agent never trusts user-supplied identity claims.
 
     Args:
         event: The raw Slack event payload.
@@ -76,58 +70,22 @@ async def handle_message_event(event: dict[str, Any], *, team_id: str | None = N
 
     logger.info("Received message from %s in channel %s: %s", user_id, channel, text)
 
-    # --- Identity resolution ---------------------------------------------------
-    # Import here to avoid a circular dependency at module load time if handlers
-    # is imported before the DB is initialised; the import itself is cheap.
-    from aegra_api.core.orm import get_session
-    from app_integrations.github.service import handle_access_request
-    from app_integrations.github.settings import github_settings
-    from app_integrations.slack.service import get_or_create_slack_user_identity_for_team
-
-    access_result = None
+    identity = None
     async for session in get_session():
         identity = await get_or_create_slack_user_identity_for_team(
             slack_user_id=user_id,
             team_id=resolved_team_id,
             session=session,
         )
-        if identity is None:
-            break
+        break
 
-        access_result = await handle_access_request(
-            user_id,
-            {"text": text, "channel": channel},
-            session,
-            server_url=github_settings.SERVER_URL,
-        )
-
-    if access_result is None:
+    if identity is None:
         logger.info(
             "Ignoring Slack message from unregistered workspace team_id=%s user=%s",
             resolved_team_id,
             user_id,
         )
         return
-
-    if not access_result.linked:
-        # User has not linked their GitHub account yet — prompt them.
-        not_linked = access_result.not_linked
-        connect_url = not_linked.connect_url if not_linked else ""
-        await post_message(
-            channel=channel,
-            text=(
-                f"Before I can act on your behalf, I need to know your GitHub account. "
-                f"Please connect it here: {connect_url}"
-            ),
-            thread_ts=reply_thread_ts,
-        )
-        return
-
-    # Identity is confirmed — use only the stored values from the database.
-    assert access_result.identity is not None
-    github_username: str = access_result.identity.github_username
-    github_user_id: str = access_result.identity.github_user_id
-    github_installation_id: str = access_result.identity.github_installation_id
 
     # --- Agent invocation ------------------------------------------------------
     client = get_client(url=slack_settings.LANGGRAPH_API_URL, headers={"X-Slack-User-ID": user_id})
@@ -158,14 +116,7 @@ async def handle_message_event(event: dict[str, Any], *, team_id: str | None = N
             thread_id=thread_id,
             assistant_id="agent",
             input={"messages": [{"role": "user", "content": text}]},
-            config={
-                "configurable": {
-                    "slack_user_id": user_id,
-                    "github_username": github_username,
-                    "github_user_id": github_user_id,
-                    "github_installation_id": github_installation_id,
-                }
-            },
+            config={"configurable": {"slack_user_id": user_id}},
             stream_mode=["updates"],
         ):
             if chunk.event == "updates":
