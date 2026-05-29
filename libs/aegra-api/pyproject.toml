@@ -1,6 +1,6 @@
 [project]
 name = "aegra-api"
-version = "0.7.14"
+version = "0.7.15"
 description = "Aegra core API - Self-hosted Agent Protocol server"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -46,6 +46,7 @@ dependencies = [
     "cryptography>=46.0.5",
     "tqdm>=4.67.3",
     "python-frontmatter>=1.1.0",
+    "slack-bolt>=1.28.0",
 ]
 
 [project.urls]
