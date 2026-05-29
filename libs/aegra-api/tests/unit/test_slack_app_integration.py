@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from app_integrations.github.models import Tenant
 from app_integrations.slack.constants import SLACK_APP_NAME
 from app_integrations.slack.service import (
     find_slack_app_integration,
@@ -21,26 +22,46 @@ def test_slack_integration_config_contains_team_id() -> None:
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_upsert_slack_app_integration_creates_tenant_and_integration() -> None:
+async def test_upsert_slack_app_integration_links_workspace_to_existing_tenant() -> None:
+    tenant = Tenant(id="tenant-1", name="Acme Corp")
     session = AsyncMock()
-    execute_result = MagicMock()
-    execute_result.scalar_one_or_none.return_value = None
-    session.execute = AsyncMock(return_value=execute_result)
-    session.flush = AsyncMock()
+    tenant_result = MagicMock()
+    tenant_result.scalar_one_or_none.return_value = tenant
+    integration_result = MagicMock()
+    integration_result.scalar_one_or_none.return_value = None
+    session.execute = AsyncMock(side_effect=[tenant_result, integration_result])
     session.commit = AsyncMock()
     session.add = MagicMock()
 
-    tenant, integration = await upsert_slack_app_integration(
+    saved_tenant, integration = await upsert_slack_app_integration(
+        tenant_id="tenant-1",
         team_id="T01234567",
-        team_name="Acme Corp",
+        team_name="Acme Slack",
         session=session,
     )
 
-    assert tenant.name == "Acme Corp"
+    assert saved_tenant is tenant
     assert integration.app_name == SLACK_APP_NAME
     assert integration.config == {"team_id": "T01234567"}
-    assert integration.tenant_id == tenant.id
+    assert integration.tenant_id == "tenant-1"
     session.commit.assert_awaited_once()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_upsert_slack_app_integration_rejects_unknown_tenant() -> None:
+    session = AsyncMock()
+    tenant_result = MagicMock()
+    tenant_result.scalar_one_or_none.return_value = None
+    session.execute = AsyncMock(return_value=tenant_result)
+
+    with pytest.raises(ValueError, match="tenant not found"):
+        await upsert_slack_app_integration(
+            tenant_id="missing-tenant",
+            team_id="T01234567",
+            team_name="Acme Slack",
+            session=session,
+        )
 
 
 @pytest.mark.unit

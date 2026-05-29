@@ -33,33 +33,39 @@ async def find_slack_app_integration(
 
 async def upsert_slack_app_integration(
     *,
+    tenant_id: str,
     team_id: str,
     team_name: str,
     session: AsyncSession,
 ) -> tuple[Tenant, AppIntegration]:
-    """Create or update the Slack ``app_integrations`` row for a workspace install."""
+    """Attach a Slack workspace install to an existing tenant."""
+    result = await session.execute(select(Tenant).where(Tenant.id == tenant_id))
+    tenant = result.scalar_one_or_none()
+    if tenant is None:
+        raise ValueError(f"tenant not found: {tenant_id}")
+
     integration = await find_slack_app_integration(team_id=team_id, session=session)
     config = slack_integration_config(team_id=team_id)
 
     if integration is not None:
+        if integration.tenant_id != tenant_id:
+            raise ValueError(f"Slack team {team_id} is already linked to tenant {integration.tenant_id}")
         integration.config = config
-        result = await session.execute(select(Tenant).where(Tenant.id == integration.tenant_id))
-        tenant = result.scalar_one()
-        tenant.name = team_name
         await session.commit()
-        logger.info("slack_app_integration_updated", team_id=team_id, tenant_id=tenant.id)
+        logger.info("slack_app_integration_updated", team_id=team_id, tenant_id=tenant_id)
         return tenant, integration
 
-    tenant = Tenant(name=team_name)
-    session.add(tenant)
-    await session.flush()
-
     integration = AppIntegration(
-        tenant_id=tenant.id,
+        tenant_id=tenant_id,
         app_name=SLACK_APP_NAME,
         config=config,
     )
     session.add(integration)
     await session.commit()
-    logger.info("slack_app_integration_created", team_id=team_id, tenant_id=tenant.id)
+    logger.info(
+        "slack_app_integration_created",
+        team_id=team_id,
+        team_name=team_name,
+        tenant_id=tenant_id,
+    )
     return tenant, integration

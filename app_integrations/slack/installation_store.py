@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import logging
 
-from slack_bolt.oauth.installation_store.async_installation_store import AsyncInstallationStore
-from slack_bolt.oauth.models.bot import Bot
-from slack_bolt.oauth.models.installation import Installation
+from slack_sdk.oauth.installation_store.async_installation_store import AsyncInstallationStore
+from slack_sdk.oauth.installation_store.models.bot import Bot
+from slack_sdk.oauth.installation_store.models.installation import Installation
 
 from aegra_api.core.orm import get_session
 from app_integrations.slack.service import upsert_slack_app_integration
@@ -26,11 +26,16 @@ class AxesInstallationStore(AsyncInstallationStore):
     ) -> None:
         team_id: str = installation.team_id or ""
         team_name: str = installation.team_name or team_id
+        tenant_id: str | None = installation.custom_values.get("tenant_id")
         if not team_id:
             (logger or logging.getLogger(__name__)).warning("slack_installation_missing_team_id; skipping save")
             return
+        if not tenant_id:
+            (logger or logging.getLogger(__name__)).warning("slack_installation_missing_tenant_id; skipping save")
+            return
         async for session in get_session():
             await upsert_slack_app_integration(
+                tenant_id=tenant_id,
                 team_id=team_id,
                 team_name=team_name,
                 session=session,

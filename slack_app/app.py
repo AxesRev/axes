@@ -6,25 +6,44 @@ import asyncio
 import logging
 
 from slack_bolt.async_app import AsyncApp
-from slack_bolt.oauth.async_oauth_flow import AsyncOAuthFlow
-from slack_bolt.oauth.oauth_settings import OAuthSettings
-from slack_bolt.oauth.state_store.file import FileOAuthStateStore
+from slack_bolt.oauth.async_oauth_settings import AsyncOAuthSettings
 
 from app_integrations.slack.installation_store import AxesInstallationStore
+from app_integrations.slack.oauth_flow import TenantAsyncOAuthFlow
+from app_integrations.slack.state_store import TenantOAuthStateStore
 from slack_app.config import slack_settings
 from slack_app.handlers import handle_message_event
 
 logger = logging.getLogger(__name__)
 
-_oauth_flow: AsyncOAuthFlow | None = None
+# Must match scopes in slack_app/slack_manifest.json oauth_config.scopes.bot
+_SLACK_BOT_SCOPES = [
+    "app_mentions:read",
+    "channels:history",
+    "chat:write",
+    "commands",
+    "im:write",
+    "im:read",
+    "im:history",
+]
+
+_oauth_flow: TenantAsyncOAuthFlow | None = None
 if slack_settings.SLACK_CLIENT_ID and slack_settings.SLACK_CLIENT_SECRET:
-    _oauth_flow = AsyncOAuthFlow(
-        settings=OAuthSettings(
+    _state_store = TenantOAuthStateStore(
+        expiration_seconds=600,
+        client_id=slack_settings.SLACK_CLIENT_ID,
+    )
+    _oauth_flow = TenantAsyncOAuthFlow(
+        settings=AsyncOAuthSettings(
             client_id=slack_settings.SLACK_CLIENT_ID,
             client_secret=slack_settings.SLACK_CLIENT_SECRET,
+            scopes=_SLACK_BOT_SCOPES,
             installation_store=AxesInstallationStore(),
-            state_store=FileOAuthStateStore(expiration_seconds=300),
+            state_store=_state_store,
             redirect_uri=slack_settings.slack_oauth_redirect_uri,
+            install_path="/slack/oauth/install",
+            redirect_uri_path="/slack/oauth/callback",
+            install_page_rendering_enabled=False,
         )
     )
 
