@@ -6,7 +6,7 @@ import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app_integrations.github.models import AppIntegration, Tenant
+from app_integrations.github.models import AppIntegration, Tenant, UserIdentity
 from app_integrations.slack.constants import SLACK_APP_NAME
 
 logger = structlog.getLogger(__name__)
@@ -69,3 +69,32 @@ async def upsert_slack_app_integration(
         tenant_id=tenant_id,
     )
     return tenant, integration
+
+
+async def get_or_create_slack_user_identity_for_team(
+    *,
+    slack_user_id: str,
+    team_id: str,
+    session: AsyncSession,
+) -> UserIdentity | None:
+    """Get or create a Slack user identity scoped to the tenant that owns *team_id*."""
+    integration = await find_slack_app_integration(team_id=team_id, session=session)
+    if integration is None:
+        return None
+
+    tenant_id = integration.tenant_id
+    result = await session.execute(select(UserIdentity).where(UserIdentity.slack_user_id == slack_user_id))
+    identity = result.scalar_one_or_none()
+    if identity is not None:
+        return identity
+
+    identity = UserIdentity(slack_user_id=slack_user_id, tenant_id=tenant_id)
+    session.add(identity)
+    await session.commit()
+    logger.info(
+        "slack_user_identity_created",
+        slack_user_id=slack_user_id,
+        team_id=team_id,
+        tenant_id=tenant_id,
+    )
+    return identity

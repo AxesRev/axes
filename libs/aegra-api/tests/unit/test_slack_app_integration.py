@@ -6,10 +6,11 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from app_integrations.github.models import Tenant
+from app_integrations.github.models import AppIntegration, Tenant, UserIdentity
 from app_integrations.slack.constants import SLACK_APP_NAME
 from app_integrations.slack.service import (
     find_slack_app_integration,
+    get_or_create_slack_user_identity_for_team,
     slack_integration_config,
     upsert_slack_app_integration,
 )
@@ -76,3 +77,75 @@ async def test_find_slack_app_integration_queries_by_team_id_in_config() -> None
 
     assert result is None
     session.execute.assert_awaited_once()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_get_or_create_slack_user_identity_for_team_returns_none_when_team_unregistered() -> None:
+    session = AsyncMock()
+    integration_result = MagicMock()
+    integration_result.scalar_one_or_none.return_value = None
+    session.execute = AsyncMock(return_value=integration_result)
+
+    identity = await get_or_create_slack_user_identity_for_team(
+        slack_user_id="U123",
+        team_id="T01234567",
+        session=session,
+    )
+
+    assert identity is None
+    session.commit.assert_not_called()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_get_or_create_slack_user_identity_for_team_creates_identity_for_registered_team() -> None:
+    integration = AppIntegration(
+        id="int-1",
+        tenant_id="tenant-1",
+        app_name=SLACK_APP_NAME,
+        config={"team_id": "T01234567"},
+    )
+    session = AsyncMock()
+    integration_result = MagicMock()
+    integration_result.scalar_one_or_none.side_effect = [integration, None]
+    session.execute = AsyncMock(side_effect=[integration_result, integration_result])
+    session.commit = AsyncMock()
+    session.add = MagicMock()
+
+    identity = await get_or_create_slack_user_identity_for_team(
+        slack_user_id="U123",
+        team_id="T01234567",
+        session=session,
+    )
+
+    assert identity is not None
+    assert identity.slack_user_id == "U123"
+    assert identity.tenant_id == "tenant-1"
+    session.add.assert_called_once()
+    session.commit.assert_awaited_once()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_get_or_create_slack_user_identity_for_team_returns_existing_identity() -> None:
+    integration = AppIntegration(
+        id="int-1",
+        tenant_id="tenant-1",
+        app_name=SLACK_APP_NAME,
+        config={"team_id": "T01234567"},
+    )
+    existing = UserIdentity(id="identity-1", slack_user_id="U123", tenant_id="tenant-1")
+    session = AsyncMock()
+    integration_result = MagicMock()
+    integration_result.scalar_one_or_none.side_effect = [integration, existing]
+    session.execute = AsyncMock(side_effect=[integration_result, integration_result])
+
+    identity = await get_or_create_slack_user_identity_for_team(
+        slack_user_id="U123",
+        team_id="T01234567",
+        session=session,
+    )
+
+    assert identity is existing
+    session.commit.assert_not_called()

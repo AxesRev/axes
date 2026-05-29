@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 SLACK_THREAD_MAP: dict[str, str] = {}
 
 
-async def handle_message_event(event: dict[str, Any]) -> None:
+async def handle_message_event(event: dict[str, Any], *, team_id: str | None = None) -> None:
     """Handle an incoming Slack message by resolving the sender's GitHub identity
     and then invoking the LangGraph agent.
 
@@ -42,6 +42,11 @@ async def handle_message_event(event: dict[str, Any]) -> None:
     """
     user_id: str | None = event.get("user")
     if not user_id:
+        return
+
+    resolved_team_id = team_id or event.get("team")
+    if not isinstance(resolved_team_id, str) or not resolved_team_id:
+        logger.debug("Ignoring Slack message without team_id for user %s", user_id)
         return
 
     text: str = event.get("text", "")
@@ -77,14 +82,32 @@ async def handle_message_event(event: dict[str, Any]) -> None:
     from aegra_api.core.orm import get_session
     from app_integrations.github.service import handle_access_request
     from app_integrations.github.settings import github_settings
+    from app_integrations.slack.service import get_or_create_slack_user_identity_for_team
 
+    access_result = None
     async for session in get_session():
+        identity = await get_or_create_slack_user_identity_for_team(
+            slack_user_id=user_id,
+            team_id=resolved_team_id,
+            session=session,
+        )
+        if identity is None:
+            break
+
         access_result = await handle_access_request(
             user_id,
             {"text": text, "channel": channel},
             session,
             server_url=github_settings.SERVER_URL,
         )
+
+    if access_result is None:
+        logger.info(
+            "Ignoring Slack message from unregistered workspace team_id=%s user=%s",
+            resolved_team_id,
+            user_id,
+        )
+        return
 
     if not access_result.linked:
         # User has not linked their GitHub account yet — prompt them.

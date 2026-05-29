@@ -55,10 +55,13 @@ bolt_app = AsyncApp(
 
 
 @bolt_app.event("message")
-async def on_message(event: dict, logger: logging.Logger) -> None:  # type: ignore[override]
+async def on_message(event: dict, body: dict, logger: logging.Logger) -> None:  # type: ignore[override]
     if event.get("subtype") is not None:
         return
-    asyncio.create_task(handle_message_event(event))
+    team_id = body.get("team_id")
+    if not isinstance(team_id, str):
+        team_id = event.get("team") if isinstance(event.get("team"), str) else None
+    asyncio.create_task(handle_message_event(event, team_id=team_id))
 
 
 @bolt_app.command("/axes")
