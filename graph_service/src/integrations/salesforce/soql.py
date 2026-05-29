@@ -22,7 +22,7 @@ def format_id_in_clause(ids: Iterable[str]) -> str:
 def build_user_by_ids_soql(ids: Iterable[str]) -> str:
     id_clause = format_id_in_clause(ids)
     return (
-        "SELECT Id, Username, Name, ProfileId, UserRoleId, ManagerId, IsActive "
+        "SELECT Id, Username, Name, Email, ProfileId, UserRoleId, ManagerId, IsActive "
         "FROM User WHERE Id IN (" + id_clause + ")"  # nosec B608
     )
 

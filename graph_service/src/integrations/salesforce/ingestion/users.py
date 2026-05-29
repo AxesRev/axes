@@ -7,6 +7,7 @@ from typing import Any
 
 from simple_salesforce import Salesforce
 
+from integrations.identity_correlation import correlate_app_identities_by_email, correlation_row_from_email
 from integrations.salesforce.client import query_all
 from integrations.salesforce.ingestion.shared import (
     SALESFORCE_APP,
@@ -20,7 +21,7 @@ from integrations.salesforce.soql import build_user_by_ids_soql
 logger = logging.getLogger(__name__)
 
 _USER_SOQL = """
-SELECT Id, Username, Name, ProfileId, UserRoleId, ManagerId, IsActive
+SELECT Id, Username, Name, Email, ProfileId, UserRoleId, ManagerId, IsActive
 FROM User
 WHERE IsActive = true
 """
@@ -30,6 +31,16 @@ _ROLE_SOQL = "SELECT Id, Name, DeveloperName FROM UserRole"
 
 def _role_name_by_id(roles: list[dict[str, Any]]) -> dict[str, str]:
     return {str(row["Id"]): str(row.get("Name") or row.get("DeveloperName") or row["Id"]) for row in roles}
+
+
+def email_from_user(user: dict[str, Any]) -> str | None:
+    email = user.get("Email")
+    if email and str(email).strip():
+        return str(email)
+    username = user.get("Username")
+    if username and "@" in str(username):
+        return str(username)
+    return None
 
 
 def identity_row_from_user(
@@ -54,6 +65,23 @@ def identity_row_from_user(
     )
 
 
+async def _correlate_users(users: list[dict[str, Any]]) -> None:
+    rows = [
+        row
+        for user in users
+        if (
+            row := correlation_row_from_email(
+                app=SALESFORCE_APP,
+                app_identity_external_id=str(user["Id"]),
+                email=email_from_user(user),
+                display_name=str(user.get("Name") or user.get("Username") or user["Id"]),
+            )
+        )
+        is not None
+    ]
+    await correlate_app_identities_by_email(rows)
+
+
 async def ingest_users(
     sf: Salesforce,
     *,
@@ -64,6 +92,7 @@ async def ingest_users(
     role_name_by_id = _role_name_by_id(roles)
     rows = [identity_row_from_user(user, connection=connection, role_name_by_id=role_name_by_id) for user in users]
     await merge_app_identities(rows)
+    await _correlate_users(users)
     identity_external_ids = {row["external_id"]: row["external_id"] for row in rows}
     logger.info("merged_app_identities count=%s", len(rows))
     return identity_external_ids
@@ -86,4 +115,5 @@ async def ensure_identities_for_ids(
     rows = [identity_row_from_user(user, connection=connection, role_name_by_id=role_name_by_id) for user in users]
     if rows:
         await merge_app_identities(rows)
+        await _correlate_users(users)
         logger.info("ensure_identities_for_ids added=%s", len(rows))
