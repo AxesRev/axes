@@ -17,7 +17,6 @@ from aegra_api.core.orm import get_session
 def tenant_api_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     monkeypatch.setattr("slack_app.config.slack_settings.AUTH0_DOMAIN", "dev-example.us.auth0.com")
     monkeypatch.setattr("slack_app.config.slack_settings.AUTH0_CLIENT_ID", "test-client-id")
-    monkeypatch.setattr("slack_app.config.slack_settings.AUTH0_AUDIENCE", "https://axes-api")
 
     app = FastAPI()
     app.include_router(tenant_router)

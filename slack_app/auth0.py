@@ -19,18 +19,12 @@ def _auth0_issuer() -> str:
     return f"https://{domain}/"
 
 
-def _accepted_audiences() -> list[str]:
-    audiences: list[str] = []
+def _id_token_audience() -> str:
     client_id = slack_settings.AUTH0_CLIENT_ID.strip()
-    api_audience = slack_settings.AUTH0_AUDIENCE.strip()
-    if client_id:
-        audiences.append(client_id)
-    if api_audience:
-        audiences.append(api_audience)
-    if not audiences:
-        msg = "AUTH0_CLIENT_ID or AUTH0_AUDIENCE must be configured"
+    if not client_id:
+        msg = "AUTH0_CLIENT_ID must be configured"
         raise RuntimeError(msg)
-    return audiences
+    return client_id
 
 
 def _get_jwks_client() -> PyJWKClient:
@@ -47,23 +41,15 @@ def _get_jwks_client() -> PyJWKClient:
 
 def _decode_auth0_token(token: str) -> dict:
     signing_key = _get_jwks_client().get_signing_key_from_jwt(token)
-    last_error: jwt.PyJWTError | None = None
-    for audience in _accepted_audiences():
-        try:
-            decoded = jwt.decode(
-                token,
-                signing_key.key,
-                algorithms=["RS256"],
-                audience=audience,
-                issuer=_auth0_issuer(),
-            )
-            if isinstance(decoded, dict):
-                return decoded
-        except jwt.PyJWTError as exc:
-            last_error = exc
-            continue
-    if last_error is not None:
-        raise last_error
+    decoded = jwt.decode(
+        token,
+        signing_key.key,
+        algorithms=["RS256"],
+        audience=_id_token_audience(),
+        issuer=_auth0_issuer(),
+    )
+    if isinstance(decoded, dict):
+        return decoded
     msg = "Token validation failed"
     raise RuntimeError(msg)
 
