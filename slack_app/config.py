@@ -12,7 +12,10 @@ class SlackSettings(BaseSettings):
     """Slack app settings."""
 
     model_config = SettingsConfigDict(
-        env_file=str(SLACK_APP_DIR / ".env"),
+        env_file=(
+            str(SLACK_APP_DIR / ".env"),
+            str(SLACK_APP_DIR.parent / ".env"),
+        ),
         case_sensitive=True,
         extra="ignore",
     )
@@ -23,6 +26,9 @@ class SlackSettings(BaseSettings):
     SLACK_CLIENT_SECRET: str = ""
     SERVER_URL: str = "http://localhost:8000"
     LANGGRAPH_API_URL: str = "http://localhost:8000"
+    AUTH0_DOMAIN: str = ""
+    AUTH0_CLIENT_ID: str = ""
+    AUTH0_AUDIENCE: str = ""
 
     @property
     def slack_oauth_redirect_uri(self) -> str:

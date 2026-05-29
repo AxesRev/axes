@@ -21,6 +21,8 @@ class Tenant(Base):
 
     id: Mapped[str] = mapped_column(Text, primary_key=True, default=lambda: str(uuid.uuid4()))
     name: Mapped[str] = mapped_column(Text, nullable=False)
+    email: Mapped[str | None] = mapped_column(Text, nullable=True)
+    auth0_sub: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class AppIntegration(Base):

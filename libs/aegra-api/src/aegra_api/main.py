@@ -121,13 +121,25 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
 
 
 # Define core exception handlers
+def _http_exception_message(exc: HTTPException) -> str:
+    if isinstance(exc.detail, str):
+        return exc.detail
+    if isinstance(exc.detail, dict):
+        for key in ("message", "error_description", "error"):
+            value = exc.detail.get(key)
+            if isinstance(value, str) and value:
+                return value
+        return str(exc.detail)
+    return str(exc.detail)
+
+
 async def agent_protocol_exception_handler(_request: Request, exc: HTTPException) -> JSONResponse:
     """Convert HTTP exceptions to Agent Protocol error format"""
     return JSONResponse(
         status_code=exc.status_code,
         content=AgentProtocolError(
             error=get_error_type(exc.status_code),
-            message=exc.detail,
+            message=_http_exception_message(exc),
             details=getattr(exc, "details", None),
         ).model_dump(),
     )

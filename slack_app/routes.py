@@ -6,7 +6,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import Response
 from slack_bolt.adapter.fastapi.async_handler import AsyncSlackRequestHandler
 
-from slack_app.app import bolt_app
+from slack_app.bolt import bolt_app
 
 router = APIRouter()
 _handler = AsyncSlackRequestHandler(bolt_app)
