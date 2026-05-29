@@ -13,6 +13,8 @@ export type AppIntegrationRecord = {
 };
 
 const SLACK_APP_NAME = "slack";
+const GITHUB_APP_NAME = "github";
+const SALESFORCE_APP_NAME = "salesforce";
 
 function apiBaseUrl(): string {
   return (process.env.AEGRA_API_URL ?? "http://127.0.0.1:8000").replace(/\/$/, "");
@@ -80,16 +82,41 @@ export async function fetchAppIntegrationsForSession(
   return fetchAppIntegrationsForAccessToken(idToken);
 }
 
-export function findSlackIntegration(
+export function findIntegration(
   integrations: AppIntegrationRecord[],
+  appName: string,
 ): AppIntegrationRecord | null {
-  return integrations.find((integration) => integration.app_name === SLACK_APP_NAME) ?? null;
+  return integrations.find((integration) => integration.app_name === appName) ?? null;
 }
 
-export function slackTeamId(integration: AppIntegrationRecord | null): string | null {
+function configString(integration: AppIntegrationRecord | null, key: string): string | null {
   if (!integration) {
     return null;
   }
-  const teamId = integration.config.team_id;
-  return typeof teamId === "string" && teamId ? teamId : null;
+  const value = integration.config[key];
+  return typeof value === "string" && value ? value : null;
+}
+
+export function findSlackIntegration(integrations: AppIntegrationRecord[]): AppIntegrationRecord | null {
+  return findIntegration(integrations, SLACK_APP_NAME);
+}
+
+export function findGithubIntegration(integrations: AppIntegrationRecord[]): AppIntegrationRecord | null {
+  return findIntegration(integrations, GITHUB_APP_NAME);
+}
+
+export function findSalesforceIntegration(integrations: AppIntegrationRecord[]): AppIntegrationRecord | null {
+  return findIntegration(integrations, SALESFORCE_APP_NAME);
+}
+
+export function slackTeamId(integration: AppIntegrationRecord | null): string | null {
+  return configString(integration, "team_id");
+}
+
+export function githubInstallationId(integration: AppIntegrationRecord | null): string | null {
+  return configString(integration, "installation_id");
+}
+
+export function salesforceOrgId(integration: AppIntegrationRecord | null): string | null {
+  return configString(integration, "org_id");
 }

@@ -1,9 +1,14 @@
 import { auth0 } from "@/lib/auth0";
+import { IntegrationSection } from "@/app/integration-section";
 import {
   buildSlackInstallUrl,
   fetchAppIntegrationsForSession,
+  findGithubIntegration,
+  findSalesforceIntegration,
   findSlackIntegration,
+  githubInstallationId,
   resolveTenantForSession,
+  salesforceOrgId,
   slackTeamId,
   type AppIntegrationRecord,
   type TenantRecord,
@@ -73,9 +78,12 @@ export default async function Home() {
     : { integrations: [], error: null };
   const tenantId = tenant?.id ?? null;
   const tenantName = tenant?.name ?? null;
-  const slackIntegration = findSlackIntegration(integrations);
-  const installedSlackTeamId = slackTeamId(slackIntegration);
-  const slackInstallUrl = tenantId && !installedSlackTeamId ? buildSlackInstallUrl(tenantId) : null;
+
+  const slackTeam = slackTeamId(findSlackIntegration(integrations));
+  const githubInstallation = githubInstallationId(findGithubIntegration(integrations));
+  const salesforceOrg = salesforceOrgId(findSalesforceIntegration(integrations));
+
+  const slackInstallUrl = tenantId && !slackTeam ? buildSlackInstallUrl(tenantId) : null;
 
   return (
     <div className="flex flex-1 flex-col items-center justify-center bg-zinc-50 px-6 py-24 font-sans dark:bg-black">
@@ -114,35 +122,30 @@ export default async function Home() {
         </section>
 
         {tenantId ? (
-          <section className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
-            <h2 className="text-sm font-medium text-zinc-950 dark:text-zinc-50">Slack</h2>
-            {integrationsError ? (
-              <p className="mt-2 text-sm text-red-600">{integrationsError}</p>
-            ) : installedSlackTeamId ? (
-              <dl className="mt-3 space-y-2 text-sm text-zinc-600 dark:text-zinc-400">
-                <div>
-                  <dt className="font-medium text-zinc-950 dark:text-zinc-50">Status</dt>
-                  <dd>Installed</dd>
-                </div>
-                <div>
-                  <dt className="font-medium text-zinc-950 dark:text-zinc-50">Team ID</dt>
-                  <dd className="font-mono text-xs break-all">{installedSlackTeamId}</dd>
-                </div>
-              </dl>
-            ) : slackInstallUrl ? (
-              <>
-                <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
-                  Install the Axes Slack app for this tenant.
-                </p>
-                <a
-                  href={slackInstallUrl}
-                  className="mt-4 inline-flex h-10 items-center justify-center rounded-full bg-zinc-950 px-4 text-sm font-medium text-white transition-colors hover:bg-zinc-800 dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200"
-                >
-                  Install Slack app
-                </a>
-              </>
-            ) : null}
-          </section>
+          <>
+            <IntegrationSection
+              title="Slack"
+              error={integrationsError}
+              installedFields={slackTeam ? [{ label: "Team ID", value: slackTeam }] : null}
+              notConnectedMessage="Install the Axes Slack app for this tenant."
+              installUrl={slackInstallUrl}
+              installLabel="Install Slack app"
+            />
+            <IntegrationSection
+              title="GitHub"
+              error={integrationsError}
+              installedFields={
+                githubInstallation ? [{ label: "Installation ID", value: githubInstallation }] : null
+              }
+              notConnectedMessage="GitHub is not connected for this tenant."
+            />
+            <IntegrationSection
+              title="Salesforce"
+              error={integrationsError}
+              installedFields={salesforceOrg ? [{ label: "Org ID", value: salesforceOrg }] : null}
+              notConnectedMessage="Salesforce is not connected for this tenant."
+            />
+          </>
         ) : null}
       </main>
     </div>
