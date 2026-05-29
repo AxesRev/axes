@@ -11,6 +11,13 @@ from integrations.salesforce.settings import SalesforceAppSettings, get_salesfor
 
 logger = logging.getLogger(__name__)
 
+_MUTING_PERMISSION_SET_GROUP_SOQL = (
+    "SELECT Id, PermissionSetGroupId, PermissionSetId FROM PermissionSetGroupMutingPermissionSet"
+)
+_MUTING_SOBJECT = "PermissionSetGroupMutingPermissionSet"
+
+_queryable_sobjects_cache: dict[str, frozenset[str]] = {}
+
 
 def make_salesforce_client(
     *,
@@ -44,6 +51,28 @@ def query_all_or_empty(sf: Salesforce, soql: str, *, context: str) -> list[dict[
     except SalesforceMalformedRequest as exc:
         logger.warning("optional_soql_skipped context=%s error=%s", context, exc)
         return []
+
+
+def _queryable_sobject_names(sf: Salesforce) -> frozenset[str]:
+    cache_key = str(getattr(sf, "sf_instance", "") or id(sf))
+    cached = _queryable_sobjects_cache.get(cache_key)
+    if cached is not None:
+        return cached
+    names = frozenset(
+        str(summary["name"])
+        for summary in describe_global(sf)
+        if isinstance(summary.get("name"), str) and summary.get("queryable")
+    )
+    _queryable_sobjects_cache[cache_key] = names
+    return names
+
+
+def query_muting_permission_set_links(sf: Salesforce) -> list[dict[str, Any]]:
+    """Return permission-set-group muting links when the org exposes that object."""
+    if _MUTING_SOBJECT not in _queryable_sobject_names(sf):
+        logger.debug("sobject_not_queryable name=%s", _MUTING_SOBJECT)
+        return []
+    return query_all(sf, _MUTING_PERMISSION_SET_GROUP_SOQL)
 
 
 def query_batches(sf: Salesforce, soql: str, *, batch_size: int = 2000) -> Iterator[list[dict[str, Any]]]:

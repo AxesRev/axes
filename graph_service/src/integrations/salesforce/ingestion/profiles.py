@@ -7,7 +7,7 @@ from typing import Any, Literal
 
 from simple_salesforce import Salesforce
 
-from integrations.salesforce.client import query_all, query_all_or_empty
+from integrations.salesforce.client import query_all, query_muting_permission_set_links
 from integrations.salesforce.ingestion.shared import (
     SALESFORCE_APP,
     ConnectionRef,
@@ -28,7 +28,6 @@ WHERE IsOwnedByProfile = false
 """
 _PERMISSION_SET_GROUP_SOQL = "SELECT Id, MasterLabel, Description FROM PermissionSetGroup"
 _GROUP_COMPONENT_SOQL = "SELECT Id, PermissionSetGroupId, PermissionSetId FROM PermissionSetGroupComponent"
-_MUTING_SOQL = "SELECT Id, PermissionSetGroupId, PermissionSetId FROM PermissionSetGroupMutingPermissionSet"
 
 
 def _profile_row(
@@ -74,7 +73,7 @@ async def ingest_profiles(
     permission_sets = query_all(sf, _PERMISSION_SET_SOQL)
     permission_set_groups = query_all(sf, _PERMISSION_SET_GROUP_SOQL)
     components = query_all(sf, _GROUP_COMPONENT_SOQL)
-    muting_links = query_all_or_empty(sf, _MUTING_SOQL, context="permission_set_group_muting")
+    muting_links = query_muting_permission_set_links(sf)
 
     muting_permission_set_ids = {str(row["PermissionSetId"]) for row in muting_links}
     rows: list[ProfileRow] = []

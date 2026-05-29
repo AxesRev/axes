@@ -7,7 +7,7 @@ from typing import Any
 
 from simple_salesforce import Salesforce
 
-from integrations.salesforce.client import query_all, query_all_or_empty
+from integrations.salesforce.client import query_all, query_muting_permission_set_links
 from integrations.salesforce.ingestion.shared import (
     SALESFORCE_APP,
     ConnectionRef,
@@ -39,10 +39,6 @@ FROM ObjectPermissions
 _FIELD_PERM_SOQL = """
 SELECT ParentId, SobjectType, Field, PermissionsRead, PermissionsEdit
 FROM FieldPermissions
-"""
-
-_MUTING_GROUP_SOQL = """
-SELECT PermissionSetId FROM PermissionSetGroupMutingPermissionSet
 """
 
 _OBJECT_FLAG_MAP: tuple[tuple[str, str], ...] = (
@@ -126,7 +122,7 @@ def build_field_permission_edges(
 
 
 def fetch_muting_profile_ids(sf: Salesforce) -> set[str]:
-    rows = query_all_or_empty(sf, _MUTING_GROUP_SOQL, context="permission_set_group_muting")
+    rows = query_muting_permission_set_links(sf)
     return {str(row["PermissionSetId"]) for row in rows}
 
 
