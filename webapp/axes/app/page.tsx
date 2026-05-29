@@ -1,5 +1,13 @@
 import { auth0 } from "@/lib/auth0";
-import { resolveTenantForSession, type TenantRecord } from "@/lib/tenants";
+import {
+  buildSlackInstallUrl,
+  fetchAppIntegrationsForSession,
+  findSlackIntegration,
+  resolveTenantForSession,
+  slackTeamId,
+  type AppIntegrationRecord,
+  type TenantRecord,
+} from "@/lib/tenants";
 
 async function loadTenantForSession(
   session: NonNullable<Awaited<ReturnType<typeof auth0.getSession>>>,
@@ -11,6 +19,19 @@ async function loadTenantForSession(
     const message = error instanceof Error ? error.message : String(error);
     console.error("Tenant resolution failed:", message);
     return { tenant: null, error: message };
+  }
+}
+
+async function loadAppIntegrationsForSession(
+  session: NonNullable<Awaited<ReturnType<typeof auth0.getSession>>>,
+): Promise<{ integrations: AppIntegrationRecord[]; error: string | null }> {
+  try {
+    const integrations = await fetchAppIntegrationsForSession(session);
+    return { integrations, error: null };
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("App integrations lookup failed:", message);
+    return { integrations: [], error: message };
   }
 }
 
@@ -47,12 +68,14 @@ export default async function Home() {
   }
 
   const { tenant, error: tenantResolveError } = await loadTenantForSession(session);
+  const { integrations, error: integrationsError } = tenant
+    ? await loadAppIntegrationsForSession(session)
+    : { integrations: [], error: null };
   const tenantId = tenant?.id ?? null;
   const tenantName = tenant?.name ?? null;
-  const apiBaseUrl = process.env.AEGRA_API_URL?.replace(/\/$/, "") ?? "http://127.0.0.1:8000";
-  const slackInstallUrl = tenantId
-    ? `${apiBaseUrl}/slack/oauth/install?tenant_id=${encodeURIComponent(tenantId)}`
-    : null;
+  const slackIntegration = findSlackIntegration(integrations);
+  const installedSlackTeamId = slackTeamId(slackIntegration);
+  const slackInstallUrl = tenantId && !installedSlackTeamId ? buildSlackInstallUrl(tenantId) : null;
 
   return (
     <div className="flex flex-1 flex-col items-center justify-center bg-zinc-50 px-6 py-24 font-sans dark:bg-black">
@@ -90,18 +113,35 @@ export default async function Home() {
           )}
         </section>
 
-        {slackInstallUrl ? (
+        {tenantId ? (
           <section className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
             <h2 className="text-sm font-medium text-zinc-950 dark:text-zinc-50">Slack</h2>
-            <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
-              Install the Axes Slack app for this tenant.
-            </p>
-            <a
-              href={slackInstallUrl}
-              className="mt-4 inline-flex h-10 items-center justify-center rounded-full bg-zinc-950 px-4 text-sm font-medium text-white transition-colors hover:bg-zinc-800 dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200"
-            >
-              Install Slack app
-            </a>
+            {integrationsError ? (
+              <p className="mt-2 text-sm text-red-600">{integrationsError}</p>
+            ) : installedSlackTeamId ? (
+              <dl className="mt-3 space-y-2 text-sm text-zinc-600 dark:text-zinc-400">
+                <div>
+                  <dt className="font-medium text-zinc-950 dark:text-zinc-50">Status</dt>
+                  <dd>Installed</dd>
+                </div>
+                <div>
+                  <dt className="font-medium text-zinc-950 dark:text-zinc-50">Team ID</dt>
+                  <dd className="font-mono text-xs break-all">{installedSlackTeamId}</dd>
+                </div>
+              </dl>
+            ) : slackInstallUrl ? (
+              <>
+                <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+                  Install the Axes Slack app for this tenant.
+                </p>
+                <a
+                  href={slackInstallUrl}
+                  className="mt-4 inline-flex h-10 items-center justify-center rounded-full bg-zinc-950 px-4 text-sm font-medium text-white transition-colors hover:bg-zinc-800 dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200"
+                >
+                  Install Slack app
+                </a>
+              </>
+            ) : null}
           </section>
         ) : null}
       </main>

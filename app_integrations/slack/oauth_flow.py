@@ -30,6 +30,7 @@ class TenantAsyncOAuthFlow(AsyncOAuthFlow):
         async for session in get_session():
             result = await session.execute(select(Tenant).where(Tenant.id == tenant_id))
             tenant = result.scalar_one_or_none()
+
         if tenant is None:
             return BoltResponse(
                 status=404,

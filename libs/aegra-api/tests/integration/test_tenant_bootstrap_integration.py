@@ -60,3 +60,48 @@ def test_get_my_tenant_provisions_tenant(tenant_api_client: TestClient) -> None:
     assert payload["id"] == "tenant-new"
     assert payload["name"] == "Owner"
     assert payload["email"] == "owner@example.com"
+
+
+@pytest.mark.integration
+def test_get_my_app_integrations_requires_auth() -> None:
+    client = FastAPI()
+    client.include_router(tenant_router)
+    unauthenticated = TestClient(client)
+    response = unauthenticated.get("/tenants/me/integrations")
+    assert response.status_code == 401
+
+
+@pytest.mark.integration
+def test_get_my_app_integrations_returns_slack_integration(
+    tenant_api_client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app_integrations.github.models import AppIntegration, Tenant
+
+    tenant = Tenant(id="tenant-new", name="Owner", email="owner@example.com", auth0_sub="auth0|123")
+    integration = AppIntegration(
+        id="int-1",
+        tenant_id="tenant-new",
+        app_name="slack",
+        config={"team_id": "T01234567"},
+    )
+
+    async def fake_get_or_create(**kwargs: object) -> Tenant:
+        return tenant
+
+    async def fake_list(**kwargs: object) -> list[AppIntegration]:
+        return [integration]
+
+    monkeypatch.setattr("slack_app.tenant_routes.get_or_create_tenant_for_auth_user", fake_get_or_create)
+    monkeypatch.setattr("slack_app.tenant_routes.list_app_integrations_for_tenant", fake_list)
+
+    response = tenant_api_client.get("/tenants/me/integrations")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload == [
+        {
+            "id": "int-1",
+            "app_name": "slack",
+            "config": {"team_id": "T01234567"},
+        }
+    ]
