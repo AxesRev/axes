@@ -1,6 +1,7 @@
 import { auth0 } from "@/lib/auth0";
 import { IntegrationSection } from "@/app/integration-section";
 import {
+  buildGithubInstallUrl,
   buildSlackInstallUrl,
   fetchAppIntegrationsForSession,
   findGithubIntegration,
@@ -84,6 +85,7 @@ export default async function Home() {
   const salesforceOrg = salesforceOrgId(findSalesforceIntegration(integrations));
 
   const slackInstallUrl = tenantId && !slackTeam ? buildSlackInstallUrl(tenantId) : null;
+  const githubInstallUrl = tenantId && !githubInstallation ? buildGithubInstallUrl(tenantId) : null;
 
   return (
     <div className="flex flex-1 flex-col items-center justify-center bg-zinc-50 px-6 py-24 font-sans dark:bg-black">
@@ -137,7 +139,9 @@ export default async function Home() {
               installedFields={
                 githubInstallation ? [{ label: "Installation ID", value: githubInstallation }] : null
               }
-              notConnectedMessage="GitHub is not connected for this tenant."
+              notConnectedMessage="Install the Axes GitHub App for this tenant."
+              installUrl={githubInstallUrl}
+              installLabel="Install GitHub App"
             />
             <IntegrationSection
               title="Salesforce"

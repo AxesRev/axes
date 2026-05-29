@@ -10,7 +10,7 @@ _ENV_FILE: str = str(Path(__file__).resolve().parents[2] / ".env")
 
 
 class GitHubAppSettings(BaseSettings):
-    """Settings for GitHub App API access."""
+    """Settings for GitHub App installation and API access."""
 
     model_config = SettingsConfigDict(
         env_file=_ENV_FILE,
@@ -20,6 +20,14 @@ class GitHubAppSettings(BaseSettings):
 
     GITHUB_APP_ID: int = 0
     GITHUB_APP_PRIVATE_KEY_PATH: str = ""
+    GITHUB_APP_SLUG: str = ""
+    GITHUB_INSTALL_STATE_SECRET: str = ""
+
+    # Public base URL of the API server (GitHub App setup URL callback).
+    SERVER_URL: str = "http://localhost:8000"
+
+    # Where to send users after a successful install.
+    WEBAPP_URL: str = "http://localhost:3000"
 
     @computed_field
     @property

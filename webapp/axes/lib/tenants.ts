@@ -28,6 +28,10 @@ export function buildSlackInstallUrl(tenantId: string): string {
   return `${publicApiBaseUrl()}/slack/oauth/install?tenant_id=${encodeURIComponent(tenantId)}`;
 }
 
+export function buildGithubInstallUrl(tenantId: string): string {
+  return `${publicApiBaseUrl()}/auth/github/install?tenant_id=${encodeURIComponent(tenantId)}`;
+}
+
 export async function resolveTenantForAccessToken(accessToken: string): Promise<TenantRecord> {
   const response = await fetch(`${apiBaseUrl()}/tenants/me`, {
     method: "GET",
