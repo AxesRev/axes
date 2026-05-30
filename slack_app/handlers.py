@@ -112,8 +112,8 @@ async def handle_message_event(event: dict[str, Any], *, team_id: str | None = N
         return
 
     assert access_result.identity is not None
-    github_username = access_result.identity.github_username
     github_user_id = access_result.identity.github_user_id
+    github_email = access_result.identity.github_email
     github_installation_id = access_result.identity.github_installation_id
 
     # --- Agent invocation ------------------------------------------------------
@@ -148,8 +148,8 @@ async def handle_message_event(event: dict[str, Any], *, team_id: str | None = N
             config={
                 "configurable": {
                     "slack_user_id": user_id,
-                    "github_username": github_username,
                     "github_user_id": github_user_id,
+                    "github_email": github_email,
                     "github_installation_id": github_installation_id,
                 }
             },

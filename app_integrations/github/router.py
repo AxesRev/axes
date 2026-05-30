@@ -17,6 +17,7 @@ from aegra_api.core.orm import get_session
 from app_integrations.github.identity_linking import link_github_identity
 from app_integrations.github.models import OAuthState, Tenant
 from app_integrations.github.oauth_state import create_github_oauth_state, verify_github_oauth_state
+from app_integrations.github.oauth_user import fetch_github_user_id_and_email
 from app_integrations.github.service import upsert_github_app_integration
 from app_integrations.github.settings import github_settings
 
@@ -27,7 +28,6 @@ _INSTALL_STATE_TTL_SECONDS = 600
 
 _GITHUB_AUTHORIZE_URL = "https://github.com/login/oauth/authorize"
 _GITHUB_TOKEN_URL = "https://github.com/login/oauth/access_token"  # nosec B105
-_GITHUB_USER_URL = "https://api.github.com/user"
 
 _SUCCESS_HTML = """<!DOCTYPE html>
 <html lang="en">
@@ -46,7 +46,7 @@ _SUCCESS_HTML = """<!DOCTYPE html>
 <body>
   <div class="card">
     <h1>&#10003; GitHub account linked</h1>
-    <p>Your GitHub account <strong>{github_username}</strong> has been connected.<br>
+    <p>Your GitHub account (<strong>{github_email}</strong>) has been connected.<br>
        You can close this tab and return to Slack.</p>
   </div>
 </body>
@@ -244,7 +244,7 @@ async def github_oauth_start(
         f"?client_id={github_settings.GITHUB_CLIENT_ID}"
         f"&redirect_uri={callback_url}"
         f"&state={oauth_state}"
-        f"&scope=read:user"
+        f"&scope=read:user%20user:email"
     )
 
     logger.info("github_oauth_redirect", slack_user_id=slack_user_id)
@@ -378,23 +378,7 @@ async def _github_oauth_callback(
         )
 
     async with httpx.AsyncClient(timeout=15.0) as client:
-        user_response = await client.get(
-            _GITHUB_USER_URL,
-            headers={
-                "Authorization": f"Bearer {access_token}",
-                "Accept": "application/vnd.github+json",
-            },
-        )
-
-    if user_response.status_code != status.HTTP_200_OK:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Failed to fetch GitHub user information.",
-        )
-
-    user_data = user_response.json()
-    github_user_id = str(user_data["id"])
-    github_username = str(user_data["login"])
+        github_user_id, github_email = await fetch_github_user_id_and_email(client, access_token=access_token)
 
     state_result = await session.execute(select(OAuthState).where(OAuthState.slack_user_id == slack_user_id))
     oauth_token_record = state_result.scalar_one_or_none()
@@ -403,7 +387,7 @@ async def _github_oauth_callback(
     await link_github_identity(
         slack_user_id=slack_user_id,
         github_user_id=github_user_id,
-        github_username=github_username,
+        github_email=github_email,
         oauth_token=oauth_token,
         session=session,
     )
@@ -411,10 +395,10 @@ async def _github_oauth_callback(
     logger.info(
         "github_oauth_complete",
         slack_user_id=slack_user_id,
-        github_username=github_username,
+        github_user_id=github_user_id,
         installation_id=installation_id,
     )
     return HTMLResponse(
-        content=_SUCCESS_HTML.format(github_username=github_username),
+        content=_SUCCESS_HTML.format(github_email=github_email),
         status_code=status.HTTP_200_OK,
     )

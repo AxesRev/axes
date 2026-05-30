@@ -65,7 +65,7 @@ async def get_github_identity(
             status="LINKED",
             slack_user_id=slack_user_id,
             github_user_id=github["user_id"],
-            github_username=github["username"],
+            github_email=github["email"],
             github_installation_id=installation_id,
         )
 
@@ -99,7 +99,7 @@ async def handle_access_request(
     logger.info(
         "access_request_authorized",
         slack_user_id=identity.slack_user_id,
-        github_username=result.github_username,
+        github_user_id=result.github_user_id,
     )
     return AccessRequestResult(linked=True, identity=result)
 
@@ -108,7 +108,7 @@ async def link_github_identity(
     *,
     slack_user_id: str,
     github_user_id: str,
-    github_username: str,
+    github_email: str,
     oauth_token: str,
     session: AsyncSession,
 ) -> UserIdentity:
@@ -118,7 +118,7 @@ async def link_github_identity(
     if identity is None:
         raise ValueError(f"user identity not found for slack_user_id={slack_user_id}")
 
-    set_github_extra(identity, user_id=github_user_id, username=github_username)
+    set_github_extra(identity, user_id=github_user_id, email=github_email)
 
     state_result = await session.execute(select(OAuthState).where(OAuthState.token == oauth_token))
     state_record = state_result.scalar_one_or_none()
@@ -129,7 +129,6 @@ async def link_github_identity(
     logger.info(
         "github_identity_linked",
         slack_user_id=slack_user_id,
-        github_username=github_username,
         github_user_id=github_user_id,
         tenant_id=identity.tenant_id,
     )

@@ -30,10 +30,10 @@ def test_github_is_linked_from_extra_app_data() -> None:
     identity = UserIdentity(
         slack_user_id="U1",
         tenant_id="t1",
-        extra_app_data={"github": {"user_id": "99", "username": "alice"}},
+        extra_app_data={"github": {"user_id": "99", "email": "alice@example.com"}},
     )
     assert github_is_linked(identity)
-    assert get_github_extra(identity) == {"user_id": "99", "username": "alice"}
+    assert get_github_extra(identity) == {"user_id": "99", "email": "alice@example.com"}
 
 
 @pytest.mark.unit
@@ -45,7 +45,7 @@ async def test_get_github_identity_returns_linked_when_extra_app_data_set(
         id="id-1",
         slack_user_id="U123",
         tenant_id="tenant-1",
-        extra_app_data={"github": {"user_id": "42", "username": "octo"}},
+        extra_app_data={"github": {"user_id": "42", "email": "octo@users.noreply.github.com"}},
     )
     integration = AppIntegration(
         id="int-1",
@@ -64,7 +64,7 @@ async def test_get_github_identity_returns_linked_when_extra_app_data_set(
 
     assert result.status == "LINKED"
     assert result.github_user_id == "42"
-    assert result.github_username == "octo"
+    assert result.github_email == "octo@users.noreply.github.com"
     assert result.github_installation_id == "inst-9"
 
 
@@ -108,13 +108,13 @@ async def test_link_github_identity_stores_extra_app_data_and_deletes_oauth_stat
     updated = await link_github_identity(
         slack_user_id="U123",
         github_user_id="42",
-        github_username="octo",
+        github_email="octo@example.com",
         oauth_token="tok-1",
         session=session,
     )
 
     assert updated is identity
-    assert get_github_extra(identity) == {"user_id": "42", "username": "octo"}
+    assert get_github_extra(identity) == {"user_id": "42", "email": "octo@example.com"}
     session.delete.assert_awaited_once_with(oauth_state)
 
 
@@ -147,6 +147,6 @@ async def test_set_github_extra_merges_other_keys() -> None:
         tenant_id="t1",
         extra_app_data={"salesforce": {"user_id": "sf1"}},
     )
-    set_github_extra(identity, user_id="99", username="alice")
+    set_github_extra(identity, user_id="99", email="alice@example.com")
     assert identity.extra_app_data["salesforce"] == {"user_id": "sf1"}
-    assert identity.extra_app_data["github"] == {"user_id": "99", "username": "alice"}
+    assert identity.extra_app_data["github"] == {"user_id": "99", "email": "alice@example.com"}

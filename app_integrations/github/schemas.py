@@ -13,7 +13,7 @@ class IdentityLinked(BaseModel):
     status: Literal["LINKED"]
     slack_user_id: str
     github_user_id: str
-    github_username: str
+    github_email: str
     github_installation_id: str = ""
 
 
