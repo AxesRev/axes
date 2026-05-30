@@ -67,7 +67,11 @@ async def _fetch_github_integration(plan: TenantFetchPlan, integration: AppInteg
         plan.tenant_id,
         installation_id,
     )
-    await fetch_installation(installation_id)
+    await fetch_installation(
+        installation_id,
+        tenant_id=plan.tenant_id,
+        tenant_name=plan.tenant_name,
+    )
     logger.info(
         "github_fetch_complete tenant_id=%s installation_id=%s",
         plan.tenant_id,
@@ -96,6 +100,8 @@ async def _fetch_salesforce_integration(plan: TenantFetchPlan, integration: AppI
         username,
     )
     await run_salesforce_ingestion(
+        tenant_id=plan.tenant_id,
+        tenant_name=plan.tenant_name,
         org_id=org_id,
         integration_username=username,
         skip_record_access=False,

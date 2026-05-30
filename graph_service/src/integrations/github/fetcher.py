@@ -48,7 +48,11 @@ async def fetch_github_for_all_tenants() -> None:
                 plan.tenant_id,
                 installation_id,
             )
-            await fetch_installation(installation_id)
+            await fetch_installation(
+                installation_id,
+                tenant_id=plan.tenant_id,
+                tenant_name=plan.tenant_name,
+            )
 
     if not found_any:
         logger.error("no_github_app_integrations_found")

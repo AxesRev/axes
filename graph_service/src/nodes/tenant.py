@@ -8,8 +8,8 @@ from nodes.base import BaseNode
 class Tenant(BaseNode):
     """Top-level organisational boundary.
 
-    ``external_id`` (from BaseNode) is the stable identifier from the owning
-    system of record when available. ``name`` is a human-readable label.
+    ``external_id`` (from BaseNode) is the Postgres ``tenants.id`` for ingested
+    workspaces. ``name`` is the tenant display name from the metadata DB.
     """
 
     name = StringProperty(required=True)

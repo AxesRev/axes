@@ -24,6 +24,8 @@ logger = logging.getLogger(__name__)
 
 async def fetch_org(
     *,
+    tenant_id: str,
+    tenant_name: str,
     org_id: str | None = None,
     integration_username: str | None = None,
     skip_record_access: bool = False,
@@ -37,39 +39,45 @@ async def fetch_org(
 
     sf: Salesforce = make_salesforce_client(username=username, settings=settings)
     org = sf.query("SELECT Id, Name FROM Organization LIMIT 1")["records"][0]
-    tenant_external_id = org_id or str(org["Id"])
-    tenant_name = str(org.get("Name") or tenant_external_id)
+    salesforce_org_id = str(org["Id"])
+    if org_id is not None and org_id != salesforce_org_id:
+        logger.warning(
+            "salesforce_org_id_mismatch config=%s api=%s tenant_id=%s",
+            org_id,
+            salesforce_org_id,
+            tenant_id,
+        )
 
-    await upsert_tenant(external_id=tenant_external_id, name=tenant_name)
-    connection = await upsert_connection(sf, tenant_external_id=tenant_external_id)
+    await upsert_tenant(external_id=tenant_id, name=tenant_name)
+    connection = await upsert_connection(sf, tenant_external_id=tenant_id)
 
-    logger.info("ingest_users org_id=%s", tenant_external_id)
+    logger.info("ingest_users tenant_id=%s salesforce_org_id=%s", tenant_id, salesforce_org_id)
     identity_external_ids = await ingest_users(sf, connection=connection)
 
-    logger.info("ingest_groups org_id=%s", tenant_external_id)
+    logger.info("ingest_groups tenant_id=%s", tenant_id)
     groups_by_name = await ingest_groups(
         sf,
         connection=connection,
         identity_external_ids=identity_external_ids,
     )
 
-    logger.info("ingest_roles org_id=%s", tenant_external_id)
+    logger.info("ingest_roles tenant_id=%s", tenant_id)
     await ingest_roles(sf, connection=connection)
 
-    logger.info("ingest_profiles org_id=%s", tenant_external_id)
+    logger.info("ingest_profiles tenant_id=%s", tenant_id)
     await ingest_profiles(sf, connection=connection)
 
-    logger.info("ingest_assignments org_id=%s", tenant_external_id)
+    logger.info("ingest_assignments tenant_id=%s", tenant_id)
     await ingest_assignments(sf, connection=connection)
 
-    logger.info("ingest_resources org_id=%s", tenant_external_id)
+    logger.info("ingest_resources tenant_id=%s", tenant_id)
     resources_by_name = await ingest_resources(sf, connection=connection)
 
-    logger.info("ingest_permissions org_id=%s", tenant_external_id)
+    logger.info("ingest_permissions tenant_id=%s", tenant_id)
     await ingest_permissions(sf, connection=connection, resources_by_name=resources_by_name)
 
     if not skip_record_access:
-        logger.info("ingest_record_access org_id=%s", tenant_external_id)
+        logger.info("ingest_record_access tenant_id=%s", tenant_id)
         await ingest_record_access(
             sf,
             connection=connection,
@@ -78,4 +86,4 @@ async def fetch_org(
             known_group_ids=set(groups_by_name.values()),
         )
 
-    logger.info("fetch_complete org_id=%s username=%s", tenant_external_id, username)
+    logger.info("fetch_complete tenant_id=%s salesforce_org_id=%s username=%s", tenant_id, salesforce_org_id, username)

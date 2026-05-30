@@ -12,6 +12,8 @@ logger = logging.getLogger(__name__)
 
 async def run_salesforce_ingestion(
     *,
+    tenant_id: str,
+    tenant_name: str,
     org_id: str | None = None,
     integration_username: str | None = None,
     skip_record_access: bool = False,
@@ -26,14 +28,17 @@ async def run_salesforce_ingestion(
         raise ValueError(msg)
 
     logger.info(
-        "salesforce_fetch_start org_id=%s username=%s skip_record_access=%s",
+        "salesforce_fetch_start tenant_id=%s org_id=%s username=%s skip_record_access=%s",
+        tenant_id,
         resolved_org_id,
         resolved_username,
         skip_record_access,
     )
     await fetch_org(
+        tenant_id=tenant_id,
+        tenant_name=tenant_name,
         org_id=resolved_org_id,
         integration_username=resolved_username,
         skip_record_access=skip_record_access,
     )
-    logger.info("salesforce_fetch_complete org_id=%s", resolved_org_id)
+    logger.info("salesforce_fetch_complete tenant_id=%s", tenant_id)

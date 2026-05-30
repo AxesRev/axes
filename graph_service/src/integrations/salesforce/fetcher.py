@@ -67,6 +67,8 @@ async def fetch_salesforce_for_all_tenants(*, skip_record_access: bool) -> None:
                 username,
             )
             await run_salesforce_ingestion(
+                tenant_id=plan.tenant_id,
+                tenant_name=plan.tenant_name,
                 org_id=org_id,
                 integration_username=username,
                 skip_record_access=skip_record_access,
