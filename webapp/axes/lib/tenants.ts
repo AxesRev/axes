@@ -12,6 +12,14 @@ export type AppIntegrationRecord = {
   config: Record<string, unknown>;
 };
 
+/** Thrown when the API rejects the bearer token (missing, expired, or invalid). */
+export class ApiUnauthorizedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ApiUnauthorizedError";
+  }
+}
+
 const SLACK_APP_NAME = "slack";
 const GITHUB_APP_NAME = "github";
 const SALESFORCE_APP_NAME = "salesforce";
@@ -32,6 +40,14 @@ export function buildGithubInstallUrl(tenantId: string): string {
   return `${publicApiBaseUrl()}/auth/github/install?tenant_id=${encodeURIComponent(tenantId)}`;
 }
 
+export function buildSalesforceInstallUrl(tenantId: string): string {
+  return `${publicApiBaseUrl()}/auth/salesforce/install?tenant_id=${encodeURIComponent(tenantId)}`;
+}
+
+export function buildSalesforceConnectUrl(tenantId: string): string {
+  return `${publicApiBaseUrl()}/auth/salesforce/connect?tenant_id=${encodeURIComponent(tenantId)}`;
+}
+
 export async function resolveTenantForAccessToken(accessToken: string): Promise<TenantRecord> {
   const response = await fetch(`${apiBaseUrl()}/tenants/me`, {
     method: "GET",
@@ -40,6 +56,10 @@ export async function resolveTenantForAccessToken(accessToken: string): Promise<
     },
     cache: "no-store",
   });
+
+  if (response.status === 401) {
+    throw new ApiUnauthorizedError("Invalid or missing access token");
+  }
 
   if (!response.ok) {
     const detail = await response.text();
@@ -52,7 +72,7 @@ export async function resolveTenantForAccessToken(accessToken: string): Promise<
 export async function resolveTenantForSession(session: SessionData): Promise<TenantRecord> {
   const idToken = session.tokenSet.idToken;
   if (!idToken) {
-    throw new Error("Auth0 ID token is missing from the session.");
+    throw new ApiUnauthorizedError("Auth0 ID token is missing from the session");
   }
   return resolveTenantForAccessToken(idToken);
 }
@@ -68,6 +88,10 @@ export async function fetchAppIntegrationsForAccessToken(
     cache: "no-store",
   });
 
+  if (response.status === 401) {
+    throw new ApiUnauthorizedError("Invalid or missing access token");
+  }
+
   if (!response.ok) {
     const detail = await response.text();
     throw new Error(`App integrations lookup failed (${response.status}): ${detail}`);
@@ -81,7 +105,7 @@ export async function fetchAppIntegrationsForSession(
 ): Promise<AppIntegrationRecord[]> {
   const idToken = session.tokenSet.idToken;
   if (!idToken) {
-    throw new Error("Auth0 ID token is missing from the session.");
+    throw new ApiUnauthorizedError("Auth0 ID token is missing from the session");
   }
   return fetchAppIntegrationsForAccessToken(idToken);
 }
