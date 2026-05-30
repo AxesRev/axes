@@ -23,6 +23,11 @@ class GitHubAppSettings(BaseSettings):
     GITHUB_APP_SLUG: str = ""
     GITHUB_INSTALL_STATE_SECRET: str = ""
 
+    # OAuth App (Slack user → GitHub account linking)
+    GITHUB_CLIENT_ID: str = ""
+    GITHUB_CLIENT_SECRET: str = ""
+    GITHUB_OAUTH_STATE_SECRET: str = ""
+
     # Public base URL of the API server (GitHub App setup URL callback).
     SERVER_URL: str = "http://localhost:8000"
 

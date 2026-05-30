@@ -7,8 +7,10 @@ discover them when env.py imports this module.
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
+from typing import Any
 
-from sqlalchemy import ForeignKey, Index, Text, text
+from sqlalchemy import TIMESTAMP, ForeignKey, Index, Text, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -61,8 +63,25 @@ class UserIdentity(Base):
         ForeignKey("tenants.id", ondelete="CASCADE"),
         nullable=False,
     )
+    extra_app_data: Mapped[dict[str, Any]] = mapped_column(
+        JSONB,
+        server_default=text("'{}'::jsonb"),
+        nullable=False,
+    )
 
     __table_args__ = (
         Index("idx_user_identities_slack_user_id", "slack_user_id", unique=True),
         Index("idx_user_identities_tenant_id", "tenant_id"),
     )
+
+
+class OAuthState(Base):
+    """Short-lived token sent to a Slack user to start GitHub OAuth linking."""
+
+    __tablename__ = "oauth_states"
+
+    token: Mapped[str] = mapped_column(Text, primary_key=True)
+    slack_user_id: Mapped[str] = mapped_column(Text, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
+
+    __table_args__ = (Index("idx_oauth_states_slack_user_id", "slack_user_id"),)
