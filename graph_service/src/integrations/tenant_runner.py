@@ -7,14 +7,12 @@ import logging
 from integrations.app_names import GITHUB_APP_NAME, SALESFORCE_APP_NAME, SLACK_APP_NAME
 from integrations.github.ingestion.installation import fetch_installation
 from integrations.salesforce.run import run_salesforce_ingestion
-from integrations.salesforce.settings import get_salesforce_settings
 from integrations.tenant_plans import (
     AppIntegrationPlan,
     TenantFetchPlan,
     github_installation_id,
     load_tenant_fetch_plans,
-    salesforce_integration_username,
-    salesforce_org_id,
+    salesforce_fetch_credentials,
 )
 
 logger = logging.getLogger(__name__)
@@ -80,19 +78,16 @@ async def _fetch_github_integration(plan: TenantFetchPlan, integration: AppInteg
 
 
 async def _fetch_salesforce_integration(plan: TenantFetchPlan, integration: AppIntegrationPlan) -> None:
-    org_id = salesforce_org_id(integration)
-    username = salesforce_integration_username(integration)
-    if username is None:
-        username = get_salesforce_settings().SALESFORCE_USERNAME or None
-
-    if not username:
+    credentials = salesforce_fetch_credentials(integration)
+    if credentials is None:
         logger.warning(
-            "salesforce_fetch_skipped_missing_username tenant_id=%s "
-            "(set config.integration_username or SALESFORCE_USERNAME)",
+            "salesforce_fetch_skipped_incomplete_app_integration tenant_id=%s "
+            "(connect Salesforce in the webapp to set org_id and integration_username)",
             plan.tenant_id,
         )
         return
 
+    org_id, username = credentials
     logger.info(
         "salesforce_fetch_start tenant_id=%s org_id=%s username=%s",
         plan.tenant_id,

@@ -23,12 +23,7 @@ import nodes as _nodes_pkg  # noqa: F401 — registers all node classes with neo
 from integrations.app_names import SALESFORCE_APP_NAME
 from integrations.graph_runner import setup_graph, teardown_graph
 from integrations.salesforce.run import run_salesforce_ingestion
-from integrations.salesforce.settings import get_salesforce_settings
-from integrations.tenant_plans import (
-    load_tenant_fetch_plans,
-    salesforce_integration_username,
-    salesforce_org_id,
-)
+from integrations.tenant_plans import load_tenant_fetch_plans, salesforce_fetch_credentials
 
 logger = logging.getLogger(__name__)
 
@@ -44,22 +39,22 @@ async def fetch_salesforce_for_all_tenants(*, skip_record_access: bool) -> None:
         logger.error("no_tenants_in_database")
         raise SystemExit(1)
 
-    default_username = get_salesforce_settings().SALESFORCE_USERNAME or None
     found_any = False
 
     for plan in plans:
         for integration in plan.integrations:
             if integration.app_name != SALESFORCE_APP_NAME:
                 continue
-            username = salesforce_integration_username(integration) or default_username
-            if not username:
+            credentials = salesforce_fetch_credentials(integration)
+            if credentials is None:
                 logger.warning(
-                    "salesforce_fetch_skipped_missing_username tenant_id=%s",
+                    "salesforce_fetch_skipped_incomplete_app_integration tenant_id=%s "
+                    "(connect Salesforce in the webapp to set org_id and integration_username)",
                     plan.tenant_id,
                 )
                 continue
+            org_id, username = credentials
             found_any = True
-            org_id = salesforce_org_id(integration)
             logger.info(
                 "salesforce_fetch_start tenant_id=%s org_id=%s username=%s",
                 plan.tenant_id,

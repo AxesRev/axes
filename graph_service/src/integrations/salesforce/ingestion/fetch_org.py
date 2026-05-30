@@ -26,21 +26,16 @@ async def fetch_org(
     *,
     tenant_id: str,
     tenant_name: str,
-    org_id: str | None = None,
-    integration_username: str | None = None,
+    org_id: str,
+    integration_username: str,
     skip_record_access: bool = False,
 ) -> None:
     """Fetch one Salesforce org and write all graph data."""
     settings = get_salesforce_settings()
-    username = integration_username or settings.SALESFORCE_USERNAME
-    if not username:
-        msg = "integration username is required (SALESFORCE_USERNAME or CLI argument)"
-        raise ValueError(msg)
-
-    sf: Salesforce = make_salesforce_client(username=username, settings=settings)
+    sf: Salesforce = make_salesforce_client(username=integration_username, settings=settings)
     org = sf.query("SELECT Id, Name FROM Organization LIMIT 1")["records"][0]
     salesforce_org_id = str(org["Id"])
-    if org_id is not None and org_id != salesforce_org_id:
+    if org_id != salesforce_org_id:
         logger.warning(
             "salesforce_org_id_mismatch config=%s api=%s tenant_id=%s",
             org_id,
@@ -86,4 +81,9 @@ async def fetch_org(
             known_group_ids=set(groups_by_name.values()),
         )
 
-    logger.info("fetch_complete tenant_id=%s salesforce_org_id=%s username=%s", tenant_id, salesforce_org_id, username)
+    logger.info(
+        "fetch_complete tenant_id=%s salesforce_org_id=%s username=%s",
+        tenant_id,
+        salesforce_org_id,
+        integration_username,
+    )

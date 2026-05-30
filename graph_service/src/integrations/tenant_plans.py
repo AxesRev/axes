@@ -114,3 +114,14 @@ def salesforce_org_id(integration: AppIntegrationPlan) -> str | None:
 
 def salesforce_integration_username(integration: AppIntegrationPlan) -> str | None:
     return _config_str(integration.config, "integration_username") or _config_str(integration.config, "username")
+
+
+def salesforce_fetch_credentials(
+    integration: AppIntegrationPlan,
+) -> tuple[str, str] | None:
+    """Return (org_id, integration_username) when the integration is ready for ingest."""
+    org_id = salesforce_org_id(integration)
+    username = salesforce_integration_username(integration)
+    if org_id is None or username is None:
+        return None
+    return org_id, username
