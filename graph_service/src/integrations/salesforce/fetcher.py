@@ -1,10 +1,16 @@
-"""CLI entry point for Salesforce → graph ingestion.
+"""CLI entry point for Salesforce → graph ingestion (all tenants from ``app_integrations``).
 
 Run directly:
-    uv run --package aegra-graph-service python -m integrations.salesforce.fetcher [ORG_ID] [INTEGRATION_USERNAME]
 
-Optional flags:
+    uv run --package aegra-graph-service python -m integrations.salesforce.fetcher
+
+Optional flag for this entrypoint only:
+
     --skip-record-access   Skip Share-table record access ingest
+
+Or use the parent fetcher for all apps:
+
+    uv run --package aegra-graph-service python -m integrations.fetcher
 """
 
 from __future__ import annotations
@@ -13,51 +19,72 @@ import asyncio
 import logging
 import sys
 
-from neomodel import adb
-
 import nodes as _nodes_pkg  # noqa: F401 — registers all node classes with neomodel
-from integrations.github.settings import get_runner_settings
-from integrations.salesforce.ingestion.fetch_org import fetch_org
+from integrations.app_names import SALESFORCE_APP_NAME
+from integrations.graph_runner import setup_graph, teardown_graph
+from integrations.salesforce.run import run_salesforce_ingestion
 from integrations.salesforce.settings import get_salesforce_settings
+from integrations.tenant_plans import (
+    load_tenant_fetch_plans,
+    salesforce_integration_username,
+    salesforce_org_id,
+)
 
 logger = logging.getLogger(__name__)
 
 
-async def wipe_graph() -> None:
-    """Remove all nodes and relationships from the graph database."""
-    await adb.cypher_query("MATCH (n) DETACH DELETE n")
-    logger.info("graph_wiped")
+def _parse_skip_record_access(argv: list[str]) -> bool:
+    return "--skip-record-access" in argv
 
 
-def _parse_args(argv: list[str]) -> tuple[str | None, str | None, bool]:
-    skip_record_access = "--skip-record-access" in argv
-    positional = [arg for arg in argv if arg != "--skip-record-access"]
-    org_id = positional[0] if len(positional) > 0 else None
-    integration_username = positional[1] if len(positional) > 1 else None
-    return org_id, integration_username, skip_record_access
+async def fetch_salesforce_for_all_tenants(*, skip_record_access: bool) -> None:
+    """Ingest Salesforce data for every tenant with a ``salesforce`` app integration."""
+    plans = await load_tenant_fetch_plans()
+    if not plans:
+        logger.error("no_tenants_in_database")
+        raise SystemExit(1)
+
+    default_username = get_salesforce_settings().SALESFORCE_USERNAME or None
+    found_any = False
+
+    for plan in plans:
+        for integration in plan.integrations:
+            if integration.app_name != SALESFORCE_APP_NAME:
+                continue
+            username = salesforce_integration_username(integration) or default_username
+            if not username:
+                logger.warning(
+                    "salesforce_fetch_skipped_missing_username tenant_id=%s",
+                    plan.tenant_id,
+                )
+                continue
+            found_any = True
+            org_id = salesforce_org_id(integration)
+            logger.info(
+                "salesforce_fetch_start tenant_id=%s org_id=%s username=%s",
+                plan.tenant_id,
+                org_id,
+                username,
+            )
+            await run_salesforce_ingestion(
+                org_id=org_id,
+                integration_username=username,
+                skip_record_access=skip_record_access,
+            )
+
+    if not found_any:
+        logger.error("no_salesforce_app_integrations_found")
+        raise SystemExit(1)
 
 
 async def _run_once() -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s %(message)s")
-
-    settings = get_salesforce_settings()
-    org_id, integration_username, skip_record_access = _parse_args(sys.argv[1:])
-    org_id = org_id or settings.SALESFORCE_ORG_ID or None
-    integration_username = integration_username or settings.SALESFORCE_USERNAME or None
-
-    runner = get_runner_settings()
-    await adb.set_connection(runner.neomodel_url)
-    await wipe_graph()
-    await adb.install_all_labels()
-
+    skip_record_access = _parse_skip_record_access(sys.argv[1:])
+    await setup_graph(wipe=True)
     try:
-        await fetch_org(
-            org_id=org_id,
-            integration_username=integration_username,
-            skip_record_access=skip_record_access,
-        )
+        await fetch_salesforce_for_all_tenants(skip_record_access=skip_record_access)
     finally:
-        await adb.close_connection()
+        await teardown_graph()
 
 
 def main() -> None:

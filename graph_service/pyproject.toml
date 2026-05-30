@@ -19,6 +19,7 @@ dependencies = [
 
 [project.scripts]
 neo4j-mcp-remote = "mcp_server.neo4j_mcp_remote:main"
+fetch-graph = "integrations.fetcher:main"
 
 [build-system]
 requires = ["hatchling"]

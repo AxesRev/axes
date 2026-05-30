@@ -1,53 +1,67 @@
-"""CLI entry point for GitHub → graph ingestion.
+"""CLI entry point for GitHub → graph ingestion (all tenants from ``app_integrations``).
 
 Run directly:
-    uv run --package aegra-graph-service python -m integrations.github.fetcher INSTALLATION_ID [INSTALLATION_ID ...]
 
-Installation IDs must be passed as CLI arguments.
+    uv run --package aegra-graph-service python -m integrations.github.fetcher
+
+Or use the parent fetcher for all apps:
+
+    uv run --package aegra-graph-service python -m integrations.fetcher
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
-import sys
-
-from neomodel import adb
 
 import nodes as _nodes_pkg  # noqa: F401 — registers all node classes with neomodel
+from integrations.app_names import GITHUB_APP_NAME
 from integrations.github.ingestion.installation import fetch_installation
-from integrations.github.settings import get_runner_settings
+from integrations.graph_runner import setup_graph, teardown_graph
+from integrations.tenant_plans import github_installation_id, load_tenant_fetch_plans
 
 logger = logging.getLogger(__name__)
 
 
-async def wipe_graph() -> None:
-    """Remove all nodes and relationships from the graph database."""
-    await adb.cypher_query("MATCH (n) DETACH DELETE n")
-    logger.info("graph_wiped")
+async def fetch_github_for_all_tenants() -> None:
+    """Ingest GitHub data for every tenant with a ``github`` app integration."""
+    plans = await load_tenant_fetch_plans()
+    if not plans:
+        logger.error("no_tenants_in_database")
+        raise SystemExit(1)
+
+    found_any = False
+    for plan in plans:
+        for integration in plan.integrations:
+            if integration.app_name != GITHUB_APP_NAME:
+                continue
+            installation_id = github_installation_id(integration)
+            if installation_id is None:
+                logger.warning(
+                    "github_fetch_skipped_missing_installation_id tenant_id=%s",
+                    plan.tenant_id,
+                )
+                continue
+            found_any = True
+            logger.info(
+                "github_fetch_start tenant_id=%s installation_id=%s",
+                plan.tenant_id,
+                installation_id,
+            )
+            await fetch_installation(installation_id)
+
+    if not found_any:
+        logger.error("no_github_app_integrations_found")
+        raise SystemExit(1)
 
 
 async def _run_once() -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s %(message)s")
-
-    if len(sys.argv) <= 1:
-        logger.error("installation_id_required_pass_as_cli_argument")
-        sys.exit(1)
-
-    installation_ids = [int(arg) for arg in sys.argv[1:]]
-    logger.info("installation_ids_from_cli=%s", installation_ids)
-
-    runner = get_runner_settings()
-    await adb.set_connection(runner.neomodel_url)
-    await wipe_graph()
-    await adb.install_all_labels()
-
+    await setup_graph(wipe=True)
     try:
-        for installation_id in installation_ids:
-            logger.info("fetch_start installation_id=%s", installation_id)
-            await fetch_installation(installation_id)
+        await fetch_github_for_all_tenants()
     finally:
-        await adb.close_connection()
+        await teardown_graph()
 
 
 if __name__ == "__main__":
