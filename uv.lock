@@ -50,7 +50,7 @@ wheels = [
 
 [[package]]
 name = "aegra-api"
-version = "0.7.19"
+version = "0.7.21"
 source = { editable = "libs/aegra-api" }
 dependencies = [
     { name = "alembic" },
