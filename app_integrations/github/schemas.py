@@ -13,16 +13,12 @@ class IdentityLinked(BaseModel):
     status: Literal["LINKED"]
     slack_user_id: str
     github_user_id: str
-    github_username: str
+    github_email: str
     github_installation_id: str = ""
 
 
 class IdentityNotLinked(BaseModel):
-    """Returned when no GitHub mapping exists for the Slack user.
-
-    The caller must surface ``connect_url`` to the user so they can complete
-    the OAuth flow.
-    """
+    """Returned when no GitHub mapping exists for the Slack user."""
 
     status: Literal["NOT_LINKED"]
     connect_url: str

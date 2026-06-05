@@ -19,11 +19,18 @@ from integrations.github.ingestion.users import ingest_users
 logger = logging.getLogger(__name__)
 
 
-async def fetch_installation(installation_id: int) -> None:
+async def fetch_installation(
+    installation_id: int,
+    *,
+    tenant_id: str,
+    tenant_name: str,
+) -> None:
     """Fetch one GitHub App installation and write all graph data.
 
     Args:
-        installation_id: The GitHub App installation ID stored in UserIdentity.
+        installation_id: GitHub App installation ID from ``app_integrations.config``.
+        tenant_id: Postgres ``tenants.id`` — stored as the graph ``Tenant.external_id``.
+        tenant_name: Postgres ``tenants.name`` — stored as the graph ``Tenant.name``.
     """
     gi = make_github_integration()
     installation: Installation = gi.get_app_installation(installation_id)
@@ -31,9 +38,8 @@ async def fetch_installation(installation_id: int) -> None:
 
     gh = gi.get_github_for_installation(installation_id)
 
-    tenant_external_id = str(account.id)
-    await upsert_tenant(external_id=tenant_external_id, name=account.login)
-    connection = await upsert_connection(account, tenant_external_id=tenant_external_id)
+    await upsert_tenant(external_id=tenant_id, name=tenant_name)
+    connection = await upsert_connection(account, tenant_external_id=tenant_id)
 
     logger.info("ingest_repos login=%s", account.login)
     repos, resources_by_uri = await ingest_repos(installation, connection=connection)
@@ -61,4 +67,9 @@ async def fetch_installation(installation_id: int) -> None:
         identity_external_ids=identity_external_ids,
     )
 
-    logger.info("fetch_complete installation_id=%s login=%s", installation_id, account.login)
+    logger.info(
+        "fetch_complete installation_id=%s tenant_id=%s login=%s",
+        installation_id,
+        tenant_id,
+        account.login,
+    )

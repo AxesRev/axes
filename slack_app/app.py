@@ -1,22 +1,21 @@
-"""FastAPI app with Slack routes and GitHub identity-linking for Aegra integration."""
+"""FastAPI app with Slack routes and Auth0 tenant API."""
 
 from fastapi import FastAPI
 
-from app_integrations.github.router import router as github_auth_router
+from app_integrations.github.router import router as github_app_router
+from app_integrations.salesforce.router import router as salesforce_router
 from slack_app.routes import router as slack_router
+from slack_app.tenant_routes import router as tenant_router
 
-# Create the FastAPI app
-# This will be merged with Aegra's core routes
 app = FastAPI(
     title="Aegra with Slack Integration",
-    description="Aegra API server with Slack bot integration and GitHub identity linking",
+    description="Aegra API server with Slack bot integration and Auth0 tenant provisioning",
 )
 
-# Include Slack event/command routes
 app.include_router(slack_router)
-
-# Include GitHub OAuth identity-linking routes (/auth/github/start, /auth/github/callback)
-app.include_router(github_auth_router)
+app.include_router(github_app_router)
+app.include_router(salesforce_router)
+app.include_router(tenant_router)
 
 
 @app.get("/health")

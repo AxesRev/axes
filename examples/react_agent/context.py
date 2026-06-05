@@ -43,18 +43,16 @@ class Context:
         },
     )
 
-    github_username: str = field(
-        default="",
-        metadata={
-            "description": "GitHub username of the authenticated user. Used to distinguish the current user from the PAT owner."
-        },
-    )
-
     github_user_id: str = field(
         default="",
         metadata={
             "description": "GitHub user ID of the authenticated user. Used to distinguish the current user from the PAT owner."
         },
+    )
+
+    github_email: str = field(
+        default="",
+        metadata={"description": "Primary verified email from GitHub OAuth for the authenticated Slack user."},
     )
 
     github_installation_id: str = field(

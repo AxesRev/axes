@@ -33,6 +33,7 @@ from aegra_api.utils.run_utils import (
     _merge_jsonb,
 )
 from aegra_api.utils.status_compat import validate_run_status
+from aegra_api.utils.token_usage import attach_usage_metadata_callback, normalize_usage_metadata
 
 router = APIRouter(tags=["Runs"], dependencies=auth_dependency)
 
@@ -858,6 +859,7 @@ async def execute_run_async(
         session = maker()
         owns_session = True
 
+    usage_callback = None
     try:
         # Update status
         await update_run_status(run_id, "running", session=session)
@@ -866,6 +868,7 @@ async def execute_run_async(
         langgraph_service = get_langgraph_service()
 
         run_config = create_run_config(run_id, thread_id, user, config or {}, checkpoint)
+        run_config, usage_callback = attach_usage_metadata_callback(run_config)
 
         # Handle human-in-the-loop fields
         if interrupt_before is not None:
@@ -952,15 +955,30 @@ async def execute_run_async(
                 await streaming_service.signal_run_error(run_id, str(stream_error), error_type)
                 raise
 
+        usage_metadata = usage_callback.usage_metadata if usage_callback is not None else {}
+        token_usage = normalize_usage_metadata(usage_metadata)
+
         if has_interrupt:
-            await update_run_status(run_id, "interrupted", output=final_output or {}, session=session)
+            await update_run_status(
+                run_id,
+                "interrupted",
+                output=final_output or {},
+                token_usage=token_usage,
+                session=session,
+            )
             if not session:
                 raise RuntimeError(f"No database session available to update thread {thread_id} status")
             await set_thread_status(session, thread_id, "interrupted")
 
         else:
             # Update with results - use standard status
-            await update_run_status(run_id, "success", output=final_output or {}, session=session)
+            await update_run_status(
+                run_id,
+                "success",
+                output=final_output or {},
+                token_usage=token_usage,
+                session=session,
+            )
             # Mark thread back to idle
             if not session:
                 raise RuntimeError(f"No database session available to update thread {thread_id} status")
@@ -968,7 +986,9 @@ async def execute_run_async(
 
     except asyncio.CancelledError:
         # Store empty output to avoid JSON serialization issues - use standard status
-        await update_run_status(run_id, "interrupted", output={}, session=session)
+        usage_metadata = usage_callback.usage_metadata if usage_callback is not None else {}
+        token_usage = normalize_usage_metadata(usage_metadata)
+        await update_run_status(run_id, "interrupted", output={}, token_usage=token_usage, session=session)
         if not session:
             raise RuntimeError(f"No database session available to update thread {thread_id} status") from None
         await set_thread_status(session, thread_id, "idle")
@@ -985,7 +1005,16 @@ async def execute_run_async(
             error_type=type(e).__name__,
         )
         # Store empty output to avoid JSON serialization issues - use standard status
-        await update_run_status(run_id, "error", output={}, error=str(e), session=session)
+        usage_metadata = usage_callback.usage_metadata if usage_callback is not None else {}
+        token_usage = normalize_usage_metadata(usage_metadata)
+        await update_run_status(
+            run_id,
+            "error",
+            output={},
+            token_usage=token_usage,
+            error=str(e),
+            session=session,
+        )
         if not session:
             raise RuntimeError(f"No database session available to update thread {thread_id} status") from None
         # Set thread status to "error" when run fails (matches API specification)
@@ -1012,6 +1041,7 @@ async def update_run_status(
     run_id: str,
     status: str,
     output: Any = None,
+    token_usage: dict[str, Any] | None = None,
     error: str | None = None,
     session: AsyncSession | None = None,
 ) -> None:
@@ -1042,6 +1072,8 @@ async def update_run_status(
                 }
         if error is not None:
             values["error_message"] = error
+        if token_usage is not None:
+            values["token_usage"] = token_usage
         logger.info(f"[update_run_status] updating DB run_id={run_id} status={validated_status}")
         await session.execute(update(RunORM).where(RunORM.run_id == str(run_id)).values(**values))  # type: ignore[arg-type]
         await session.commit()

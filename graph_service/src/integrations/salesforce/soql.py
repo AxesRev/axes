@@ -32,23 +32,6 @@ def build_group_by_ids_soql(ids: Iterable[str]) -> str:
     return "SELECT Id, Name, DeveloperName, Type FROM Group WHERE Id IN (" + id_clause + ")"  # nosec B608
 
 
-def escape_soql_string_literal(value: str) -> str:
-    return value.replace("'", "\\'")
-
-
-def build_owned_records_soql(*, sobject_type: str, name_prefix: str) -> str:
-    validated_sobject = validate_sobject_api_name(sobject_type)
-    escaped_prefix = escape_soql_string_literal(name_prefix)
-    return (
-        "SELECT Id, Name, OwnerId FROM " + validated_sobject + " WHERE Name LIKE '" + escaped_prefix + "%'"  # nosec B608
-    )
-
-
-def build_account_by_name_soql(*, account_name: str) -> str:
-    escaped_name = escape_soql_string_literal(account_name)
-    return "SELECT Id FROM Account WHERE Name = '" + escaped_name + "' LIMIT 1"  # nosec B608
-
-
 def build_share_table_soql(*, share_object_name: str, target_sobject: str) -> str:
     validated_share_object = validate_share_object_api_name(share_object_name)
     validated_target = validate_sobject_api_name(target_sobject)

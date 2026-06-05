@@ -1,26 +1,9 @@
-"""FastAPI router for GitHub OAuth identity-linking endpoints.
-
-Endpoints
----------
-GET /auth/github/start?token=...
-    Validates a short-lived OAuthState token, then redirects the user's
-    browser to GitHub's OAuth authorization URL with a signed ``state``
-    parameter.
-
-GET /auth/github/callback?code=...&state=...
-    Receives the GitHub callback, verifies the ``state`` signature, exchanges
-    the authorization code for a GitHub access token, fetches the user's
-    GitHub identity, and stores the Slack → GitHub mapping.
-
-GET /auth/github/install?installation_id=...&state=...&setup_action=...
-    Receives the GitHub App installation callback.  Verifies the signed
-    ``state`` to recover the ``slack_user_id``, then persists the
-    ``installation_id`` on the corresponding ``user_identities`` row.
-"""
+"""FastAPI router for GitHub App installation and Slack → GitHub OAuth linking."""
 
 from __future__ import annotations
 
-import time
+from datetime import UTC, datetime, timedelta
+from typing import Literal
 
 import httpx
 import jwt as pyjwt
@@ -31,22 +14,20 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from aegra_api.core.orm import get_session
-from app_integrations.github.models import OAuthState
+from app_integrations.github.identity_linking import link_github_identity
+from app_integrations.github.models import OAuthState, Tenant
 from app_integrations.github.oauth_state import create_github_oauth_state, verify_github_oauth_state
-from app_integrations.github.service import (
-    link_github_identity,
-    store_github_installation,
-    store_installation_by_github_user_id,
-)
+from app_integrations.github.oauth_user import fetch_github_user_id_and_email
+from app_integrations.github.service import upsert_github_app_integration
 from app_integrations.github.settings import github_settings
 
 logger = structlog.getLogger(__name__)
 
-router = APIRouter(prefix="/auth/github", tags=["github-auth"])
+router = APIRouter(prefix="/auth/github", tags=["github-app"])
+_INSTALL_STATE_TTL_SECONDS = 600
 
 _GITHUB_AUTHORIZE_URL = "https://github.com/login/oauth/authorize"
 _GITHUB_TOKEN_URL = "https://github.com/login/oauth/access_token"  # nosec B105
-_GITHUB_USER_URL = "https://api.github.com/user"
 
 _SUCCESS_HTML = """<!DOCTYPE html>
 <html lang="en">
@@ -65,22 +46,49 @@ _SUCCESS_HTML = """<!DOCTYPE html>
 <body>
   <div class="card">
     <h1>&#10003; GitHub account linked</h1>
-    <p>Your GitHub account <strong>{github_username}</strong> has been connected.<br>
+    <p>Your GitHub account (<strong>{github_email}</strong>) has been connected.<br>
        You can close this tab and return to Slack.</p>
   </div>
 </body>
 </html>"""
+
+_TENANT_INSTALL_SUCCESS_HTML = """<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>GitHub App Installed</title>
+  <style>
+    body {{ font-family: sans-serif; display: flex; justify-content: center;
+           align-items: center; height: 100vh; margin: 0; background: #f6f8fa; }}
+    .card {{ background: white; border-radius: 8px; padding: 2rem 3rem;
+             box-shadow: 0 2px 8px rgba(0,0,0,.12); text-align: center; }}
+    h1 {{ color: #2da44e; }}
+    p  {{ color: #57606a; }}
+    a  {{ color: #0969da; text-decoration: none; }}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>&#10003; GitHub App installed</h1>
+    <p>Installation <strong>#{installation_id}</strong> has been connected to your tenant.<br>
+       <a href="{webapp_url}">Return to Axes</a></p>
+  </div>
+</body>
+</html>"""
+
+
+def _state_kind(state: str) -> Literal["jwt", "oauth_hmac"]:
+    """Distinguish tenant install JWT (3 segments) from OAuth HMAC state (2 segments)."""
+    if state.count(".") == 2:
+        return "oauth_hmac"
+    return "jwt"
 
 
 async def _validate_oauth_state_token(
     token: str,
     session: AsyncSession,
 ) -> str:
-    """Validate an OAuthState DB token and return the associated slack_user_id.
-
-    Raises ``HTTPException(400)`` if the token is missing, expired, or already
-    consumed.
-    """
+    """Validate an OAuthState DB token and return the associated slack_user_id."""
     result = await session.execute(select(OAuthState).where(OAuthState.token == token))
     record = result.scalar_one_or_none()
 
@@ -89,8 +97,6 @@ async def _validate_oauth_state_token(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="OAuth linking token is invalid or has already been used.",
         )
-
-    from datetime import UTC, datetime
 
     if record.expires_at.replace(tzinfo=UTC) < datetime.now(UTC):
         await session.delete(record)
@@ -103,24 +109,117 @@ async def _validate_oauth_state_token(
     return record.slack_user_id
 
 
+def _decode_tenant_install_state(state: str) -> str:
+    if not github_settings.GITHUB_INSTALL_STATE_SECRET:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="GITHUB_INSTALL_STATE_SECRET is not configured.",
+        )
+    try:
+        claims = pyjwt.decode(
+            state,
+            github_settings.GITHUB_INSTALL_STATE_SECRET,
+            algorithms=["HS256"],
+            options={"require": ["tenant_id", "exp"]},
+        )
+        tenant_id = claims["tenant_id"]
+        if not isinstance(tenant_id, str) or not tenant_id:
+            raise ValueError("state is missing tenant_id")
+        return tenant_id
+    except (pyjwt.PyJWTError, ValueError) as exc:
+        logger.warning("github_app_install_invalid_state", error=str(exc))
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid installation state: {exc}",
+        ) from exc
+
+
+@router.get("/install", response_model=None)
+async def github_app_install(
+    tenant_id: str | None = None,
+    installation_id: str | None = None,
+    state: str | None = None,
+    setup_action: str | None = None,
+    session: AsyncSession = Depends(get_session),
+) -> RedirectResponse | HTMLResponse:
+    """Start tenant GitHub App install, or handle Slack-signed install callback.
+
+    * ``?tenant_id=`` — redirect browser to GitHub's install page (webapp flow).
+    * ``?installation_id=&state=`` with OAuth HMAC state — legacy Slack install callback.
+    """
+    if tenant_id is not None:
+        return await _github_app_install_start(tenant_id, session)
+
+    if installation_id is not None and state is not None and _state_kind(state) == "oauth_hmac":
+        if not github_settings.GITHUB_OAUTH_STATE_SECRET:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="GITHUB_OAUTH_STATE_SECRET is not configured.",
+            )
+        try:
+            slack_user_id = verify_github_oauth_state(state, github_settings.GITHUB_OAUTH_STATE_SECRET)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid state parameter: {exc}",
+            ) from exc
+        logger.info(
+            "github_app_install_slack_callback",
+            slack_user_id=slack_user_id,
+            installation_id=installation_id,
+            setup_action=setup_action,
+        )
+        return HTMLResponse(
+            content=_TENANT_INSTALL_SUCCESS_HTML.format(
+                installation_id=installation_id,
+                webapp_url=github_settings.WEBAPP_URL.rstrip("/"),
+            ),
+            status_code=status.HTTP_200_OK,
+        )
+
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail="Provide tenant_id to start installation, or installation_id with a valid state.",
+    )
+
+
+async def _github_app_install_start(tenant_id: str, session: AsyncSession) -> RedirectResponse:
+    result = await session.execute(select(Tenant).where(Tenant.id == tenant_id))
+    tenant = result.scalar_one_or_none()
+    if tenant is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"tenant not found: {tenant_id}")
+
+    if not github_settings.GITHUB_APP_SLUG:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="GITHUB_APP_SLUG is not configured on this server.",
+        )
+    if not github_settings.GITHUB_INSTALL_STATE_SECRET:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="GITHUB_INSTALL_STATE_SECRET is not configured.",
+        )
+
+    state = pyjwt.encode(
+        {
+            "tenant_id": tenant_id,
+            "exp": datetime.now(UTC) + timedelta(seconds=_INSTALL_STATE_TTL_SECONDS),
+        },
+        github_settings.GITHUB_INSTALL_STATE_SECRET,
+        algorithm="HS256",
+        headers={"typ": "JWT"},
+    )
+    install_url = f"https://github.com/apps/{github_settings.GITHUB_APP_SLUG}/installations/new?state={state}"
+    logger.info("github_app_install_redirect", tenant_id=tenant_id)
+    return RedirectResponse(url=install_url, status_code=status.HTTP_302_FOUND)
+
+
 @router.get("/start")
 async def github_oauth_start(
     token: str,
     session: AsyncSession = Depends(get_session),
 ) -> RedirectResponse:
-    """Validate the short-lived linking token and redirect the user to GitHub.
-
-    The ``state`` parameter embedded in the GitHub redirect URL is HMAC-signed
-    and contains the ``slack_user_id`` so the callback can retrieve it without
-    trusting client input.
-
-    Args:
-        token: Short-lived OAuthState token sent to the user via Slack.
-        session: Injected async database session.
-
-    Returns:
-        HTTP 302 redirect to GitHub's OAuth authorization endpoint.
-    """
+    """Validate a Slack linking token and redirect the user to GitHub OAuth."""
     slack_user_id = await _validate_oauth_state_token(token, session)
 
     if not github_settings.GITHUB_CLIENT_ID:
@@ -131,7 +230,7 @@ async def github_oauth_start(
     if not github_settings.GITHUB_OAUTH_STATE_SECRET:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="GitHub OAuth state secret is not configured.",
+            detail="GITHUB_OAUTH_STATE_SECRET is not configured.",
         )
 
     oauth_state = create_github_oauth_state(
@@ -139,13 +238,13 @@ async def github_oauth_start(
         secret=github_settings.GITHUB_OAUTH_STATE_SECRET,
     )
 
-    callback_url = f"{github_settings.SERVER_URL}/auth/github/callback"
+    callback_url = f"{github_settings.SERVER_URL.rstrip('/')}/auth/github/callback"
     authorize_url = (
         f"{_GITHUB_AUTHORIZE_URL}"
         f"?client_id={github_settings.GITHUB_CLIENT_ID}"
         f"&redirect_uri={callback_url}"
         f"&state={oauth_state}"
-        f"&scope=read:user"
+        f"&scope=read:user%20user:email"
     )
 
     logger.info("github_oauth_redirect", slack_user_id=slack_user_id)
@@ -153,126 +252,100 @@ async def github_oauth_start(
 
 
 @router.get("/callback")
-async def github_oauth_callback(
-    code: str,
+async def github_callback(
+    code: str | None = None,
     state: str | None = None,
     installation_id: str | None = None,
     setup_action: str | None = None,
     session: AsyncSession = Depends(get_session),
 ) -> HTMLResponse:
-    """Handle the GitHub OAuth callback and/or GitHub App installation.
+    """GitHub OAuth callback, tenant App install callback, or direct App install."""
+    if code is not None:
+        return await _github_oauth_callback(
+            code=code,
+            state=state,
+            installation_id=installation_id,
+            session=session,
+        )
 
-    GitHub calls this endpoint in two scenarios:
+    if installation_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Missing installation_id or authorization code.",
+        )
 
-    **Scenario A — Slack-initiated OAuth linking** (``state`` present):
-    The user followed a Slack-generated link.  ``state`` is HMAC-signed and
-    encodes the ``slack_user_id``.  The code is exchanged for an access token,
-    the GitHub identity is fetched, and the Slack → GitHub mapping is upserted.
-    If ``installation_id`` is also present it is stored at the same time.
-
-    **Scenario B — GitHub App installation** (``state`` absent):
-    The user installed the app directly from GitHub.  The ``installation_id``
-    is stored immediately — **no code exchange is performed**.  The code
-    supplied by GitHub is only needed if user-level API access is required,
-    which it is not for a plain installation record.  ``slack_user_id`` and
-    ``github_user_id`` are left as ``None`` and can be filled in later.
-
-    The ``slack_user_id`` is **never** accepted from the query string — it is
-    always recovered from the verified signed state.
-
-    Args:
-        code: GitHub authorization code (used only in Scenario A).
-        state: Optional HMAC-signed state parameter echoed back by GitHub.
-            Present for Slack-initiated flows; absent for direct installations.
-        installation_id: Optional GitHub App installation ID.
-        setup_action: Optional setup action (``install`` / ``update`` /
-            ``delete``).  Informational only.
-        session: Injected async database session.
-
-    Returns:
-        HTML success page.
-    """
-    # Scenario B: GitHub App installation — use the App JWT to fetch the
-    # installation and get the target account (org or user).
     if state is None:
-        github_user_id: str | None = None
-        github_username: str | None = None
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Missing state parameter. Start installation from the Axes webapp.",
+        )
 
-        if installation_id is not None:
-            app_pk = github_settings.github_app_private_key
-            if github_settings.GITHUB_APP_ID <= 0 or app_pk is None:
-                logger.warning(
-                    "github_app_install_skipped_installation_lookup",
-                    installation_id=installation_id,
-                    has_app_id=github_settings.GITHUB_APP_ID > 0,
-                    has_private_key=app_pk is not None,
-                )
-            else:
-                now = int(time.time())
-                app_jwt = pyjwt.encode(
-                    {"iat": now - 60, "exp": now + 600, "iss": str(github_settings.GITHUB_APP_ID)},
-                    app_pk,
-                    algorithm="RS256",
-                )
-                async with httpx.AsyncClient(timeout=15.0) as client:
-                    install_response = await client.get(
-                        f"https://api.github.com/app/installations/{installation_id}",
-                        headers={
-                            "Authorization": f"Bearer {app_jwt}",
-                            "Accept": "application/vnd.github+json",
-                            "X-GitHub-Api-Version": "2022-11-28",
-                        },
-                    )
-                if install_response.status_code != status.HTTP_200_OK:
-                    logger.error(
-                        "github_app_install_lookup_failed",
-                        installation_id=installation_id,
-                        status_code=install_response.status_code,
-                        body=install_response.text[:2000],
-                    )
-                else:
-                    payload = install_response.json()
-                    account = payload.get("account") or {}
-                    aid = account.get("id")
-                    login = account.get("login")
-                    if aid is None or login is None:
-                        logger.error(
-                            "github_app_install_missing_account",
-                            installation_id=installation_id,
-                            keys=list(payload.keys()),
-                        )
-                    else:
-                        github_user_id = str(aid)
-                        github_username = str(login)
-
-        if installation_id is not None:
-            await store_installation_by_github_user_id(
-                github_user_id=github_user_id,
-                github_username=github_username,
+    if _state_kind(state) == "jwt":
+        tenant_id = _decode_tenant_install_state(state)
+        try:
+            await upsert_github_app_integration(
+                tenant_id=tenant_id,
                 installation_id=installation_id,
                 session=session,
             )
+        except ValueError as exc:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
         logger.info(
             "github_app_install_complete",
+            tenant_id=tenant_id,
             installation_id=installation_id,
-            github_username=github_username,
             setup_action=setup_action,
         )
         return HTMLResponse(
-            content=_INSTALL_SUCCESS_HTML.format(installation_id=installation_id or ""),
+            content=_TENANT_INSTALL_SUCCESS_HTML.format(
+                installation_id=installation_id,
+                webapp_url=github_settings.WEBAPP_URL.rstrip("/"),
+            ),
             status_code=status.HTTP_200_OK,
         )
 
-    # Scenario A: Slack-initiated OAuth flow.
+    return HTMLResponse(
+        content=_TENANT_INSTALL_SUCCESS_HTML.format(
+            installation_id=installation_id,
+            webapp_url=github_settings.WEBAPP_URL.rstrip("/"),
+        ),
+        status_code=status.HTTP_200_OK,
+    )
+
+
+async def _github_oauth_callback(
+    *,
+    code: str,
+    state: str | None,
+    installation_id: str | None,
+    session: AsyncSession,
+) -> HTMLResponse:
+    if state is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Missing OAuth state parameter.",
+        )
+    if not github_settings.GITHUB_OAUTH_STATE_SECRET:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="GITHUB_OAUTH_STATE_SECRET is not configured.",
+        )
+    if not github_settings.GITHUB_CLIENT_ID or not github_settings.GITHUB_CLIENT_SECRET:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="GitHub OAuth client credentials are not configured.",
+        )
+
     try:
         slack_user_id = verify_github_oauth_state(state, github_settings.GITHUB_OAUTH_STATE_SECRET)
     except ValueError as exc:
-        logger.warning("github_oauth_invalid_state", error=str(exc))
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Invalid OAuth state: {exc}",
-        )
+        ) from exc
 
+    callback_url = f"{github_settings.SERVER_URL.rstrip('/')}/auth/github/callback"
     async with httpx.AsyncClient(timeout=15.0) as client:
         token_response = await client.post(
             _GITHUB_TOKEN_URL,
@@ -280,7 +353,7 @@ async def github_oauth_callback(
                 "client_id": github_settings.GITHUB_CLIENT_ID,
                 "client_secret": github_settings.GITHUB_CLIENT_SECRET,
                 "code": code,
-                "redirect_uri": f"{github_settings.SERVER_URL}/auth/github/callback",
+                "redirect_uri": callback_url,
             },
             headers={"Accept": "application/json"},
         )
@@ -299,34 +372,13 @@ async def github_oauth_callback(
     token_data = token_response.json()
     access_token = token_data.get("access_token")
     if not access_token:
-        logger.error("github_token_missing", response=token_data)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="GitHub did not return an access token.",
         )
 
     async with httpx.AsyncClient(timeout=15.0) as client:
-        user_response = await client.get(
-            _GITHUB_USER_URL,
-            headers={
-                "Authorization": f"Bearer {access_token}",
-                "Accept": "application/vnd.github+json",
-            },
-        )
-
-    if user_response.status_code != status.HTTP_200_OK:
-        logger.error(
-            "github_user_fetch_failed",
-            status_code=user_response.status_code,
-        )
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Failed to fetch GitHub user information.",
-        )
-
-    user_data = user_response.json()
-    github_user_id: str = str(user_data["id"])
-    github_username: str = user_data["login"]
+        github_user_id, github_email = await fetch_github_user_id_and_email(client, access_token=access_token)
 
     state_result = await session.execute(select(OAuthState).where(OAuthState.slack_user_id == slack_user_id))
     oauth_token_record = state_result.scalar_one_or_none()
@@ -335,105 +387,18 @@ async def github_oauth_callback(
     await link_github_identity(
         slack_user_id=slack_user_id,
         github_user_id=github_user_id,
-        github_username=github_username,
+        github_email=github_email,
         oauth_token=oauth_token,
         session=session,
     )
 
-    if installation_id is not None:
-        await store_github_installation(
-            slack_user_id=slack_user_id,
-            installation_id=installation_id,
-            session=session,
-        )
-
     logger.info(
         "github_oauth_complete",
         slack_user_id=slack_user_id,
-        github_username=github_username,
+        github_user_id=github_user_id,
         installation_id=installation_id,
     )
     return HTMLResponse(
-        content=_SUCCESS_HTML.format(github_username=github_username),
-        status_code=status.HTTP_200_OK,
-    )
-
-
-_INSTALL_SUCCESS_HTML = """<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>GitHub App Installed</title>
-  <style>
-    body {{ font-family: sans-serif; display: flex; justify-content: center;
-           align-items: center; height: 100vh; margin: 0; background: #f6f8fa; }}
-    .card {{ background: white; border-radius: 8px; padding: 2rem 3rem;
-             box-shadow: 0 2px 8px rgba(0,0,0,.12); text-align: center; }}
-    h1 {{ color: #2da44e; }}
-    p  {{ color: #57606a; }}
-  </style>
-</head>
-<body>
-  <div class="card">
-    <h1>&#10003; GitHub App installed</h1>
-    <p>Installation <strong>#{installation_id}</strong> has been recorded.<br>
-       You can close this tab and return to Slack.</p>
-  </div>
-</body>
-</html>"""
-
-
-@router.get("/install")
-async def github_app_install_callback(
-    installation_id: str,
-    state: str,
-    setup_action: str = "install",
-    session: AsyncSession = Depends(get_session),
-) -> HTMLResponse:
-    """Handle the GitHub App installation callback.
-
-    GitHub redirects here after a user installs the app.  The ``state``
-    parameter must be the HMAC-signed value generated when the bot sent the
-    user their installation link — it encodes the ``slack_user_id`` so we can
-    associate the installation without trusting client input.
-
-    Steps:
-    1. Verify and decode the signed ``state`` to recover ``slack_user_id``.
-    2. Persist ``installation_id`` on the ``user_identities`` row.
-    3. Return a success HTML page the user can close.
-
-    Args:
-        installation_id: GitHub App installation ID provided by GitHub.
-        state: HMAC-signed state containing the ``slack_user_id``.
-        setup_action: Action that triggered the callback (``install`` /
-            ``update`` / ``delete``).  Defaults to ``"install"``.
-        session: Injected async database session.
-
-    Returns:
-        HTML success page.
-    """
-    try:
-        slack_user_id = verify_github_oauth_state(state, github_settings.GITHUB_OAUTH_STATE_SECRET)
-    except ValueError as exc:
-        logger.warning("github_install_invalid_state", error=str(exc))
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid state parameter: {exc}",
-        )
-
-    await store_github_installation(
-        slack_user_id=slack_user_id,
-        installation_id=installation_id,
-        session=session,
-    )
-
-    logger.info(
-        "github_app_install_complete",
-        slack_user_id=slack_user_id,
-        installation_id=installation_id,
-        setup_action=setup_action,
-    )
-    return HTMLResponse(
-        content=_INSTALL_SUCCESS_HTML.format(installation_id=installation_id),
+        content=_SUCCESS_HTML.format(github_email=github_email),
         status_code=status.HTTP_200_OK,
     )

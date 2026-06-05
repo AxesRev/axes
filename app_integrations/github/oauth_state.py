@@ -24,12 +24,12 @@ import time
 _ENCODING = "utf-8"
 
 
-def _b64_encode(data: dict) -> str:
+def _b64_encode(data: dict[str, object]) -> str:
     raw = json.dumps(data, separators=(",", ":")).encode(_ENCODING)
     return base64.urlsafe_b64encode(raw).decode(_ENCODING).rstrip("=")
 
 
-def _b64_decode(s: str) -> dict:
+def _b64_decode(s: str) -> dict[str, object]:
     padding = (4 - len(s) % 4) % 4
     raw = base64.urlsafe_b64decode(s + "=" * padding)
     return json.loads(raw.decode(_ENCODING))
@@ -44,17 +44,7 @@ def _sign(encoded_payload: str, secret: str) -> str:
 
 
 def create_github_oauth_state(slack_user_id: str, secret: str, ttl_seconds: int = 300) -> str:
-    """Create a signed, time-limited OAuth state string.
-
-    Args:
-        slack_user_id: The Slack user ID to embed in the state.
-        secret: HMAC signing key (``GITHUB_OAUTH_STATE_SECRET``).
-        ttl_seconds: Lifetime of the state in seconds (default 5 min).
-
-    Returns:
-        A dot-separated ``<payload>.<signature>`` string safe to use as an
-        OAuth ``state`` query parameter.
-    """
+    """Create a signed, time-limited OAuth state string."""
     payload = {
         "slack_user_id": slack_user_id,
         "nonce": secrets.token_hex(16),
@@ -66,23 +56,11 @@ def create_github_oauth_state(slack_user_id: str, secret: str, ttl_seconds: int 
 
 
 def verify_github_oauth_state(state: str, secret: str) -> str:
-    """Verify a signed OAuth state and return the embedded ``slack_user_id``.
-
-    Args:
-        state: The raw ``state`` query parameter received from GitHub.
-        secret: HMAC signing key (``GITHUB_OAUTH_STATE_SECRET``).
-
-    Returns:
-        The ``slack_user_id`` embedded in the state.
-
-    Raises:
-        ValueError: If the state is malformed, the signature is invalid, or
-            the state has expired.
-    """
+    """Verify a signed OAuth state and return the embedded ``slack_user_id``."""
     try:
         encoded, signature = state.rsplit(".", 1)
-    except ValueError:
-        raise ValueError("Malformed OAuth state: missing signature segment")
+    except ValueError as exc:
+        raise ValueError("Malformed OAuth state: missing signature segment") from exc
 
     expected_sig = _sign(encoded, secret)
     if not hmac.compare_digest(signature, expected_sig):
@@ -90,14 +68,14 @@ def verify_github_oauth_state(state: str, secret: str) -> str:
 
     try:
         payload = _b64_decode(encoded)
-    except Exception:
-        raise ValueError("OAuth state payload could not be decoded")
+    except Exception as exc:
+        raise ValueError("OAuth state payload could not be decoded") from exc
 
     if payload.get("exp", 0) < int(time.time()):
         raise ValueError("OAuth state has expired")
 
     slack_user_id = payload.get("slack_user_id")
-    if not slack_user_id:
+    if not slack_user_id or not isinstance(slack_user_id, str):
         raise ValueError("OAuth state payload is missing slack_user_id")
 
     return slack_user_id

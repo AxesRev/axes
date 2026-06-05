@@ -106,6 +106,10 @@ class Run(BaseModel):
     error_message: str | None = None
     config: dict[str, Any] | None = {}
     context: dict[str, Any] | None = {}
+    token_usage: dict[str, Any] | None = Field(
+        None,
+        description="Aggregated LangChain UsageMetadata keyed by model name",
+    )
     user_id: str
     created_at: datetime
     updated_at: datetime

@@ -89,11 +89,7 @@ but is not an exhaustive list of valid domains, resources, or permission levels.
 bindings on a resource, that shows who currently has what — not the complete set of grantable levels.
 Prefer the user request and documentation snippets for valid choices; use tools to verify current facts.
 Do not infer policies that are not explicitly stated.
-
-When `{field_name}` is `permission`:
-  - Map the user's stated capability to its canonical name (e.g. push/write code → WRITE).
-  - Do NOT choose ADMIN because it is the only non-read binding visible on the resource.
-  - Do NOT treat the permission labels present on a resource as the only valid options for this field.
+Do NOT treat the permission labels present on a resource as the only valid options for this field.
 """
 
 FIELD_DETECTOR_FEEDBACK_TEMPLATE = """
