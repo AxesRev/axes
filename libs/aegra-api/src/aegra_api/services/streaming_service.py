@@ -340,7 +340,7 @@ class StreamingService:
             # Lazy import to avoid cycles
             from aegra_api.api.runs import update_run_status
 
-            await update_run_status(run_id, status, output, error)
+            await update_run_status(run_id, status, output=output, error=error)
         except Exception as e:
             logger.error(f"Error updating run status for {run_id}: {e}")
 

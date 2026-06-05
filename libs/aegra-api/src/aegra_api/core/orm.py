@@ -133,6 +133,7 @@ class Run(Base):
     # If migrations add this column later, it's already represented here.
     config: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     context: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    token_usage: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     output: Mapped[dict | None] = mapped_column(JSONB)
     error_message: Mapped[str | None] = mapped_column(Text)
     user_id: Mapped[str] = mapped_column(Text, nullable=False)
