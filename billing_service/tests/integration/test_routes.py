@@ -5,19 +5,19 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from aegra_api.core.orm import get_session
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from slack_app.auth0 import require_auth0_claims
-from slack_app.billing_routes import router as billing_router
 
-from aegra_api.core.orm import get_session
+from billing.routes import router as billing_router
 
 
 @pytest.fixture
 def billing_api_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     monkeypatch.setattr("slack_app.config.slack_settings.AUTH0_DOMAIN", "dev-example.us.auth0.com")
     monkeypatch.setattr("slack_app.config.slack_settings.AUTH0_CLIENT_ID", "test-client-id")
-    monkeypatch.setattr("slack_app.config.billing_settings.PADDLE_API_KEY", "test_sdbx_key")
+    monkeypatch.setattr("billing.config.billing_settings.PADDLE_API_KEY", "test_sdbx_key")
 
     app = FastAPI()
     app.include_router(billing_router)
@@ -58,6 +58,8 @@ def test_get_my_tenant_billing_returns_not_setup(
 ) -> None:
     from app_integrations.github.models import Tenant
 
+    from billing.schemas import TenantBillingStatusResponse
+
     tenant = Tenant(
         id="tenant-new",
         name="Owner",
@@ -68,9 +70,7 @@ def test_get_my_tenant_billing_returns_not_setup(
     async def fake_get_or_create(**kwargs: object) -> Tenant:
         return tenant
 
-    async def fake_status(**kwargs: object) -> object:
-        from slack_app.billing_schemas import TenantBillingStatusResponse
-
+    async def fake_status(**kwargs: object) -> TenantBillingStatusResponse:
         return TenantBillingStatusResponse(
             billing_setup=False,
             paddle_customer_id=None,
@@ -78,8 +78,8 @@ def test_get_my_tenant_billing_returns_not_setup(
             subscription_status=None,
         )
 
-    monkeypatch.setattr("slack_app.billing_routes.get_or_create_tenant_for_auth_user", fake_get_or_create)
-    monkeypatch.setattr("slack_app.billing_routes.get_tenant_billing_status", fake_status)
+    monkeypatch.setattr("billing.routes.get_or_create_tenant_for_auth_user", fake_get_or_create)
+    monkeypatch.setattr("billing.routes.get_tenant_billing_status", fake_status)
 
     response = billing_api_client.get("/tenants/me/billing")
     assert response.status_code == 200

@@ -35,23 +35,3 @@ class SlackSettings(BaseSettings):
 
 
 slack_settings = SlackSettings()
-
-
-class BillingSettings(BaseSettings):
-    """Paddle billing settings (sandbox). Card data is never stored locally."""
-
-    model_config = SettingsConfigDict(
-        env_file=(
-            str(SLACK_APP_DIR / ".env"),
-            str(SLACK_APP_DIR.parent / ".env"),
-        ),
-        case_sensitive=True,
-        extra="ignore",
-    )
-
-    PADDLE_API_KEY: str = ""
-    PADDLE_USAGE_PRICE_ID: str = ""
-    BILLING_TOKENS_PER_UNIT: int = 1000
-
-
-billing_settings = BillingSettings()

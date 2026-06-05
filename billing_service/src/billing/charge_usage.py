@@ -2,7 +2,7 @@
 
 Run from the repo root on a schedule, e.g. the 1st of each month:
 
-    uv run python -m slack_app.charge_usage
+    uv run --package aegra-billing-service charge-usage
 """
 
 from __future__ import annotations
@@ -12,12 +12,12 @@ import json
 import sys
 
 import structlog
-from sqlalchemy.exc import SQLAlchemyError
-
 from aegra_api.core.database import db_manager
 from aegra_api.core.orm import get_metadata_session_maker
-from slack_app.billing_service import charge_monthly_usage_for_all_tenants, current_month_period
-from slack_app.config import billing_settings
+from sqlalchemy.exc import SQLAlchemyError
+
+from billing.config import billing_settings
+from billing.service import charge_monthly_usage_for_all_tenants, current_month_period
 
 logger = structlog.getLogger(__name__)
 

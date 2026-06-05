@@ -3,16 +3,16 @@
 from __future__ import annotations
 
 import structlog
+from aegra_api.core.orm import get_session
 from fastapi import APIRouter, Depends, HTTPException, status
+from slack_app.auth0 import require_auth0_claims
+from slack_app.tenant_service import get_or_create_tenant_for_auth_user
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from aegra_api.core.orm import get_session
-from slack_app.auth0 import require_auth0_claims
-from slack_app.billing_schemas import BillingLinkRequest, BillingLinkResponse, TenantBillingStatusResponse
-from slack_app.billing_service import get_tenant_billing_status, link_tenant_paddle_billing
-from slack_app.config import billing_settings
-from slack_app.paddle_client import PaddleApiError
-from slack_app.tenant_service import get_or_create_tenant_for_auth_user
+from billing.config import billing_settings
+from billing.paddle_client import PaddleApiError
+from billing.schemas import BillingLinkRequest, BillingLinkResponse, TenantBillingStatusResponse
+from billing.service import get_tenant_billing_status, link_tenant_paddle_billing
 
 router = APIRouter(tags=["billing"])
 

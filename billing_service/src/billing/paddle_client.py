@@ -7,7 +7,7 @@ from typing import Any
 
 import httpx
 
-from slack_app.config import billing_settings
+from billing.config import billing_settings
 
 PADDLE_SANDBOX_API_BASE = "https://sandbox-api.paddle.com"
 

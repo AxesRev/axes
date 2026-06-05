@@ -7,20 +7,20 @@ from datetime import UTC, datetime
 from typing import Any
 
 import structlog
+from aegra_api.core.orm import Run
+from app_integrations.github.models import Tenant, UserIdentity
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from aegra_api.core.orm import Run
-from app_integrations.github.models import Tenant, UserIdentity
-from slack_app.billing_schemas import BillingChargeUsageResponse, BillingLinkResponse, TenantBillingStatusResponse
-from slack_app.config import billing_settings
-from slack_app.paddle_client import (
+from billing.config import billing_settings
+from billing.paddle_client import (
     PaddleApiError,
     charge_subscription_usage,
     get_subscription,
     get_transaction,
     list_subscriptions_for_customer,
 )
+from billing.schemas import BillingChargeUsageResponse, BillingLinkResponse, TenantBillingStatusResponse
 
 logger = structlog.getLogger(__name__)
 
@@ -143,8 +143,6 @@ async def link_tenant_paddle_billing(
 
     subscription_id = transaction.get("subscription_id")
     if not isinstance(subscription_id, str) or not subscription_id:
-        # Transaction may be from a one-time price or the subscription isn't linked yet.
-        # Fall back: find the most recently created active subscription for this customer.
         logger.info(
             "billing_link_no_subscription_on_transaction",
             transaction_id=paddle_transaction_id,
