@@ -1,7 +1,9 @@
 import { redirect } from "next/navigation";
 
 import { auth0 } from "@/lib/auth0";
+import { BillingSection } from "@/app/billing-section";
 import { IntegrationSection } from "@/app/integration-section";
+import { getPaddlePublicConfig } from "@/lib/paddle/config";
 import {
   ApiUnauthorizedError,
   buildGithubInstallUrl,
@@ -76,6 +78,8 @@ export default async function Home() {
   const githubInstallUrl = tenantId && !githubInstallation ? buildGithubInstallUrl(tenantId) : null;
   const salesforceInstallUrl = tenantId && !salesforceOrg ? buildSalesforceInstallUrl(tenantId) : null;
   const salesforceConnectUrl = tenantId && !salesforceOrg ? buildSalesforceConnectUrl(tenantId) : null;
+  const paddleConfig = getPaddlePublicConfig();
+  const customerEmail = session.user.email ?? tenant?.email ?? null;
 
   return (
     <div className="flex flex-1 flex-col items-center justify-center bg-zinc-50 px-6 py-24 font-sans dark:bg-black">
@@ -112,6 +116,16 @@ export default async function Home() {
             <p className="mt-3 text-sm text-red-600">{tenantResolveError ?? "Could not resolve tenant."}</p>
           )}
         </section>
+
+        {tenantId && paddleConfig && customerEmail ? (
+          <BillingSection
+            clientToken={paddleConfig.clientToken}
+            basePriceId={paddleConfig.basePriceId}
+            customerEmail={customerEmail}
+            customerName={session.user.name ?? tenantName}
+            tenantId={tenantId}
+          />
+        ) : null}
 
         {tenantId ? (
           <>

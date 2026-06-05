@@ -4,6 +4,7 @@ from fastapi import FastAPI
 
 from app_integrations.github.router import router as github_app_router
 from app_integrations.salesforce.router import router as salesforce_router
+from billing.routes import router as billing_router
 from slack_app.routes import router as slack_router
 from slack_app.tenant_routes import router as tenant_router
 
@@ -16,6 +17,7 @@ app.include_router(slack_router)
 app.include_router(github_app_router)
 app.include_router(salesforce_router)
 app.include_router(tenant_router)
+app.include_router(billing_router)
 
 
 @app.get("/health")

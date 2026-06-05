@@ -6,6 +6,13 @@ export type TenantRecord = {
   email: string | null;
 };
 
+export type TenantBillingStatus = {
+  billing_setup: boolean;
+  paddle_customer_id: string | null;
+  paddle_subscription_id: string | null;
+  subscription_status: string | null;
+};
+
 export type AppIntegrationRecord = {
   id: string;
   app_name: string;
@@ -17,6 +24,27 @@ export class ApiUnauthorizedError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "ApiUnauthorizedError";
+  }
+}
+
+/** Thrown when the API returns a non-success response. */
+export class ApiResponseError extends Error {
+  readonly status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "ApiResponseError";
+    this.status = status;
+  }
+}
+
+async function readApiErrorDetail(response: Response): Promise<string> {
+  const body = await response.text();
+  try {
+    const payload = JSON.parse(body) as { detail?: string; message?: string };
+    return payload.detail ?? payload.message ?? body;
+  } catch {
+    return body || response.statusText;
   }
 }
 
@@ -147,4 +175,51 @@ export function githubInstallationId(integration: AppIntegrationRecord | null): 
 
 export function salesforceOrgId(integration: AppIntegrationRecord | null): string | null {
   return configString(integration, "org_id");
+}
+
+export async function fetchBillingStatusForAccessToken(accessToken: string): Promise<TenantBillingStatus> {
+  const response = await fetch(`${apiBaseUrl()}/tenants/me/billing`, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+    cache: "no-store",
+  });
+
+  if (response.status === 401) {
+    throw new ApiUnauthorizedError("Invalid or missing access token");
+  }
+
+  if (!response.ok) {
+    const detail = await readApiErrorDetail(response);
+    throw new ApiResponseError(detail, response.status);
+  }
+
+  return (await response.json()) as TenantBillingStatus;
+}
+
+export async function fetchBillingPortalUrlForAccessToken(accessToken: string): Promise<string> {
+  const response = await fetch(`${apiBaseUrl()}/tenants/me/billing/portal`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+    cache: "no-store",
+  });
+
+  if (response.status === 401) {
+    throw new ApiUnauthorizedError("Invalid or missing access token");
+  }
+
+  if (!response.ok) {
+    const detail = await readApiErrorDetail(response);
+    throw new ApiResponseError(detail, response.status);
+  }
+
+  const payload = (await response.json()) as { url?: string };
+  if (!payload.url) {
+    throw new ApiResponseError("Paddle did not return a customer portal URL.", 502);
+  }
+
+  return payload.url;
 }
