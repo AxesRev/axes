@@ -26,6 +26,7 @@ class Tenant(Base):
     auth0_sub: Mapped[str | None] = mapped_column(Text, nullable=True)
     paddle_customer_id: Mapped[str | None] = mapped_column(Text, nullable=True)
     paddle_subscription_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    paddle_subscription_status: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class AppIntegration(Base):

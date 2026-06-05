@@ -12,15 +12,8 @@ class TenantBillingStatusResponse(BaseModel):
     subscription_status: str | None = None
 
 
-class BillingLinkRequest(BaseModel):
-    paddle_customer_id: str = Field(min_length=1)
-    paddle_transaction_id: str = Field(min_length=1)
-
-
-class BillingLinkResponse(BaseModel):
-    billing_setup: bool
-    paddle_customer_id: str
-    paddle_subscription_id: str
+class BillingPortalResponse(BaseModel):
+    url: str = Field(min_length=1)
 
 
 class BillingChargeUsageResponse(BaseModel):

@@ -22,7 +22,7 @@ export function getPaddlePublicConfig(): PaddlePublicConfig | null {
 }
 
 export function isPaddleBillingConfigured(): boolean {
-  return getPaddlePublicConfig() !== null && Boolean(process.env.PADDLE_API_KEY?.trim());
+  return getPaddlePublicConfig() !== null;
 }
 
 export function isValidPaddlePriceId(priceId: string): boolean {

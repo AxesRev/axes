@@ -198,17 +198,12 @@ export async function fetchBillingStatusForAccessToken(accessToken: string): Pro
   return (await response.json()) as TenantBillingStatus;
 }
 
-export async function linkBillingForAccessToken(
-  accessToken: string,
-  payload: { paddle_customer_id: string; paddle_transaction_id: string },
-): Promise<TenantBillingStatus> {
-  const response = await fetch(`${apiBaseUrl()}/tenants/me/billing/link`, {
+export async function fetchBillingPortalUrlForAccessToken(accessToken: string): Promise<string> {
+  const response = await fetch(`${apiBaseUrl()}/tenants/me/billing/portal`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${accessToken}`,
-      "Content-Type": "application/json",
     },
-    body: JSON.stringify(payload),
     cache: "no-store",
   });
 
@@ -221,6 +216,10 @@ export async function linkBillingForAccessToken(
     throw new ApiResponseError(detail, response.status);
   }
 
-  await response.json();
-  return fetchBillingStatusForAccessToken(accessToken);
+  const payload = (await response.json()) as { url?: string };
+  if (!payload.url) {
+    throw new ApiResponseError("Paddle did not return a customer portal URL.", 502);
+  }
+
+  return payload.url;
 }

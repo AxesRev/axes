@@ -13,14 +13,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from billing.config import billing_settings
-from billing.paddle_client import (
-    PaddleApiError,
-    charge_subscription_usage,
-    get_subscription,
-    get_transaction,
-    list_subscriptions_for_customer,
-)
-from billing.schemas import BillingChargeUsageResponse, BillingLinkResponse, TenantBillingStatusResponse
+from billing.paddle_client import PaddleApiError, charge_subscription_usage, create_customer_portal_url
+from billing.schemas import BillingChargeUsageResponse, BillingPortalResponse, TenantBillingStatusResponse
 
 logger = structlog.getLogger(__name__)
 
@@ -84,86 +78,44 @@ def _billing_setup(tenant: Tenant) -> bool:
     return bool(tenant.paddle_customer_id and tenant.paddle_subscription_id)
 
 
-async def get_tenant_billing_status(*, tenant: Tenant) -> TenantBillingStatusResponse:
-    subscription_status: str | None = None
-    if tenant.paddle_subscription_id and billing_settings.PADDLE_API_KEY.strip():
-        try:
-            subscription = await get_subscription(tenant.paddle_subscription_id)
-            status = subscription.get("status")
-            subscription_status = status if isinstance(status, str) else None
-        except PaddleApiError as error:
-            logger.warning(
-                "paddle_subscription_status_lookup_failed",
-                tenant_id=tenant.id,
-                subscription_id=tenant.paddle_subscription_id,
-                detail=error.detail,
-            )
-
+def get_tenant_billing_status(*, tenant: Tenant) -> TenantBillingStatusResponse:
     return TenantBillingStatusResponse(
         billing_setup=_billing_setup(tenant),
         paddle_customer_id=tenant.paddle_customer_id,
         paddle_subscription_id=tenant.paddle_subscription_id,
-        subscription_status=subscription_status,
+        subscription_status=tenant.paddle_subscription_status,
     )
 
 
-async def link_tenant_paddle_billing(
+async def create_tenant_billing_portal_url(*, tenant: Tenant) -> BillingPortalResponse:
+    if not tenant.paddle_customer_id or not tenant.paddle_subscription_id:
+        raise ValueError("Billing is not set up for this tenant")
+
+    url = await create_customer_portal_url(
+        customer_id=tenant.paddle_customer_id,
+        subscription_id=tenant.paddle_subscription_id,
+    )
+    return BillingPortalResponse(url=url)
+
+
+def _tenant_id_from_custom_data(custom_data: object) -> str | None:
+    if not isinstance(custom_data, dict):
+        return None
+    tenant_id = custom_data.get("tenant_id")
+    return tenant_id if isinstance(tenant_id, str) and tenant_id else None
+
+
+async def _apply_tenant_billing_link(
     *,
     tenant: Tenant,
     paddle_customer_id: str,
-    paddle_transaction_id: str,
+    paddle_subscription_id: str,
+    paddle_subscription_status: str | None,
     session: AsyncSession,
-) -> BillingLinkResponse:
-    transaction = await get_transaction(paddle_transaction_id)
-
-    logger.info(
-        "billing_link_transaction_fetched",
-        transaction_id=paddle_transaction_id,
-        transaction_status=transaction.get("status"),
-        transaction_customer_id=transaction.get("customer_id"),
-        transaction_subscription_id=transaction.get("subscription_id"),
-        transaction_custom_data=transaction.get("custom_data"),
-        provided_customer_id=paddle_customer_id,
-        tenant_id=tenant.id,
-    )
-
-    transaction_customer_id = transaction.get("customer_id")
-    if transaction_customer_id != paddle_customer_id:
-        raise ValueError(
-            f"Transaction customer '{transaction_customer_id}' does not match provided '{paddle_customer_id}'"
-        )
-
-    custom_data = transaction.get("custom_data")
-    if not isinstance(custom_data, dict):
-        raise ValueError(f"Transaction is missing custom_data (got {type(custom_data).__name__}: {custom_data!r})")
-
-    tenant_id = custom_data.get("tenant_id")
-    if tenant_id != tenant.id:
-        raise ValueError(f"Transaction tenant_id '{tenant_id}' does not match authenticated tenant '{tenant.id}'")
-
-    subscription_id = transaction.get("subscription_id")
-    if not isinstance(subscription_id, str) or not subscription_id:
-        logger.info(
-            "billing_link_no_subscription_on_transaction",
-            transaction_id=paddle_transaction_id,
-            customer_id=paddle_customer_id,
-        )
-        subscriptions = await list_subscriptions_for_customer(paddle_customer_id)
-        active = [s for s in subscriptions if s.get("status") in {"active", "trialing", "past_due"}]
-        if not active:
-            raise ValueError(
-                "No active Paddle subscription found for this customer. "
-                "Make sure your Paddle price is a recurring subscription (not a one-time charge)."
-            )
-        subscription_id = active[0]["id"]
-        logger.info(
-            "billing_link_subscription_resolved_from_customer",
-            subscription_id=subscription_id,
-            customer_id=paddle_customer_id,
-        )
-
+) -> None:
     tenant.paddle_customer_id = paddle_customer_id
-    tenant.paddle_subscription_id = subscription_id
+    tenant.paddle_subscription_id = paddle_subscription_id
+    tenant.paddle_subscription_status = paddle_subscription_status
     await session.commit()
     await session.refresh(tenant)
 
@@ -171,14 +123,121 @@ async def link_tenant_paddle_billing(
         "tenant_paddle_billing_linked",
         tenant_id=tenant.id,
         paddle_customer_id=paddle_customer_id,
-        paddle_subscription_id=subscription_id,
+        paddle_subscription_id=paddle_subscription_id,
+        paddle_subscription_status=paddle_subscription_status,
     )
 
-    return BillingLinkResponse(
-        billing_setup=True,
-        paddle_customer_id=paddle_customer_id,
+
+async def handle_subscription_created_webhook(
+    *,
+    subscription: dict[str, Any],
+    session: AsyncSession,
+) -> None:
+    tenant_id = _tenant_id_from_custom_data(subscription.get("custom_data"))
+    if tenant_id is None:
+        logger.warning("billing_webhook_subscription_created_missing_tenant_id")
+        return
+
+    customer_id = subscription.get("customer_id")
+    subscription_id = subscription.get("id")
+    status = subscription.get("status")
+    if not isinstance(customer_id, str) or not isinstance(subscription_id, str):
+        logger.warning(
+            "billing_webhook_subscription_created_missing_ids",
+            tenant_id=tenant_id,
+        )
+        return
+
+    tenant = await session.get(Tenant, tenant_id)
+    if tenant is None:
+        logger.warning("billing_webhook_subscription_created_tenant_not_found", tenant_id=tenant_id)
+        return
+
+    subscription_status = status if isinstance(status, str) else None
+    await _apply_tenant_billing_link(
+        tenant=tenant,
+        paddle_customer_id=customer_id,
         paddle_subscription_id=subscription_id,
+        paddle_subscription_status=subscription_status,
+        session=session,
     )
+
+
+async def handle_subscription_updated_webhook(
+    *,
+    subscription: dict[str, Any],
+    session: AsyncSession,
+) -> None:
+    subscription_id = subscription.get("id")
+    if not isinstance(subscription_id, str) or not subscription_id:
+        return
+
+    result = await session.execute(
+        select(Tenant).where(Tenant.paddle_subscription_id == subscription_id),
+    )
+    tenant = result.scalar_one_or_none()
+    if tenant is None:
+        return
+
+    status = subscription.get("status")
+    tenant.paddle_subscription_status = status if isinstance(status, str) else None
+    await session.commit()
+
+    logger.info(
+        "tenant_paddle_subscription_status_updated",
+        tenant_id=tenant.id,
+        paddle_subscription_id=subscription_id,
+        paddle_subscription_status=tenant.paddle_subscription_status,
+    )
+
+
+async def handle_transaction_completed_webhook(
+    *,
+    transaction: dict[str, Any],
+    session: AsyncSession,
+) -> None:
+    tenant_id = _tenant_id_from_custom_data(transaction.get("custom_data"))
+    if tenant_id is None:
+        return
+
+    customer_id = transaction.get("customer_id")
+    subscription_id = transaction.get("subscription_id")
+    if not isinstance(customer_id, str) or not isinstance(subscription_id, str):
+        return
+
+    tenant = await session.get(Tenant, tenant_id)
+    if tenant is None:
+        logger.warning("billing_webhook_transaction_completed_tenant_not_found", tenant_id=tenant_id)
+        return
+
+    if tenant.paddle_subscription_id == subscription_id and tenant.paddle_customer_id == customer_id:
+        return
+
+    await _apply_tenant_billing_link(
+        tenant=tenant,
+        paddle_customer_id=customer_id,
+        paddle_subscription_id=subscription_id,
+        paddle_subscription_status=tenant.paddle_subscription_status,
+        session=session,
+    )
+
+
+async def handle_paddle_webhook_event(
+    *,
+    event_type: str,
+    data: dict[str, Any],
+    session: AsyncSession,
+) -> None:
+    if event_type == "subscription.created":
+        await handle_subscription_created_webhook(subscription=data, session=session)
+        return
+
+    if event_type == "subscription.updated":
+        await handle_subscription_updated_webhook(subscription=data, session=session)
+        return
+
+    if event_type == "transaction.completed":
+        await handle_transaction_completed_webhook(transaction=data, session=session)
 
 
 def _usage_quantity(total_tokens: int) -> int:
@@ -226,7 +285,7 @@ async def charge_monthly_usage_for_all_tenants(
             continue
 
         try:
-            charge_result = await charge_subscription_usage(
+            await charge_subscription_usage(
                 subscription_id=tenant.paddle_subscription_id,
                 price_id=usage_price_id,
                 quantity=quantity,
@@ -238,7 +297,6 @@ async def charge_monthly_usage_for_all_tenants(
                     "status": "charged",
                     "total_tokens": total_tokens,
                     "quantity": quantity,
-                    "paddle_transaction_id": charge_result.get("id"),
                 },
             )
         except PaddleApiError as error:

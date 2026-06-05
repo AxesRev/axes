@@ -20,6 +20,7 @@ class BillingSettings(BaseSettings):
     )
 
     PADDLE_API_KEY: str = ""
+    PADDLE_WEBHOOK_SECRET: str = ""
     PADDLE_USAGE_PRICE_ID: str = ""
     BILLING_TOKENS_PER_UNIT: int = 1000
 

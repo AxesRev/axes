@@ -1,9 +1,8 @@
 import { NextResponse } from "next/server";
 
 import { auth0 } from "@/lib/auth0";
-import { createCustomerPortalUrl } from "@/lib/paddle/server";
 import { isPaddleBillingConfigured } from "@/lib/paddle/config";
-import { fetchBillingStatusForAccessToken } from "@/lib/tenants";
+import { ApiResponseError, fetchBillingPortalUrlForAccessToken } from "@/lib/tenants";
 
 export async function POST(): Promise<NextResponse> {
   if (!isPaddleBillingConfigured()) {
@@ -19,26 +18,16 @@ export async function POST(): Promise<NextResponse> {
   }
 
   try {
-    const billingStatus = await fetchBillingStatusForAccessToken(session.tokenSet.idToken);
-    const customerId = billingStatus.paddle_customer_id;
-    if (!customerId) {
-      return NextResponse.json(
-        {
-          detail:
-            "Billing is not set up for this tenant yet. Add a payment method through Paddle checkout first.",
-        },
-        { status: 404 },
-      );
-    }
-
-    const url = await createCustomerPortalUrl(customerId, billingStatus.paddle_subscription_id);
+    const url = await fetchBillingPortalUrlForAccessToken(session.tokenSet.idToken);
     return NextResponse.json({ url });
   } catch (error: unknown) {
+    if (error instanceof ApiResponseError) {
+      console.error("Billing portal failed:", error.message);
+      return NextResponse.json({ detail: error.message }, { status: error.status });
+    }
+
     const message = error instanceof Error ? error.message : String(error);
-    console.error("Paddle customer portal session failed:", message);
-    return NextResponse.json(
-      { detail: "Could not create a Paddle customer portal session." },
-      { status: 502 },
-    );
+    console.error("Billing portal failed:", message);
+    return NextResponse.json({ detail: "Could not create a Paddle customer portal session." }, { status: 502 });
   }
 }

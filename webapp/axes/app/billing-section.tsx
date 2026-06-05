@@ -20,6 +20,9 @@ type BillingStatus = {
   subscription_status: string | null;
 };
 
+const WEBHOOK_POLL_ATTEMPTS = 8;
+const WEBHOOK_POLL_INTERVAL_MS = 1000;
+
 export function BillingSection({
   clientToken,
   basePriceId,
@@ -33,9 +36,9 @@ export function BillingSection({
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
   const [portalError, setPortalError] = useState<string | null>(null);
   const [portalLoading, setPortalLoading] = useState(false);
-  const [linkLoading, setLinkLoading] = useState(false);
+  const [webhookWaitLoading, setWebhookWaitLoading] = useState(false);
 
-  const refreshBillingStatus = useCallback(async (): Promise<void> => {
+  const refreshBillingStatus = useCallback(async (): Promise<BillingStatus | null> => {
     setStatusLoading(true);
     setStatusError(null);
 
@@ -48,9 +51,11 @@ export function BillingSection({
       }
 
       setBillingStatus(payload);
+      return payload;
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
       setStatusError(message);
+      return null;
     } finally {
       setStatusLoading(false);
     }
@@ -60,40 +65,35 @@ export function BillingSection({
     void refreshBillingStatus();
   }, [refreshBillingStatus]);
 
-  const linkCheckoutToTenant = useCallback(
-    async (customerId: string, transactionId: string): Promise<void> => {
-      setLinkLoading(true);
-      setCheckoutError(null);
+  const waitForWebhookBillingSetup = useCallback(async (): Promise<void> => {
+    setWebhookWaitLoading(true);
+    setCheckoutError(null);
 
-      try {
-        const response = await fetch("/api/billing/link", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            paddle_customer_id: customerId,
-            paddle_transaction_id: transactionId,
-          }),
-        });
-        const payload = (await response.json()) as BillingStatus & { detail?: string };
-
-        if (!response.ok) {
-          throw new Error(payload.detail ?? "Could not link billing to this tenant.");
+    try {
+      for (let attempt = 0; attempt < WEBHOOK_POLL_ATTEMPTS; attempt += 1) {
+        if (attempt > 0) {
+          await new Promise((resolve) => {
+            setTimeout(resolve, WEBHOOK_POLL_INTERVAL_MS);
+          });
         }
 
-        setBillingStatus(payload);
-      } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : String(error);
-        setCheckoutError(message);
-      } finally {
-        setLinkLoading(false);
+        const status = await refreshBillingStatus();
+        if (status?.billing_setup) {
+          return;
+        }
       }
-    },
-    [],
-  );
+
+      setCheckoutError(
+        "Checkout completed, but billing is not active yet. Wait a few seconds and refresh the page.",
+      );
+    } finally {
+      setWebhookWaitLoading(false);
+    }
+  }, [refreshBillingStatus]);
 
   const paddle = usePaddle(clientToken, {
-    onCheckoutCompleted: ({ customerId, transactionId }) => {
-      void linkCheckoutToTenant(customerId, transactionId);
+    onCheckoutCompleted: () => {
+      void waitForWebhookBillingSetup();
     },
     onCheckoutError: ({ message }) => {
       setCheckoutError(message);
@@ -151,13 +151,11 @@ export function BillingSection({
   }
 
   const billingReady = billingStatus?.billing_setup === true;
-  const checkoutButtonLabel = linkLoading
-    ? "Saving…"
-    : billingReady
-      ? "Update payment method"
-      : paddle
-        ? "Set up billing"
-        : "Loading…";
+  const setupButtonLabel = webhookWaitLoading
+    ? "Activating billing…"
+    : paddle
+      ? "Set up billing"
+      : "Loading…";
 
   return (
     <section className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
@@ -185,14 +183,16 @@ export function BillingSection({
       )}
 
       <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-        <button
-          type="button"
-          onClick={openCheckout}
-          disabled={!paddle || linkLoading}
-          className="inline-flex h-10 items-center justify-center rounded-full bg-zinc-950 px-4 text-sm font-medium text-white transition-colors hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200"
-        >
-          {checkoutButtonLabel}
-        </button>
+        {!billingReady ? (
+          <button
+            type="button"
+            onClick={openCheckout}
+            disabled={!paddle || webhookWaitLoading}
+            className="inline-flex h-10 items-center justify-center rounded-full bg-zinc-950 px-4 text-sm font-medium text-white transition-colors hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200"
+          >
+            {setupButtonLabel}
+          </button>
+        ) : null}
         <button
           type="button"
           onClick={() => {
@@ -207,6 +207,10 @@ export function BillingSection({
 
       {checkoutError ? <p className="mt-3 text-sm text-red-600">{checkoutError}</p> : null}
       {portalError ? <p className="mt-3 text-sm text-red-600">{portalError}</p> : null}
+
+      {!billingReady && customerName ? (
+        <p className="mt-3 text-xs text-zinc-500 dark:text-zinc-500">Billing contact: {customerName}.</p>
+      ) : null}
     </section>
   );
 }
