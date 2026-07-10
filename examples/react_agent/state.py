@@ -196,3 +196,6 @@ class State(InputState):
 
     doc_corpus_context: str = field(default="")
     """Semantically retrieved documentation snippets for the current user message (prompt injection)."""
+
+    tenant_agent_context: str = field(default="")
+    """Editable tenant-specific instructions loaded from PostgreSQL for access evaluation."""

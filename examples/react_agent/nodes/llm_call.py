@@ -8,6 +8,7 @@ from langgraph.runtime import Runtime
 from examples.react_agent.context import Context
 from examples.react_agent.nodes.tools import _get_all_tools
 from examples.react_agent.state import State
+from examples.react_agent.tenant_agent_context_prompt import build_tenant_agent_context_block
 from examples.react_agent.user_context_prompt import build_user_context_block
 from examples.react_agent.utils import load_chat_model
 
@@ -35,6 +36,7 @@ async def call_model(
         system_time=datetime.now(tz=UTC).isoformat(),
         user_context=build_user_context_block(state.user_context),
         doc_corpus_context=state.doc_corpus_context.strip(),
+        tenant_agent_context=build_tenant_agent_context_block(state.tenant_agent_context),
     )
 
     response = cast(

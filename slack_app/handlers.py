@@ -115,6 +115,7 @@ async def handle_message_event(event: dict[str, Any], *, team_id: str | None = N
     github_user_id = access_result.identity.github_user_id
     github_email = access_result.identity.github_email
     github_installation_id = access_result.identity.github_installation_id
+    tenant_id = identity.tenant_id
 
     # --- Agent invocation ------------------------------------------------------
     client = get_client(url=slack_settings.LANGGRAPH_API_URL, headers={"X-Slack-User-ID": user_id})
@@ -148,6 +149,7 @@ async def handle_message_event(event: dict[str, Any], *, team_id: str | None = N
             config={
                 "configurable": {
                     "slack_user_id": user_id,
+                    "tenant_id": tenant_id,
                     "github_user_id": github_user_id,
                     "github_email": github_email,
                     "github_installation_id": github_installation_id,

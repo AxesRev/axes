@@ -64,6 +64,11 @@ class Context:
         },
     )
 
+    tenant_id: str = field(
+        default="",
+        metadata={"description": "Tenant ID for the Slack workspace. Used to load tenant-specific agent context."},
+    )
+
     reasoning_effort: str = field(
         default="",
         metadata={
