@@ -20,7 +20,9 @@ def _resolve_identity_for_app(*, app: str, runtime: Runtime[Context]) -> tuple[s
         user_id = runtime.context.github_user_id.strip()
         return (user_id or None, None)
     if app == "salesforce":
-        email = runtime.context.github_email.strip()
+        slack_email = runtime.context.slack_email.strip()
+        github_email = runtime.context.github_email.strip()
+        email = slack_email or github_email
         return (None, email or None)
     return (None, None)
 

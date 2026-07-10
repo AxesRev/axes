@@ -11,7 +11,7 @@ from aegra_api.core.orm import get_session
 from app_integrations.github.identity_linking import handle_access_request
 from app_integrations.github.settings import github_settings
 from app_integrations.slack.service import get_or_create_slack_user_identity_for_team
-from slack_app.client import post_message
+from slack_app.client import fetch_user_email, post_message
 from slack_app.config import slack_settings
 from slack_app.replies import slack_replies_from_updates
 
@@ -116,6 +116,7 @@ async def handle_message_event(event: dict[str, Any], *, team_id: str | None = N
     github_email = access_result.identity.github_email
     github_installation_id = access_result.identity.github_installation_id
     tenant_id = identity.tenant_id
+    slack_email = await fetch_user_email(user_id) or ""
 
     # --- Agent invocation ------------------------------------------------------
     client = get_client(url=slack_settings.LANGGRAPH_API_URL, headers={"X-Slack-User-ID": user_id})
@@ -149,6 +150,7 @@ async def handle_message_event(event: dict[str, Any], *, team_id: str | None = N
             config={
                 "configurable": {
                     "slack_user_id": user_id,
+                    "slack_email": slack_email,
                     "tenant_id": tenant_id,
                     "github_user_id": github_user_id,
                     "github_email": github_email,

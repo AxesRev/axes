@@ -24,6 +24,8 @@ class SlackSettings(BaseSettings):
     SLACK_SIGNING_SECRET: str = ""
     SLACK_CLIENT_ID: str = ""
     SLACK_CLIENT_SECRET: str = ""
+    SLACK_APP_ID: str = ""
+    SLACK_APP_CONFIG_TOKEN: str = ""
     SERVER_URL: str = "http://localhost:8000"
     LANGGRAPH_API_URL: str = "http://localhost:8000"
     AUTH0_DOMAIN: str = ""

@@ -17,6 +17,11 @@ async def slack_events(req: Request) -> Response:
     return await _handler.handle(req)
 
 
+@router.post("/slack/commands")
+async def slack_commands(req: Request) -> Response:
+    return await _handler.handle(req)
+
+
 @router.get("/slack/oauth/install")
 async def slack_install(req: Request) -> Response:
     return await _handler.handle(req)

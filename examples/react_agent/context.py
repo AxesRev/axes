@@ -55,6 +55,11 @@ class Context:
         metadata={"description": "Primary verified email from GitHub OAuth for the authenticated Slack user."},
     )
 
+    slack_email: str = field(
+        default="",
+        metadata={"description": "Primary email from Slack users.info for the message author."},
+    )
+
     github_installation_id: str = field(
         default="",
         metadata={
