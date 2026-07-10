@@ -5,7 +5,8 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from slack_app.tenant_service import get_or_create_tenant_for_auth_user
+
+from tenant.service import get_or_create_tenant_for_auth_user
 
 
 @pytest.mark.unit
@@ -35,7 +36,7 @@ async def test_get_or_create_tenant_for_auth_user_creates_tenant_on_signup() -> 
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_get_or_create_tenant_for_auth_user_returns_existing_tenant_on_login() -> None:
-    from app_integrations.github.models import Tenant
+    from tenant.models import Tenant
 
     existing = Tenant(id="tenant-1", name="Acme", email="owner@example.com", auth0_sub="auth0|123")
     session = AsyncMock()

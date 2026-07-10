@@ -6,7 +6,7 @@ from app_integrations.github.router import router as github_app_router
 from app_integrations.salesforce.router import router as salesforce_router
 from billing.routes import router as billing_router
 from slack_app.routes import router as slack_router
-from slack_app.tenant_routes import router as tenant_router
+from tenant.routes import router as tenant_router
 
 app = FastAPI(
     title="Aegra with Slack Integration",

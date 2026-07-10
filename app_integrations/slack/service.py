@@ -6,8 +6,8 @@ import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app_integrations.github.models import AppIntegration, Tenant, UserIdentity
 from app_integrations.slack.constants import SLACK_APP_NAME
+from tenant.models import AppIntegration, Tenant, UserIdentity
 
 logger = structlog.getLogger(__name__)
 

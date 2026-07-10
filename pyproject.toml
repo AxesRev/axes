@@ -51,7 +51,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["aegra_api", "billing", "app_integrations", "slack_app"]
+known-first-party = ["aegra_api", "billing", "app_integrations", "slack_app", "tenant"]
 
 # Note: pytest config is in each package's pyproject.toml
 # Run tests from: libs/aegra-api

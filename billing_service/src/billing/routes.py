@@ -8,7 +8,6 @@ import structlog
 from aegra_api.core.orm import get_session
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from slack_app.auth0 import require_auth0_claims
-from slack_app.tenant_service import get_or_create_tenant_for_auth_user
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from billing.config import billing_settings
@@ -16,6 +15,7 @@ from billing.paddle_client import PaddleApiError
 from billing.schemas import BillingPortalResponse, TenantBillingStatusResponse
 from billing.service import create_tenant_billing_portal_url, get_tenant_billing_status, handle_paddle_webhook_event
 from billing.webhooks import WebhookVerificationError, verify_paddle_webhook_signature
+from tenant.service import get_or_create_tenant_for_auth_user
 
 router = APIRouter(tags=["billing"])
 

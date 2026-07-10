@@ -41,7 +41,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["billing"]
+known-first-party = ["billing", "tenant"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

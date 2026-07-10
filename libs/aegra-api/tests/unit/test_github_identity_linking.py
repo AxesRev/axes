@@ -14,8 +14,9 @@ from app_integrations.github.identity_linking import (
     handle_access_request,
     link_github_identity,
 )
-from app_integrations.github.models import AppIntegration, OAuthState, UserIdentity
+from app_integrations.github.models import OAuthState
 from app_integrations.github.oauth_state import create_github_oauth_state, verify_github_oauth_state
+from tenant.models import AppIntegration, UserIdentity
 
 
 @pytest.mark.unit

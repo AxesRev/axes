@@ -15,11 +15,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from aegra_api.core.orm import get_session
 from app_integrations.github.identity_linking import link_github_identity
-from app_integrations.github.models import OAuthState, Tenant
+from app_integrations.github.models import OAuthState
 from app_integrations.github.oauth_state import create_github_oauth_state, verify_github_oauth_state
 from app_integrations.github.oauth_user import fetch_github_user_id_and_email
 from app_integrations.github.service import upsert_github_app_integration
 from app_integrations.github.settings import github_settings
+from tenant.models import Tenant
 
 logger = structlog.getLogger(__name__)
 

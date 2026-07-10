@@ -6,7 +6,7 @@ import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app_integrations.github.models import Tenant
+from tenant.models import Tenant
 
 logger = structlog.getLogger(__name__)
 

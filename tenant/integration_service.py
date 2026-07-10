@@ -5,7 +5,7 @@ from __future__ import annotations
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app_integrations.github.models import AppIntegration
+from tenant.models import AppIntegration
 
 
 async def list_app_integrations_for_tenant(

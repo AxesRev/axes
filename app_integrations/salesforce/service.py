@@ -6,8 +6,8 @@ import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app_integrations.github.models import AppIntegration, Tenant
 from app_integrations.salesforce.constants import SALESFORCE_APP_NAME
+from tenant.models import AppIntegration, Tenant
 
 logger = structlog.getLogger(__name__)
 

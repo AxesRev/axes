@@ -7,9 +7,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from aegra_api.core.orm import get_session
 from slack_app.auth0 import require_auth0_claims
-from slack_app.integration_service import list_app_integrations_for_tenant
-from slack_app.tenant_schemas import AppIntegrationResponse, TenantResponse
-from slack_app.tenant_service import get_or_create_tenant_for_auth_user
+from tenant.integration_service import list_app_integrations_for_tenant
+from tenant.schemas import AppIntegrationResponse, TenantResponse
+from tenant.service import get_or_create_tenant_for_auth_user
 
 router = APIRouter(prefix="/tenants", tags=["tenants"])
 

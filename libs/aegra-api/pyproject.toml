@@ -94,7 +94,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["aegra_api", "app_integrations"]
+known-first-party = ["aegra_api", "app_integrations", "tenant"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

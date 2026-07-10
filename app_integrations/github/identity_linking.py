@@ -11,9 +11,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app_integrations.github.extra_app_data import get_github_extra, github_is_linked, set_github_extra
-from app_integrations.github.models import OAuthState, UserIdentity
+from app_integrations.github.models import OAuthState
 from app_integrations.github.schemas import AccessRequestResult, IdentityLinked, IdentityNotLinked
 from app_integrations.github.service import find_github_app_integration_for_tenant
+from tenant.models import UserIdentity
 
 logger = structlog.getLogger(__name__)
 

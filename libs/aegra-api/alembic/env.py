@@ -9,8 +9,9 @@ from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
-# Register app_integrations models so autogenerate detects them.
+# Register tenant and integration models so autogenerate detects them.
 import app_integrations.github.models  # noqa: F401, E402
+import tenant.models  # noqa: F401, E402
 
 # Import your SQLAlchemy models here
 from aegra_api.core.orm import Base
