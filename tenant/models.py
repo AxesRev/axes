@@ -7,9 +7,10 @@ discover them when env.py imports this module.
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 from typing import Any
 
-from sqlalchemy import ForeignKey, Index, Text, text
+from sqlalchemy import TIMESTAMP, ForeignKey, Index, Text, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -74,4 +75,22 @@ class UserIdentity(Base):
     __table_args__ = (
         Index("idx_user_identities_slack_user_id", "slack_user_id", unique=True),
         Index("idx_user_identities_tenant_id", "tenant_id"),
+    )
+
+
+class TenantAgentContext(Base):
+    """Editable free-form text for a tenant, used to configure the AI agent."""
+
+    __tablename__ = "tenant_agent_context"
+
+    tenant_id: Mapped[str] = mapped_column(
+        Text,
+        ForeignKey("tenants.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    content: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("''"))
+    updated_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True),
+        nullable=False,
+        server_default=text("now()"),
     )

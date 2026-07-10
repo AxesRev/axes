@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { auth0 } from "@/lib/auth0";
+import { AgentContextSection } from "@/app/agent-context-section";
 import { BillingSection } from "@/app/billing-section";
 import { IntegrationSection } from "@/app/integration-section";
 import { getPaddlePublicConfig } from "@/lib/paddle/config";
@@ -116,6 +117,8 @@ export default async function Home() {
             <p className="mt-3 text-sm text-red-600">{tenantResolveError ?? "Could not resolve tenant."}</p>
           )}
         </section>
+
+        {tenantId ? <AgentContextSection /> : null}
 
         {tenantId && paddleConfig && customerEmail ? (
           <BillingSection
