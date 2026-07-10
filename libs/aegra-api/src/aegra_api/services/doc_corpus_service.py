@@ -11,7 +11,7 @@ import asyncio
 import math
 import re
 import zipfile
-from collections.abc import AsyncIterator, Mapping
+from collections.abc import AsyncIterator, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -739,14 +739,13 @@ async def search_doc_chunks(
     collection_key: str,
     query_embedding: list[float],
     limit: int,
+    applications: Sequence[str] | None = None,
 ) -> list[DocCorpusSearchHit]:
-    """Cosine-distance search over stored documentation chunks (all ``application`` values)."""
-    stmt = (
-        select(DocEmbeddingChunk)
-        .where(DocEmbeddingChunk.collection_key == collection_key)
-        .order_by(DocEmbeddingChunk.embedding.cosine_distance(query_embedding))
-        .limit(limit)
-    )
+    """Cosine-distance search over stored documentation chunks."""
+    stmt = select(DocEmbeddingChunk).where(DocEmbeddingChunk.collection_key == collection_key)
+    if applications:
+        stmt = stmt.where(DocEmbeddingChunk.application.in_(tuple(applications)))
+    stmt = stmt.order_by(DocEmbeddingChunk.embedding.cosine_distance(query_embedding)).limit(limit)
     rows = list((await session.scalars(stmt)).all())
     hits: list[DocCorpusSearchHit] = []
     for row in rows:
@@ -787,6 +786,7 @@ async def retrieve_doc_corpus_prompt_block(
     collection_key: str,
     query: str,
     limit: int,
+    applications: Sequence[str] | None = None,
 ) -> tuple[str, list[str]]:
     """Embed ``query``, cosine-search ``doc_embedding_chunks``, return formatted text and titles.
 
@@ -815,6 +815,7 @@ async def retrieve_doc_corpus_prompt_block(
                 collection_key=collection_key,
                 query_embedding=vectors[0],
                 limit=limit,
+                applications=applications,
             )
     except (RuntimeError, SQLAlchemyError, OSError, ValueError, OpenAIError) as e:
         logger.warning("doc_corpus_retrieval_failed", error=str(e))

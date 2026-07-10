@@ -13,20 +13,22 @@ async def test_access_request_evaluation_receives_permission_from_parent_state()
     state = State(
         messages=[HumanMessage(content="Give me admin on our test repo")],
         permission=Permission(domain="github_repository", resource="AxesRev/Test_repo", permission="ADMIN"),
-        user_context=UserContextData(
-            app="github",
-            user_id="123",
-            user_name="alice",
-            groups=[UserContextGroup(external_id="org-1", name="AxesRev")],
-            permissions=[
-                UserContextPermission(
-                    permission="read",
-                    target_kind="resource",
-                    target_name="AxesRev/Test_repo",
-                    target_external_id="repo-1",
-                )
-            ],
-        ),
+        user_contexts=[
+            UserContextData(
+                app="github",
+                user_id="123",
+                user_name="alice",
+                groups=[UserContextGroup(external_id="org-1", name="AxesRev")],
+                permissions=[
+                    UserContextPermission(
+                        permission="read",
+                        target_kind="resource",
+                        target_name="AxesRev/Test_repo",
+                        target_external_id="repo-1",
+                    )
+                ],
+            )
+        ],
     )
 
     with (

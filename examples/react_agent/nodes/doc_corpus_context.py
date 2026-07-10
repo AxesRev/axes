@@ -72,6 +72,7 @@ async def load_doc_corpus_context_with_phrase(
         collection_key=coll_key,
         query=query,
         limit=ctx.doc_corpus_top_k,
+        applications=state.selected_apps or None,
     )
     if block:
         logger.info(

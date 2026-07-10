@@ -34,7 +34,7 @@ def _sample_user_context() -> UserContextData:
 def test_extra_detector_context_empty_for_non_resource_fields() -> None:
     state = State(
         messages=[HumanMessage(content="hello")],
-        user_context=_sample_user_context(),
+        user_contexts=[_sample_user_context()],
     )
     assert _extra_detector_context(state, "domain") == ""
     assert _extra_detector_context(state, "permission") == ""
@@ -43,7 +43,7 @@ def test_extra_detector_context_empty_for_non_resource_fields() -> None:
 def test_extra_detector_context_includes_groups_and_resource_permissions() -> None:
     state = State(
         messages=[HumanMessage(content="make me admin")],
-        user_context=_sample_user_context(),
+        user_contexts=[_sample_user_context()],
     )
     block = _extra_detector_context(state, "resource")
     assert "AxesRev/Test_repo" in block
@@ -56,7 +56,7 @@ def test_extra_detector_context_includes_groups_and_resource_permissions() -> No
 def test_seed_resource_appends_user_context_lists() -> None:
     state = State(
         messages=[HumanMessage(content="I want to become the admin in our test repo.")],
-        user_context=_sample_user_context(),
+        user_contexts=[_sample_user_context()],
     )
     msg = _seed(state, "resource", feedback=None)
     text = msg.content if isinstance(msg.content, str) else ""
@@ -67,7 +67,7 @@ def test_seed_resource_appends_user_context_lists() -> None:
 def test_seed_domain_does_not_append_user_context_lists() -> None:
     state = State(
         messages=[HumanMessage(content="repo access")],
-        user_context=_sample_user_context(),
+        user_contexts=[_sample_user_context()],
     )
     msg = _seed(state, "domain", feedback=None)
     text = msg.content if isinstance(msg.content, str) else ""

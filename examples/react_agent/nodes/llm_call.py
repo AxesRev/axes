@@ -34,7 +34,7 @@ async def call_model(
 
     system_message = runtime.context.system_prompt.format(
         system_time=datetime.now(tz=UTC).isoformat(),
-        user_context=build_user_context_block(state.user_context),
+        user_context=build_user_context_block(state.user_contexts),
         doc_corpus_context=state.doc_corpus_context.strip(),
         tenant_agent_context=build_tenant_agent_context_block(state.tenant_agent_context),
     )

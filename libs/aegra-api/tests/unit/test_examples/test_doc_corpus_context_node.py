@@ -67,12 +67,13 @@ async def test_load_doc_corpus_context_with_phrase_uses_resolver() -> None:
         collection_key="default",
         query="How to grant maintainer for github_team",
         limit=6,
+        applications=None,
     )
 
 
 async def test_make_load_doc_corpus_context_default_uses_human_message() -> None:
     node = make_load_doc_corpus_context()
-    state = State(messages=[HumanMessage(content="need read access")])
+    state = State(messages=[HumanMessage(content="need read access")], selected_apps=["github"])
     runtime = Runtime(context=Context())
 
     with patch(
@@ -85,4 +86,5 @@ async def test_make_load_doc_corpus_context_default_uses_human_message() -> None
         collection_key="default",
         query="need read access",
         limit=6,
+        applications=["github"],
     )
