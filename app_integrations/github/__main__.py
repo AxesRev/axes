@@ -10,7 +10,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from aegra_api.core.database import db_manager
 from aegra_api.core.orm import get_metadata_session_maker
-from aegra_api.services.doc_corpus_service import ingest_github_documentation_from_zip
+from app_integrations.github.doc_generation import ingest_github_documentation_from_zip
 
 
 async def _async_main() -> int:

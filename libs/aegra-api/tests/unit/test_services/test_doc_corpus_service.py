@@ -16,13 +16,16 @@ from aegra_api.services.doc_corpus_service import (
     cosine_distance_row,
     embed_texts_openai,
     ingest_documentation_source,
-    ingest_github_documentation_from_zip,
-    iter_github_docs_zip_markdown_members,
     parse_firecrawl_scrape_payload,
-    split_github_docs_zip_markdown_into_chunks,
     split_text_into_chunks,
 )
 from aegra_api.settings import settings
+from app_integrations.github.doc_generation import zip_embedder as github_zip_embedder_module
+from app_integrations.github.doc_generation.zip_embedder import (
+    ingest_github_documentation_from_zip,
+    iter_github_docs_zip_markdown_members,
+    split_github_docs_zip_markdown_into_chunks,
+)
 
 
 def test_parse_firecrawl_scrape_payload_success() -> None:
@@ -75,8 +78,8 @@ def test_split_github_docs_zip_small_file_one_chunk() -> None:
 
 
 def test_split_github_docs_zip_splits_on_h2_when_over_small_threshold(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(doc_corpus_service_module, "_GITHUB_DOCS_SMALL_FILE_MAX_CHARS", 40)
-    monkeypatch.setattr(doc_corpus_service_module, "_GITHUB_DOCS_HEADER_STRATEGY_UPPER_MAX_CHARS", 50_000)
+    monkeypatch.setattr(github_zip_embedder_module, "_GITHUB_DOCS_SMALL_FILE_MAX_CHARS", 40)
+    monkeypatch.setattr(github_zip_embedder_module, "_GITHUB_DOCS_HEADER_STRATEGY_UPPER_MAX_CHARS", 50_000)
     body = "preamble text here\n\n## First\n\naaa body\n\n## Second\n\nbbb body\n"
     pairs = split_github_docs_zip_markdown_into_chunks(
         body,
@@ -94,9 +97,9 @@ def test_split_github_docs_zip_splits_on_h2_when_over_small_threshold(monkeypatc
 
 
 def test_split_github_docs_zip_subdivides_large_h2_with_h3(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(doc_corpus_service_module, "_GITHUB_DOCS_SMALL_FILE_MAX_CHARS", 80)
-    monkeypatch.setattr(doc_corpus_service_module, "_GITHUB_DOCS_HEADER_STRATEGY_UPPER_MAX_CHARS", 50_000)
-    monkeypatch.setattr(doc_corpus_service_module, "_GITHUB_DOCS_H2_BLOCK_SUBDIVIDE_CHARS", 150)
+    monkeypatch.setattr(github_zip_embedder_module, "_GITHUB_DOCS_SMALL_FILE_MAX_CHARS", 80)
+    monkeypatch.setattr(github_zip_embedder_module, "_GITHUB_DOCS_HEADER_STRATEGY_UPPER_MAX_CHARS", 50_000)
+    monkeypatch.setattr(github_zip_embedder_module, "_GITHUB_DOCS_H2_BLOCK_SUBDIVIDE_CHARS", 150)
     filler = "word " * 40
     body = f"## Section\n\n{filler}\n\n### Sub A\n\n{filler}\n\n### Sub B\n\n{filler}\n"
     pairs = split_github_docs_zip_markdown_into_chunks(
@@ -115,8 +118,8 @@ def test_split_github_docs_zip_subdivides_large_h2_with_h3(monkeypatch: pytest.M
 
 
 def test_split_github_docs_zip_over_upper_max_uses_sliding_window(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(doc_corpus_service_module, "_GITHUB_DOCS_SMALL_FILE_MAX_CHARS", 20)
-    monkeypatch.setattr(doc_corpus_service_module, "_GITHUB_DOCS_HEADER_STRATEGY_UPPER_MAX_CHARS", 80)
+    monkeypatch.setattr(github_zip_embedder_module, "_GITHUB_DOCS_SMALL_FILE_MAX_CHARS", 20)
+    monkeypatch.setattr(github_zip_embedder_module, "_GITHUB_DOCS_HEADER_STRATEGY_UPPER_MAX_CHARS", 80)
     body = "q" * 120
     pairs = split_github_docs_zip_markdown_into_chunks(
         body,
@@ -151,9 +154,9 @@ children:
 ---
 
 """
-    post = doc_corpus_service_module._github_docs_frontmatter_post(md, member="x/index.md")
-    doc_title = doc_corpus_service_module._github_docs_document_title_from_post(post, member="x/index.md")
-    body = doc_corpus_service_module._github_docs_chunking_body_from_post(post, document_title=doc_title)
+    post = github_zip_embedder_module._github_docs_frontmatter_post(md, member="x/index.md")
+    doc_title = github_zip_embedder_module._github_docs_document_title_from_post(post, member="x/index.md")
+    body = github_zip_embedder_module._github_docs_chunking_body_from_post(post, document_title=doc_title)
     assert "# Concepts for account and profile" in body
     assert "Learn the core concepts." in body
     assert "- /personal-profile" in body
@@ -161,8 +164,8 @@ children:
 
 def test_github_docs_chunking_body_fallback_heading_when_stub_metadata_empty() -> None:
     md = "---\nplaceholder: true\n---\n\n"
-    post = doc_corpus_service_module._github_docs_frontmatter_post(md, member="only/stub.md")
-    body = doc_corpus_service_module._github_docs_chunking_body_from_post(post, document_title="Stub Title")
+    post = github_zip_embedder_module._github_docs_frontmatter_post(md, member="only/stub.md")
+    body = github_zip_embedder_module._github_docs_chunking_body_from_post(post, document_title="Stub Title")
     assert body.strip() == "# Stub Title"
 
 
@@ -338,21 +341,21 @@ def test_iter_github_docs_zip_markdown_members_raises_on_unsafe_member(tmp_path:
 
 def test_github_docs_zip_document_title_prefers_yaml_then_h1_then_filename() -> None:
     assert (
-        doc_corpus_service_module._github_docs_zip_document_title(
+        github_zip_embedder_module._github_docs_zip_document_title(
             "---\ntitle: From Yaml\n---\n\n# Ignore\n",
             member="x.md",
         )
         == "From Yaml"
     )
     assert (
-        doc_corpus_service_module._github_docs_zip_document_title(
+        github_zip_embedder_module._github_docs_zip_document_title(
             "# Content <!-- omit in toc -->\n\nHi\n",
             member="content/README.md",
         )
         == "Content"
     )
     assert (
-        doc_corpus_service_module._github_docs_zip_document_title(
+        github_zip_embedder_module._github_docs_zip_document_title(
             "no heading here\n",
             member="plain/stuff.md",
         )
@@ -383,7 +386,7 @@ async def test_ingest_github_documentation_from_zip_plain_markdown_uses_filename
     ) -> list[list[float]]:
         return [[0.01] * 1536 for _ in texts]
 
-    monkeypatch.setattr(doc_corpus_service_module, "embed_texts_openai", fake_embed)
+    monkeypatch.setattr(github_zip_embedder_module, "embed_texts_openai", fake_embed)
 
     session = MagicMock()
     session.execute = AsyncMock()
@@ -424,7 +427,7 @@ async def test_ingest_github_documentation_from_zip_persists_chunks(
     ) -> list[list[float]]:
         return [[0.01] * 1536 for _ in texts]
 
-    monkeypatch.setattr(doc_corpus_service_module, "embed_texts_openai", fake_embed)
+    monkeypatch.setattr(github_zip_embedder_module, "embed_texts_openai", fake_embed)
 
     session = MagicMock()
     session.execute = AsyncMock()
