@@ -1,20 +1,28 @@
-"""Unit tests for Salesforce PDF documentation extraction and chunking."""
+"""Unit tests for Salesforce PDF documentation extraction, chunking, and ingest."""
 
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock
 
 import pymupdf
 import pytest
 
+from aegra_api.settings import settings
+from app_integrations.salesforce.constants import SALESFORCE_APP_NAME
+from app_integrations.salesforce.doc_generation import pdf_embedder as salesforce_pdf_embedder_module
 from app_integrations.salesforce.doc_generation.pdf_embedder import (
     PdfLine,
+    SalesforcePdfChunk,
     SalesforcePdfPageText,
+    _sanitize_metadata_for_postgres,
+    _sanitize_text_for_postgres,
     build_pdf_sections,
     chunk_pdf_sections,
     extract_page_lines,
     extract_page_text,
     extract_pdf_pages,
+    ingest_salesforce_documentation_from_pdf,
     is_toc_page,
     split_salesforce_pdf_into_chunks,
     split_salesforce_pdf_pages_into_chunks,
@@ -201,3 +209,111 @@ def test_extract_pdf_pages_raises_when_missing(tmp_path: Path) -> None:
     missing = tmp_path / "missing.pdf"
     with pytest.raises(FileNotFoundError, match="Salesforce docs PDF not found"):
         extract_pdf_pages(missing)
+
+
+def test_sanitize_text_for_postgres_strips_null_bytes() -> None:
+    assert _sanitize_text_for_postgres("REST\x00API") == "RESTAPI"
+    assert _sanitize_metadata_for_postgres({"title": "a\x00b", "count": 1}) == {"title": "ab", "count": 1}
+
+
+@pytest.mark.asyncio
+async def test_ingest_salesforce_documentation_from_pdf_strips_null_bytes(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    pdf_path = tmp_path / "sf_docs.pdf"
+    _write_sample_pdf(pdf_path)
+    monkeypatch.setattr(settings.doc_corpus, "OPENAI_API_KEY", "oa", raising=False)
+
+    dirty_chunk = SalesforcePdfChunk(
+        page_number=1,
+        content="# Guide > Section\x00\n\nBody\x00text",
+        chunk_title="Section\x00",
+        metadata={"document_title": "Guide\x00", "section_title": "Section\x00", "source_format": "pdf"},
+    )
+
+    monkeypatch.setattr(
+        salesforce_pdf_embedder_module,
+        "split_salesforce_pdf_into_chunks",
+        lambda *_args, **_kwargs: [dirty_chunk],
+    )
+
+    async def fake_embed(  # noqa: ARG001
+        *,
+        texts: list[str],
+        model: str,
+        api_key: str,
+        progress_bar: object | None = None,
+    ) -> list[list[float]]:
+        return [[0.01] * 1536 for _ in texts]
+
+    monkeypatch.setattr(salesforce_pdf_embedder_module, "embed_texts_openai", fake_embed)
+
+    session = MagicMock()
+    session.execute = AsyncMock()
+    session.add = MagicMock()
+    session.commit = AsyncMock()
+
+    await ingest_salesforce_documentation_from_pdf(session, pdf_path, show_progress=False)
+
+    added = session.add.call_args_list[0][0][0]
+    assert "\x00" not in added.content
+    assert "\x00" not in added.page_title
+    assert "\x00" not in added.metadata_dict["salesforce_pdf"]["document_title"]
+
+
+@pytest.mark.asyncio
+async def test_ingest_salesforce_documentation_from_pdf_persists_chunks(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    pdf_path = tmp_path / "sf_docs.pdf"
+    _write_sample_pdf(pdf_path)
+
+    monkeypatch.setattr(settings.doc_corpus, "OPENAI_API_KEY", "oa", raising=False)
+
+    async def fake_embed(  # noqa: ARG001
+        *,
+        texts: list[str],
+        model: str,
+        api_key: str,
+        progress_bar: object | None = None,
+    ) -> list[list[float]]:
+        return [[0.01] * 1536 for _ in texts]
+
+    monkeypatch.setattr(salesforce_pdf_embedder_module, "embed_texts_openai", fake_embed)
+
+    session = MagicMock()
+    session.execute = AsyncMock()
+    session.add = MagicMock()
+    session.commit = AsyncMock()
+
+    pdfs_seen, chunks_written, row_titles = await ingest_salesforce_documentation_from_pdf(
+        session,
+        pdf_path,
+        show_progress=False,
+    )
+
+    assert pdfs_seen == 1
+    assert chunks_written >= 1
+    assert len(row_titles) == chunks_written
+
+    added = session.add.call_args_list[0][0][0]
+    assert added.application == SALESFORCE_APP_NAME
+    assert added.collection_key == "default"
+    assert added.metadata_dict["salesforce_pdf"]["source_format"] == "pdf"
+    session.commit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_ingest_salesforce_documentation_from_pdf_requires_api_key(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    pdf_path = tmp_path / "sf_docs.pdf"
+    _write_sample_pdf(pdf_path)
+    monkeypatch.setattr(settings.doc_corpus, "OPENAI_API_KEY", "", raising=False)
+
+    session = MagicMock()
+    with pytest.raises(ValueError, match="OPENAI_API_KEY is required"):
+        await ingest_salesforce_documentation_from_pdf(session, pdf_path, show_progress=False)

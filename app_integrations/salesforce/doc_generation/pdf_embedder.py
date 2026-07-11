@@ -1,4 +1,4 @@
-"""Salesforce documentation PDF parsing, text extraction, and chunking."""
+"""Salesforce documentation PDF parsing, text extraction, chunking, and ingestion."""
 
 from __future__ import annotations
 
@@ -10,10 +10,22 @@ from typing import Any
 
 import pymupdf
 import structlog
+from sqlalchemy import delete
+from sqlalchemy.ext.asyncio import AsyncSession
+from tqdm import tqdm
 
-from aegra_api.services.doc_corpus_service import split_text_into_chunks
+from aegra_api.core.orm import DocEmbeddingChunk
+from aegra_api.services.doc_corpus_service import embed_texts_openai, split_text_into_chunks
+from aegra_api.settings import settings
+from app_integrations.salesforce.constants import SALESFORCE_APP_NAME
 
 logger = structlog.get_logger(__name__)
+
+_DOC_INGEST_COLLECTION_KEY = "default"
+_CHUNK_MAX_CHARS = 2000
+_CHUNK_OVERLAP_CHARS = 200
+_EMBED_MODEL = "text-embedding-3-small"
+_EMBED_DIMENSIONS = 1536
 
 _TEXT_BLOCK_TYPE = 0
 _CHAPTER_HEADING_FONT_SIZE_MIN = 14.0
@@ -76,15 +88,30 @@ class SalesforcePdfChunk:
     metadata: dict[str, Any]
 
 
+def _sanitize_text_for_postgres(text: str) -> str:
+    """Remove null bytes that PostgreSQL UTF-8 text columns reject."""
+    return text.replace("\x00", "")
+
+
+def _sanitize_metadata_for_postgres(value: Any) -> Any:
+    if isinstance(value, str):
+        return _sanitize_text_for_postgres(value)
+    if isinstance(value, dict):
+        return {key: _sanitize_metadata_for_postgres(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_sanitize_metadata_for_postgres(item) for item in value]
+    return value
+
+
 def _normalize_line(text: str) -> str:
-    return re.sub(r"\s+", " ", text.strip())
+    return re.sub(r"\s+", " ", _sanitize_text_for_postgres(text).strip())
 
 
 def _sorted_text_blocks(page: pymupdf.Page) -> list[str]:
     blocks = page.get_text("blocks")
     text_blocks = [block for block in blocks if block[6] == _TEXT_BLOCK_TYPE and block[4].strip()]
     ordered = sorted(text_blocks, key=lambda block: (round(block[1], 1), round(block[0], 1)))
-    return [block[4].strip() for block in ordered]
+    return [_sanitize_text_for_postgres(block[4].strip()) for block in ordered]
 
 
 def _detect_page_heading(page: pymupdf.Page) -> str | None:
@@ -99,7 +126,7 @@ def _detect_page_heading(page: pymupdf.Page) -> str | None:
             spans = line.get("spans", [])
             if not spans:
                 continue
-            line_text = "".join(str(span.get("text", "")) for span in spans).strip()
+            line_text = _sanitize_text_for_postgres("".join(str(span.get("text", "")) for span in spans).strip())
             if not line_text:
                 continue
             line_size = max(float(span.get("size", 0.0)) for span in spans)
@@ -126,7 +153,7 @@ def extract_page_lines(page: pymupdf.Page, *, page_number: int) -> list[PdfLine]
             spans = line.get("spans", [])
             if not spans:
                 continue
-            text = "".join(str(span.get("text", "")) for span in spans).strip()
+            text = _sanitize_text_for_postgres("".join(str(span.get("text", "")) for span in spans).strip())
             if not text:
                 continue
             font_size = max(float(span.get("size", 0.0)) for span in spans)
@@ -510,7 +537,10 @@ def _pack_paragraphs_into_chunks(
 
 
 def _format_chunk_content(*, document_title: str, section_title: str, body: str) -> str:
-    return f"# {document_title} > {section_title}\n\n{body.strip()}"
+    safe_title = _sanitize_text_for_postgres(document_title)
+    safe_section = _sanitize_text_for_postgres(section_title)
+    safe_body = _sanitize_text_for_postgres(body).strip()
+    return f"# {safe_title} > {safe_section}\n\n{safe_body}"
 
 
 def chunk_pdf_sections(
@@ -569,7 +599,7 @@ def split_salesforce_pdf_into_chunks(
         raise FileNotFoundError(f"Salesforce docs PDF not found: {pdf_path}")
 
     with pymupdf.open(pdf_path) as document:
-        resolved_title = document_title or document.metadata.get("title") or pdf_path.stem
+        resolved_title = _sanitize_text_for_postgres(document_title or document.metadata.get("title") or pdf_path.stem)
         all_page_lines = [
             extract_page_lines(document[index], page_number=index + 1) for index in range(document.page_count)
         ]
@@ -617,3 +647,85 @@ def split_salesforce_pdf_pages_into_chunks(
         max_chars=max_chars,
         overlap_chars=overlap_chars,
     )
+
+
+async def ingest_salesforce_documentation_from_pdf(
+    session: AsyncSession,
+    pdf_path: Path,
+    *,
+    show_progress: bool = True,
+) -> tuple[int, int, list[str]]:
+    """Chunk a Salesforce docs PDF, embed with OpenAI, and store rows in ``doc_embedding_chunks``.
+
+    Replaces all existing rows for ``application=salesforce`` and ``collection_key=default``.
+    """
+    resolved_path = pdf_path.expanduser().resolve()
+    if not resolved_path.is_file():
+        msg = f"Salesforce docs PDF not found: {resolved_path}"
+        raise FileNotFoundError(msg)
+
+    api_key = settings.doc_corpus.OPENAI_API_KEY
+    if not api_key:
+        msg = "OPENAI_API_KEY is required for Salesforce documentation ingest"
+        raise ValueError(msg)
+
+    chunking_bar = tqdm(total=1, desc="Chunking", unit="pdf", disable=not show_progress)
+    chunks = split_salesforce_pdf_into_chunks(
+        resolved_path,
+        max_chars=_CHUNK_MAX_CHARS,
+        overlap_chars=_CHUNK_OVERLAP_CHARS,
+    )
+    chunking_bar.update(1)
+    chunking_bar.close()
+
+    if not chunks:
+        msg = f"No embeddable chunks produced from PDF: {resolved_path}"
+        raise ValueError(msg)
+
+    await session.execute(
+        delete(DocEmbeddingChunk).where(
+            DocEmbeddingChunk.application == SALESFORCE_APP_NAME,
+            DocEmbeddingChunk.collection_key == _DOC_INGEST_COLLECTION_KEY,
+        )
+    )
+
+    texts = [chunk.content for chunk in chunks]
+    embeddings = await embed_texts_openai(
+        texts=texts,
+        model=_EMBED_MODEL,
+        api_key=api_key,
+        progress_bar=tqdm(total=len(texts), desc="Embedding", unit="chunk", disable=not show_progress),
+    )
+    if len(embeddings) != len(chunks):
+        msg = f"Embedding count mismatch: expected {len(chunks)}, got {len(embeddings)}"
+        raise RuntimeError(msg)
+
+    row_titles: list[str] = []
+    storing_bar = tqdm(total=len(chunks), desc="Storing in DB", unit="row", disable=not show_progress)
+    for chunk, embedding in zip(chunks, embeddings, strict=True):
+        if len(embedding) != _EMBED_DIMENSIONS:
+            msg = f"Unexpected embedding dimension: {len(embedding)}"
+            raise RuntimeError(msg)
+
+        row_titles.append(chunk.chunk_title)
+        session.add(
+            DocEmbeddingChunk(
+                application=SALESFORCE_APP_NAME,
+                collection_key=_DOC_INGEST_COLLECTION_KEY,
+                page_title=_sanitize_text_for_postgres(chunk.chunk_title),
+                content=_sanitize_text_for_postgres(chunk.content),
+                metadata_dict={"salesforce_pdf": _sanitize_metadata_for_postgres(chunk.metadata)},
+                embedding=embedding,
+            )
+        )
+        storing_bar.update(1)
+    storing_bar.close()
+
+    await session.commit()
+
+    logger.info(
+        "salesforce_pdf_ingested",
+        pdf_path=str(resolved_path),
+        chunk_count=len(chunks),
+    )
+    return 1, len(chunks), row_titles
