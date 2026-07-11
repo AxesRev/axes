@@ -12,6 +12,7 @@ from langgraph.runtime import Runtime
 from examples.react_agent.context import Context
 from examples.react_agent.nodes.github_openapi_tools import build_openapi_toolkit
 from examples.react_agent.nodes.salesforce_rest_tools import build_salesforce_rest_tools
+from examples.react_agent.nodes.tools import _get_all_tools
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +52,15 @@ async def load_grant_execution_tools(*, runtime: Runtime[Context], selected_apps
             "load_grant_execution_tools: app=%s tool_count=%d",
             app,
             len(app_tools),
+        )
+
+    graph_tools = await _get_all_tools(runtime)
+    tools.extend(graph_tools)
+    if graph_tools:
+        logger.info(
+            "load_grant_execution_tools: graph_tool_count=%d graph_tools=%s",
+            len(graph_tools),
+            [tool.name for tool in graph_tools],
         )
 
     logger.info(
