@@ -48,6 +48,7 @@ dependencies = [
     "python-frontmatter>=1.1.0",
     "slack-bolt>=1.28.0",
     "auth0-fastapi-api>=1.0.0b5",
+    "pymupdf>=1.28.0",
 ]
 
 [project.urls]
