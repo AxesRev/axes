@@ -168,9 +168,9 @@ class RunEvent(Base):
 
 
 class DocEmbeddingChunk(Base):
-    """Chunk of crawled documentation with an embedding for semantic search.
+    """Chunk of ingested documentation with an embedding for semantic search.
 
-    Populated by the docs corpus ingest pipeline (Firecrawl + OpenAI embeddings).
+    Populated by app integration ingest CLIs (GitHub zip, Salesforce PDF, etc.).
     Vector dimension must match ``settings.doc_corpus.DOCS_EMBED_DIMENSIONS`` (default 1536).
     """
 
