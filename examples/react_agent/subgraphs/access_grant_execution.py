@@ -67,13 +67,13 @@ async def call_grant_model(state: State, runtime: Runtime[Context]) -> dict[str,
     grant_runtime = Runtime(
         context=dataclasses.replace(runtime.context, system_prompt=ACCESS_GRANT_EXECUTION_BASE_PROMPT),
     )
-    grant_tools = load_grant_execution_tools(runtime=grant_runtime, selected_apps=state.selected_apps)
+    grant_tools = await load_grant_execution_tools(runtime=grant_runtime, selected_apps=state.selected_apps)
     return await call_model(state, grant_runtime, tools=grant_tools)
 
 
 async def run_grant_tools(state: State, runtime: Runtime[Context]) -> dict[str, list[Any]]:
     """Execute grant-execution tools for the selected apps."""
-    grant_tools = load_grant_execution_tools(runtime=runtime, selected_apps=state.selected_apps)
+    grant_tools = await load_grant_execution_tools(runtime=runtime, selected_apps=state.selected_apps)
     return await execute_tools(state, runtime, tools=grant_tools)
 
 

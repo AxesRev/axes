@@ -2,6 +2,7 @@
 
 import importlib
 import importlib.util
+import sys
 from pathlib import Path
 
 import structlog
@@ -38,6 +39,12 @@ def load_custom_app(app_import: str, base_dir: Path | None = None) -> FastAPI | 
         )
 
     path, name = app_import.rsplit(":", 1)
+
+    if base_dir is not None:
+        base_dir_str = str(base_dir.resolve())
+        if base_dir_str not in sys.path:
+            sys.path.insert(0, base_dir_str)
+            logger.info(f"Added config directory to sys.path: {base_dir_str}")
 
     try:
         # Determine if it's a file path or module path

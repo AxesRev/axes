@@ -2,26 +2,28 @@
 
 from __future__ import annotations
 
+import inspect
 import logging
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 from langgraph.runtime import Runtime
 
 from examples.react_agent.context import Context
 from examples.react_agent.nodes.github_openapi_tools import build_openapi_toolkit
+from examples.react_agent.nodes.salesforce_rest_tools import build_salesforce_rest_tools
 
 logger = logging.getLogger(__name__)
 
-AppGrantToolLoader = Callable[[Runtime[Context]], list[Any]]
+AppGrantToolLoader = Callable[[Runtime[Context]], list[Any] | Awaitable[list[Any]]]
 
 
 def _load_github_grant_tools(runtime: Runtime[Context]) -> list[Any]:
     return build_openapi_toolkit(runtime).get_tools()
 
 
-def _load_salesforce_grant_tools(runtime: Runtime[Context]) -> list[Any]:
-    return []
+async def _load_salesforce_grant_tools(runtime: Runtime[Context]) -> list[Any]:
+    return await build_salesforce_rest_tools(runtime)
 
 
 GRANT_EXECUTION_TOOLS_BY_APP: dict[str, AppGrantToolLoader] = {
@@ -30,7 +32,7 @@ GRANT_EXECUTION_TOOLS_BY_APP: dict[str, AppGrantToolLoader] = {
 }
 
 
-def load_grant_execution_tools(*, runtime: Runtime[Context], selected_apps: list[str]) -> list[Any]:
+async def load_grant_execution_tools(*, runtime: Runtime[Context], selected_apps: list[str]) -> list[Any]:
     """Load grant-execution tools for each app in ``selected_apps``."""
     tools: list[Any] = []
     loaded_apps: list[str] = []
@@ -41,7 +43,8 @@ def load_grant_execution_tools(*, runtime: Runtime[Context], selected_apps: list
             logger.warning("load_grant_execution_tools: no tools registered for app=%s", app)
             continue
 
-        app_tools = loader(runtime)
+        loaded = loader(runtime)
+        app_tools = await loaded if inspect.isawaitable(loaded) else loaded
         tools.extend(app_tools)
         loaded_apps.append(app)
         logger.info(
