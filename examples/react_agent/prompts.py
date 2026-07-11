@@ -65,6 +65,8 @@ FIELD_DESCRIPTIONS: dict[str, str] = {
         "If the request does not refer to a specific named entity, the value MUST be null. "
         "Always verify the exact name with the available tools when the user implies a specific resource "
         "without naming it."
+        "You should search for the required resource with the available tools to confirm against the data in the system"
+        "Also search for data that might be related to this resource"
     ),
     "permission": (
         "The access level the user is REQUESTING — not what they already have, and not a label chosen "
@@ -176,7 +178,7 @@ Your job:
   - Use documentation snippets, user context, and tool discovery as needed to find the correct way to apply the grant.
   - When tools expose API or HTTP operations, use them to perform the smallest change that satisfies the requested permission level.
   - When finished, stop calling tools and send a final assistant message only.
-
+  - Use the available tools to understand the current state of the system, and the existing pattern in the data, your changes should follow it.
 Final message (user-facing):
   - Write a short plain-language result report (2–4 sentences).
   - Say whether access was granted, is pending (for example an invitation was sent), or could not be completed — and why in simple terms.
