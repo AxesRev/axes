@@ -10,11 +10,13 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from openai import APIConnectionError, RateLimitError
 
+from aegra_api.models.doc_corpus import DocCorpusSearchHit
 from aegra_api.services import doc_corpus_service as doc_corpus_service_module
 from aegra_api.services.doc_corpus_service import (
     _openai_retry_wait_seconds,
     cosine_distance_row,
     embed_texts_openai,
+    format_doc_corpus_hits_for_prompt,
     split_text_into_chunks,
 )
 from aegra_api.settings import settings
@@ -173,6 +175,23 @@ def test_cosine_distance_row_length_mismatch_raises() -> None:
 def test_cosine_distance_row_zero_vector_handled() -> None:
     assert cosine_distance_row([0.0, 0.0], [1.0, 0.0]) == pytest.approx(1.0)
     assert math.isfinite(cosine_distance_row([0.0, 0.0], [0.0, 0.0]))
+
+
+def test_format_doc_corpus_hits_for_prompt_omits_source_url() -> None:
+    block = format_doc_corpus_hits_for_prompt(
+        [
+            DocCorpusSearchHit(
+                application="github",
+                page_title="Get a List of Objects",
+                content="Use the Describe Global resource.",
+                score=0.91,
+            )
+        ]
+    )
+
+    assert "URL:" not in block
+    assert "Get a List of Objects" in block
+    assert "Use the Describe Global resource." in block
 
 
 def test_openai_retry_wait_seconds_uses_retry_after_header() -> None:

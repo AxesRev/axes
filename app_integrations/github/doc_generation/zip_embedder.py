@@ -29,8 +29,6 @@ _DOC_INGEST_COLLECTION_KEY = "default"
 class _PendingGithubDocChunk:
     """One chunk row waiting for batched embedding and DB insert."""
 
-    source_url: str
-    chunk_index: int
     content: str
     chunk_display_title: str
     zip_meta: dict[str, Any]
@@ -402,7 +400,6 @@ async def ingest_github_documentation_from_zip(
             post = _github_docs_frontmatter_post(markdown, member=inner)
             document_title = _github_docs_document_title_from_post(post, member=inner)
             body = _github_docs_chunking_body_from_post(post, document_title=document_title)
-            source_ref = f"github-docs://{inner}"
 
             chunk_pairs = split_github_docs_zip_markdown_into_chunks(
                 body,
@@ -414,11 +411,9 @@ async def ingest_github_documentation_from_zip(
                 raise ValueError(f"github docs markdown produced no chunks after split: {inner!r}")
 
             zip_meta: dict[str, Any] = {"zip_member": inner, "document_title": document_title}
-            for idx, (text_chunk, chunk_title) in enumerate(chunk_pairs):
+            for text_chunk, chunk_title in chunk_pairs:
                 pending.append(
                     _PendingGithubDocChunk(
-                        source_url=source_ref,
-                        chunk_index=idx,
                         content=text_chunk,
                         chunk_display_title=chunk_title,
                         zip_meta=zip_meta,
@@ -450,9 +445,7 @@ async def ingest_github_documentation_from_zip(
                 DocEmbeddingChunk(
                     application=application,
                     collection_key=collection_key,
-                    source_url=row.source_url,
                     page_title=row.chunk_display_title,
-                    chunk_index=row.chunk_index,
                     content=row.content,
                     metadata_dict={"github_docs_zip": row.zip_meta},
                     embedding=vector,

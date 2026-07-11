@@ -160,9 +160,7 @@ async def search_doc_chunks(
         hits.append(
             DocCorpusSearchHit(
                 application=row.application,
-                source_url=row.source_url,
                 page_title=row.page_title,
-                chunk_index=row.chunk_index,
                 content=row.content,
                 score=score,
             )
@@ -180,7 +178,6 @@ def format_doc_corpus_hits_for_prompt(hits: list[DocCorpusSearchHit]) -> str:
         parts.append(
             f"### Snippet {i} — {title}\n"
             f"Application: {h.application}\n"
-            f"URL: {h.source_url}\n"
             f"Relevance score: {h.score:.4f}\n\n"
             f"{h.content.strip()}\n"
         )

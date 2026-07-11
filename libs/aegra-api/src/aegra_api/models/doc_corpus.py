@@ -5,8 +5,6 @@ from pydantic import BaseModel
 
 class DocCorpusSearchHit(BaseModel):
     application: str
-    source_url: str
     page_title: str | None
-    chunk_index: int
     content: str
     score: float

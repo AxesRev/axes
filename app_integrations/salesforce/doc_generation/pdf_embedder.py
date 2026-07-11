@@ -71,7 +71,6 @@ class SalesforcePdfChunk:
     """One chunk ready for embedding."""
 
     page_number: int
-    chunk_index: int
     content: str
     chunk_title: str
     metadata: dict[str, Any]
@@ -534,11 +533,10 @@ def chunk_pdf_sections(
         if not bodies and section.body.strip():
             bodies = [section.body.strip()]
 
-        for chunk_index, body in enumerate(bodies):
+        for body in bodies:
             chunks.append(
                 SalesforcePdfChunk(
                     page_number=section.start_page,
-                    chunk_index=chunk_index,
                     content=_format_chunk_content(
                         document_title=document_title,
                         section_title=section.title,
