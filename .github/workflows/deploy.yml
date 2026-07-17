@@ -47,11 +47,13 @@ jobs:
         with:
           terragrunt-version: ${{ env.TERRAGRUNT_VERSION }}
 
-      - name: Terragrunt apply
+      - name: Apply infra
         working-directory: ${{ env.DEPLOY_DIR }}
-        env:
-          IMAGE_TAG: ${{ env.IMAGE_TAG }}
-        run: terragrunt run --all --non-interactive -- apply
+        run: >
+          terragrunt run --all --non-interactive
+          --filter '!./neo4j-mcp'
+          --filter '!./langraph-server'
+          -- apply
 
       - name: Login to Amazon ECR
         id: ecr
@@ -83,3 +85,13 @@ jobs:
             ${{ steps.ecr.outputs.registry }}/axes/neo4j-mcp:latest
           cache-from: type=gha,scope=neo4j-mcp
           cache-to: type=gha,mode=max,scope=neo4j-mcp
+
+      - name: Apply apps
+        working-directory: ${{ env.DEPLOY_DIR }}
+        env:
+          IMAGE_TAG: ${{ env.IMAGE_TAG }}
+        run: >
+          terragrunt run --all --non-interactive
+          --filter './neo4j-mcp'
+          --filter './langraph-server'
+          -- apply
