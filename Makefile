@@ -40,22 +40,22 @@ lint:
 	uv run ruff check .
 
 type-check:
-	uv run ty check libs/aegra-api/src/
+	uv run ty check langraph_server/src/
 
 security:
-	uv run bandit -c pyproject.toml -r libs/aegra-api/src/
+	uv run bandit -c pyproject.toml -r langraph_server/src/
 
 test: test-api
 
 test-api:
-	uv run --package aegra-api pytest libs/aegra-api/tests/
+	uv run --package aegra-api pytest langraph_server/tests/
 
 test-cov:
-	uv run --package aegra-api pytest libs/aegra-api/tests/ --cov=libs/aegra-api/src --cov-report=html --cov-report=term
+	uv run --package aegra-api pytest langraph_server/tests/ --cov=langraph_server/src --cov-report=html --cov-report=term
 
 ci-check: format lint
-	-uv run ty check libs/aegra-api/src/
-	-uv run bandit -c pyproject.toml -r libs/aegra-api/src/
+	-uv run ty check langraph_server/src/
+	-uv run bandit -c pyproject.toml -r langraph_server/src/
 	$(MAKE) test
 	@echo ""
 	@echo "All CI checks completed! (ty and bandit are non-blocking)"
@@ -66,4 +66,4 @@ clean:
 	rm -rf .pytest_cache .ty_cache .ruff_cache htmlcov 2>/dev/null || true
 
 run:
-	uv run --package aegra-api uvicorn aegra_api.main:app --reload --loop asyncio
+	AEGRA_CONFIG=langraph_server/aegra.json PYTHONPATH=langraph_server uv run --package aegra-api uvicorn aegra_api.main:app --reload --loop asyncio

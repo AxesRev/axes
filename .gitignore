@@ -40,3 +40,13 @@ graph_service/certs/salesforce/AxesRev.key
 
 # Local inspect / debug output (scripts/inspect_latest_run.py)
 .scratch/
+
+# Terraform / Terragrunt
+**/.terraform/
+**/.terragrunt-cache/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+crash.*.log
+.terraform.lock.hcl

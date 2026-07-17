@@ -39,11 +39,11 @@ jobs:
         run: uv python install 3.12
 
       - name: Install aegra-api dependencies
-        working-directory: libs/aegra-api
+        working-directory: langraph_server
         run: uv sync
 
       - name: Run database migrations
-        working-directory: libs/aegra-api
+        working-directory: langraph_server
         env:
           POSTGRES_USER: "user"
           POSTGRES_PASSWORD: "password"
@@ -54,7 +54,7 @@ jobs:
 
       - name: Start Aegra server in background
         env:
-          AEGRA_CONFIG: ${{ github.workspace }}/aegra.json
+          AEGRA_CONFIG: ${{ github.workspace }}/langraph_server/aegra.json
           POSTGRES_USER: "user"
           POSTGRES_PASSWORD: "password"
           POSTGRES_HOST: "localhost"
@@ -65,8 +65,8 @@ jobs:
           HOST: "0.0.0.0"
           PORT: "8000"
           # Add examples to Python path for graph imports
-          PYTHONPATH: ${{ github.workspace }}/examples
-        working-directory: libs/aegra-api
+          PYTHONPATH: ${{ github.workspace }}/langraph_server
+        working-directory: langraph_server
         run: |
           uv run uvicorn aegra_api.main:app --host 0.0.0.0 --port 8000 > server.log 2>&1 &
           echo $! > server.pid
@@ -84,7 +84,7 @@ jobs:
           exit 1
 
       - name: Run E2E tests
-        working-directory: libs/aegra-api
+        working-directory: langraph_server
         env:
           SERVER_URL: http://localhost:8000
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
@@ -92,14 +92,14 @@ jobs:
 
       - name: Show server logs on failure
         if: failure()
-        working-directory: libs/aegra-api
+        working-directory: langraph_server
         run: |
           echo "=== Server Logs ==="
           cat server.log || echo "No server logs found"
 
       - name: Stop server
         if: always()
-        working-directory: libs/aegra-api
+        working-directory: langraph_server
         run: |
           if [ -f server.pid ]; then
             kill $(cat server.pid) || true

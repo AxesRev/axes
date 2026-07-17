@@ -1,5 +1,5 @@
 # Root pyproject.toml - Workspace configuration + dev tools
-# The actual packages are in libs/aegra-api
+# LangGraph / Agent Protocol server lives in langraph_server/
 
 [project]
 name = "aegra-workspace"
@@ -22,7 +22,7 @@ package = false
 aegra-billing-service = { workspace = true }
 
 [tool.uv.workspace]
-members = ["libs/*", "graph_service", "billing_service"]
+members = ["langraph_server", "graph_service", "billing_service", "neo4j_mcp"]
 
 [dependency-groups]
 dev = [
@@ -59,7 +59,7 @@ ignore = [
 known-first-party = ["aegra_api", "billing", "app_integrations", "slack_app", "tenant"]
 
 # Note: pytest config is in each package's pyproject.toml
-# Run tests from: libs/aegra-api
+# Run tests from: langraph_server/
 
 # ty replaces mypy for type checking. It uses its own rule system rather than
 # mypy-style strictness flags. Severity and per-rule overrides go in

@@ -1,4 +1,4 @@
-# Remote Neo4j MCP (mcp-neo4j-cypher HTTP) — run alongside Aegra when agents need graph tools.
+# HTTP Neo4j MCP (mcp-neo4j-cypher) — run alongside Neo4j when agents need graph tools.
 FROM python:3.12-slim-bookworm
 
 WORKDIR /workspace
@@ -6,9 +6,9 @@ WORKDIR /workspace
 RUN pip install --no-cache-dir uv
 
 COPY pyproject.toml uv.lock /workspace/
-COPY graph_service /workspace/graph_service/
+COPY neo4j_mcp /workspace/neo4j_mcp/
 
-RUN uv sync --frozen --package aegra-graph-service --no-dev
+RUN uv sync --frozen --package aegra-neo4j-mcp --no-dev
 
 ENV PATH="/workspace/.venv/bin:$PATH"
 
@@ -16,4 +16,4 @@ EXPOSE 8811
 
 WORKDIR /workspace
 
-CMD ["uv", "run", "--package", "aegra-graph-service", "neo4j-mcp-remote"]
+CMD ["uv", "run", "--package", "aegra-neo4j-mcp", "neo4j-mcp-remote"]
