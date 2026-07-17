@@ -60,6 +60,8 @@ resource "kubernetes_stateful_set_v1" "this" {
     }
   }
 
+  wait_for_rollout = false
+
   spec {
     service_name = "neo4j"
     replicas     = 1
