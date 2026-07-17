@@ -12,5 +12,6 @@ output "app_password" {
 }
 
 output "bootstrap_job_name" {
-  value = kubernetes_job_v1.bootstrap.metadata[0].name
+  value     = nonsensitive(kubernetes_job_v1.bootstrap.metadata[0].name)
+  sensitive = false
 }
