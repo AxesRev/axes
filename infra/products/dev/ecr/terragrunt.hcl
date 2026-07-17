@@ -9,5 +9,6 @@ terraform {
 inputs = {
   repository_names = [
     "axes/neo4j-mcp",
+    "axes/langraph-server",
   ]
 }
