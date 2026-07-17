@@ -66,7 +66,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: deployments/docker/Dockerfile
+          file: langraph_server/Dockerfile
           push: true
           tags: |
             ${{ steps.ecr.outputs.registry }}/axes/langraph-server:${{ env.IMAGE_TAG }}
@@ -77,8 +77,8 @@ jobs:
       - name: Build and push neo4j-mcp
         uses: docker/build-push-action@v6
         with:
-          context: .
-          file: deployments/docker/Dockerfile.neo4j-mcp
+          context: neo4j_mcp
+          file: neo4j_mcp/Dockerfile
           push: true
           tags: |
             ${{ steps.ecr.outputs.registry }}/axes/neo4j-mcp:${{ env.IMAGE_TAG }}

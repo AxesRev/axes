@@ -26,10 +26,12 @@ jobs:
       matrix:
         include:
           - name: langraph-server
-            dockerfile: deployments/docker/Dockerfile
+            context: .
+            dockerfile: langraph_server/Dockerfile
             repository: axes/langraph-server
           - name: neo4j-mcp
-            dockerfile: deployments/docker/Dockerfile.neo4j-mcp
+            context: neo4j_mcp
+            dockerfile: neo4j_mcp/Dockerfile
             repository: axes/neo4j-mcp
 
     steps:
@@ -51,7 +53,7 @@ jobs:
       - name: Build and push ${{ matrix.name }}
         uses: docker/build-push-action@v6
         with:
-          context: .
+          context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
           push: true
           tags: |

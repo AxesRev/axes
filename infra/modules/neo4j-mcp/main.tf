@@ -24,6 +24,8 @@ resource "kubernetes_deployment_v1" "this" {
       }
 
       spec {
+        enable_service_links = false
+
         container {
           name  = "neo4j-mcp"
           image = var.image

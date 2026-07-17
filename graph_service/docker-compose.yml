@@ -33,8 +33,8 @@ services:
 
   neo4j-mcp:
     build:
-      context: ..
-      dockerfile: deployments/docker/Dockerfile.neo4j-mcp
+      context: ../neo4j_mcp
+      dockerfile: Dockerfile
     ports:
       - "${NEO4J_MCP_PUBLISH_PORT:-8811}:8811"
     environment:
