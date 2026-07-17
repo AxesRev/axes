@@ -53,7 +53,7 @@ wheels = [
 [[package]]
 name = "aegra-api"
 version = "0.7.29"
-source = { editable = "libs/aegra-api" }
+source = { editable = "langraph_server" }
 dependencies = [
     { name = "alembic" },
     { name = "asgi-correlation-id" },

@@ -42,8 +42,8 @@ cp .env.example .env
 uv sync --all-packages
 docker compose up -d
 
-# Start the dev server
-uv run --package aegra-api uvicorn aegra_api.main:app --reload
+# Start the LangGraph server
+AEGRA_CONFIG=langraph_server/aegra.json PYTHONPATH=langraph_server uv run --package aegra-api uvicorn aegra_api.main:app --reload
 ```
 
 Open [http://localhost:8000/docs](http://localhost:8000/docs) to explore the API.

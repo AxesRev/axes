@@ -36,21 +36,21 @@ jobs:
 
       - name: Get version
         id: get-version
-        working-directory: libs/aegra-api
+        working-directory: langraph_server
         run: |
           VERSION=$(grep -m 1 "^version = " pyproject.toml | cut -d '"' -f 2)
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "Building aegra-api version $VERSION"
 
       - name: Build package
-        working-directory: libs/aegra-api
+        working-directory: langraph_server
         run: uv build --out-dir dist/
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
           name: dist-aegra-api
-          path: libs/aegra-api/dist/
+          path: langraph_server/dist/
           if-no-files-found: error
 
   publish-api:

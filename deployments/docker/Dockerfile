@@ -27,8 +27,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy aegra-api package files and workspace lockfile
-COPY libs/aegra-api/pyproject.toml libs/aegra-api/README.md ./
+# Copy langraph_server package files and workspace lockfile
+COPY langraph_server/pyproject.toml langraph_server/README.md ./
 COPY uv.lock ./
 
 # Install dependencies from lockfile (includes dev deps for example agents).
@@ -37,9 +37,9 @@ RUN uv export --frozen --no-emit-project --format=requirements-txt > requirement
     rm requirements.txt
 
 # Copy the actual project source code and forced includes (alembic).
-COPY libs/aegra-api/src/ ./src/
-COPY libs/aegra-api/alembic.ini ./alembic.ini
-COPY libs/aegra-api/alembic/ ./alembic/
+COPY langraph_server/src/ ./src/
+COPY langraph_server/alembic.ini ./alembic.ini
+COPY langraph_server/alembic/ ./alembic/
 
 # Install the project package itself.
 RUN uv pip install --system --compile-bytecode --no-deps .
@@ -59,10 +59,10 @@ COPY --from=builder /usr/local/lib/python${PY_VERSION}/site-packages/ /usr/local
 COPY --from=builder /usr/local/bin/ /usr/local/bin/
 
 # Copy runtime assets required by the app and alembic
-COPY libs/aegra-api/alembic.ini ./alembic.ini
-COPY libs/aegra-api/alembic/ ./alembic/
-COPY aegra.json ./aegra.json
-COPY examples/ ./examples/
+COPY langraph_server/alembic.ini ./alembic.ini
+COPY langraph_server/alembic/ ./alembic/
+COPY langraph_server/aegra.json ./aegra.json
+COPY langraph_server/examples/ ./examples/
 
 EXPOSE 8000
 
