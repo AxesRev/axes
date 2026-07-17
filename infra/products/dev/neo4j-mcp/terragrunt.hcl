@@ -58,10 +58,9 @@ EOF
 }
 
 inputs = {
-  namespace        = dependency.neo4j.outputs.namespace
-  neo4j_bolt_uri  = dependency.neo4j.outputs.bolt_uri
+  namespace         = dependency.neo4j.outputs.namespace
+  neo4j_bolt_uri   = dependency.neo4j.outputs.bolt_uri
   auth_secret_name = dependency.neo4j.outputs.auth_secret_name
 
-  # Image must be pushed to ECR before applying this stack.
-  image = "${dependency.ecr.outputs.repository_urls["axes/neo4j-mcp"]}:latest"
+  image = "${dependency.ecr.outputs.repository_urls["axes/neo4j-mcp"]}:${get_env("IMAGE_TAG", "latest")}"
 }

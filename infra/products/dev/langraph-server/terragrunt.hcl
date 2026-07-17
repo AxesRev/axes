@@ -76,7 +76,7 @@ EOF
 }
 
 inputs = {
-  image = "${dependency.ecr.outputs.repository_urls["axes/langraph-server"]}:latest"
+  image = "${dependency.ecr.outputs.repository_urls["axes/langraph-server"]}:${get_env("IMAGE_TAG", "latest")}"
 
   postgres_host     = dependency.rds.outputs.address
   postgres_port     = dependency.rds.outputs.port

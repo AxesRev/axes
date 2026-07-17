@@ -18,19 +18,31 @@ dependency "rds" {
   mock_outputs_allowed_terraform_commands = ["validate", "plan"]
 }
 
-generate "postgresql_provider" {
-  path      = "postgresql_provider.tf"
+dependency "eks" {
+  config_path = "../eks"
+
+  mock_outputs = {
+    cluster_name = "axes-dev"
+  }
+  mock_outputs_allowed_terraform_commands = ["validate", "plan"]
+}
+
+generate "k8s_provider" {
+  path      = "k8s_provider.tf"
   if_exists = "overwrite_terragrunt"
   contents  = <<EOF
-provider "postgresql" {
-  host            = "${dependency.rds.outputs.address}"
-  port            = ${dependency.rds.outputs.port}
-  database        = "postgres"
-  username        = "${dependency.rds.outputs.master_username}"
-  password        = "${dependency.rds.outputs.master_password}"
-  sslmode         = "require"
-  connect_timeout = 15
-  superuser       = false
+data "aws_eks_cluster" "this" {
+  name = "${dependency.eks.outputs.cluster_name}"
+}
+
+data "aws_eks_cluster_auth" "this" {
+  name = "${dependency.eks.outputs.cluster_name}"
+}
+
+provider "kubernetes" {
+  host                   = data.aws_eks_cluster.this.endpoint
+  cluster_ca_certificate = base64decode(data.aws_eks_cluster.this.certificate_authority[0].data)
+  token                  = data.aws_eks_cluster_auth.this.token
 }
 EOF
 }
@@ -41,6 +53,10 @@ locals {
 
 inputs = {
   name            = local.env.locals.database_name
+  host            = dependency.rds.outputs.address
+  port            = dependency.rds.outputs.port
+  master_username = dependency.rds.outputs.master_username
+  master_password = dependency.rds.outputs.master_password
   create_app_user = true
   extensions      = ["vector"]
 }

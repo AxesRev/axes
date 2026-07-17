@@ -2,9 +2,9 @@ terraform {
   required_version = ">= 1.6.0"
 
   required_providers {
-    postgresql = {
-      source  = "cyrilgdn/postgresql"
-      version = "~> 1.22"
+    kubernetes = {
+      source  = "hashicorp/kubernetes"
+      version = "~> 2.0"
     }
     random = {
       source  = "hashicorp/random"

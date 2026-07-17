@@ -9,22 +9,77 @@ permissions:
   id-token: write
   contents: read
 
+concurrency:
+  group: deploy-dev
+  cancel-in-progress: false
+
 env:
   AWS_REGION: eu-west-1
+  TF_IN_AUTOMATION: "true"
+  TF_INPUT: "false"
+  TF_LOG: ""
+  TERRAFORM_VERSION: "1.9.8"
+  TERRAGRUNT_VERSION: "0.80.4"
+  TG_WORKING_DIR: infra/products/dev
+  IMAGE_TAG: ${{ github.sha }}
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 180
     steps:
       - uses: actions/checkout@v4
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          role-to-assume: arn:aws:iam::042993547532:role/github-actions-deploy
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Verify AWS access
-        run: aws sts get-caller-identity
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
 
-      # TODO: add terraform init/plan/apply when infra/ is ready
+      - name: Setup Terragrunt
+        uses: autero1/action-terragrunt@v3
+        with:
+          terragrunt-version: ${{ env.TERRAGRUNT_VERSION }}
+
+      - name: Terragrunt apply
+        working-directory: ${{ env.TG_WORKING_DIR }}
+        env:
+          IMAGE_TAG: ${{ env.IMAGE_TAG }}
+        run: terragrunt run --all --non-interactive -- apply
+
+      - name: Login to Amazon ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push langraph-server
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deployments/docker/Dockerfile
+          push: true
+          tags: |
+            ${{ steps.ecr.outputs.registry }}/axes/langraph-server:${{ env.IMAGE_TAG }}
+            ${{ steps.ecr.outputs.registry }}/axes/langraph-server:latest
+          cache-from: type=gha,scope=langraph-server
+          cache-to: type=gha,mode=max,scope=langraph-server
+
+      - name: Build and push neo4j-mcp
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deployments/docker/Dockerfile.neo4j-mcp
+          push: true
+          tags: |
+            ${{ steps.ecr.outputs.registry }}/axes/neo4j-mcp:${{ env.IMAGE_TAG }}
+            ${{ steps.ecr.outputs.registry }}/axes/neo4j-mcp:latest
+          cache-from: type=gha,scope=neo4j-mcp
+          cache-to: type=gha,mode=max,scope=neo4j-mcp
