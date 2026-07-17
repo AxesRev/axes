@@ -11,6 +11,7 @@ members = [
     "aegra-api",
     "aegra-billing-service",
     "aegra-graph-service",
+    "aegra-neo4j-mcp",
     "aegra-workspace",
 ]
 
@@ -185,12 +186,10 @@ version = "0.1.1"
 source = { editable = "graph_service" }
 dependencies = [
     { name = "asyncpg" },
-    { name = "mcp-neo4j-cypher" },
     { name = "neo4j" },
     { name = "neomodel" },
     { name = "pydantic-settings" },
     { name = "pygithub" },
-    { name = "python-dotenv" },
     { name = "simple-salesforce" },
     { name = "structlog" },
 ]
@@ -205,12 +204,10 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "asyncpg", specifier = ">=0.31.0" },
-    { name = "mcp-neo4j-cypher", specifier = ">=0.6.0" },
     { name = "neo4j", specifier = ">=5.0.0" },
     { name = "neomodel", specifier = ">=6.1.0" },
     { name = "pydantic-settings", specifier = ">=2.0.0" },
     { name = "pygithub", specifier = ">=2.9.1" },
-    { name = "python-dotenv", specifier = ">=1.0.0" },
     { name = "simple-salesforce", specifier = ">=1.12.6" },
     { name = "structlog", specifier = ">=25.0.0" },
 ]
@@ -220,6 +217,21 @@ dev = [
     { name = "pytest", specifier = ">=9.0.0" },
     { name = "pytest-asyncio", specifier = ">=1.3.0" },
     { name = "pytest-mock", specifier = ">=3.15.0" },
+]
+
+[[package]]
+name = "aegra-neo4j-mcp"
+version = "0.1.0"
+source = { editable = "neo4j_mcp" }
+dependencies = [
+    { name = "mcp-neo4j-cypher" },
+    { name = "python-dotenv" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "mcp-neo4j-cypher", specifier = ">=0.6.0" },
+    { name = "python-dotenv", specifier = ">=1.0.0" },
 ]
 
 [[package]]

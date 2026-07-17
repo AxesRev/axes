@@ -8,7 +8,6 @@ terraform {
 
 inputs = {
   repository_names = [
-    "axes/graph-service",
     "axes/neo4j-mcp",
   ]
 }

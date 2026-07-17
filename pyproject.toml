@@ -22,7 +22,7 @@ package = false
 aegra-billing-service = { workspace = true }
 
 [tool.uv.workspace]
-members = ["libs/*", "graph_service", "billing_service"]
+members = ["libs/*", "graph_service", "billing_service", "neo4j_mcp"]
 
 [dependency-groups]
 dev = [
