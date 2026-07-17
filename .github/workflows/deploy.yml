@@ -20,7 +20,7 @@ env:
   TF_LOG: ""
   TERRAFORM_VERSION: "1.9.8"
   TERRAGRUNT_VERSION: "0.80.4"
-  TG_WORKING_DIR: infra/products/dev
+  DEPLOY_DIR: infra/products/dev
   IMAGE_TAG: ${{ github.sha }}
 
 jobs:
@@ -48,7 +48,7 @@ jobs:
           terragrunt-version: ${{ env.TERRAGRUNT_VERSION }}
 
       - name: Terragrunt apply
-        working-directory: ${{ env.TG_WORKING_DIR }}
+        working-directory: ${{ env.DEPLOY_DIR }}
         env:
           IMAGE_TAG: ${{ env.IMAGE_TAG }}
         run: terragrunt run --all --non-interactive -- apply
