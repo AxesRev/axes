@@ -48,7 +48,6 @@ from aegra_api.core.route_merger import (  # noqa: E402
 )
 from aegra_api.middleware import ContentTypeFixMiddleware, StructLogMiddleware  # noqa: E402
 from aegra_api.models.errors import AgentProtocolError, get_error_type  # noqa: E402
-from aegra_api.observability.setup import setup_observability  # noqa: E402
 from aegra_api.services.event_store import event_store  # noqa: E402
 from aegra_api.services.langgraph_service import get_langgraph_service  # noqa: E402
 from aegra_api.settings import settings  # noqa: E402
@@ -96,9 +95,6 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     except (ConnectionRefusedError, OSError) as e:
         _log_connection_help(e)
         raise
-
-    # Observability
-    setup_observability()
 
     # Initialize LangGraph service
     langgraph_service = get_langgraph_service()

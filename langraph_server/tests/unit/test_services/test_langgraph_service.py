@@ -625,7 +625,7 @@ class TestLangGraphServiceConfigs:
         assert result["configurable"]["thread_id"] == thread_id
         assert result["configurable"]["user_id"] == "user-123"
 
-    def test_create_run_config(self):
+    def test_create_run_config(self) -> None:
         """Test creating run configuration"""
         mock_user = Mock()
         mock_user.identity = "user-123"
@@ -636,18 +636,14 @@ class TestLangGraphServiceConfigs:
         thread_id = "thread-456"
         additional_config = {"custom": "value"}
 
-        with patch(
-            "aegra_api.services.langgraph_service.get_tracing_callbacks",
-            return_value=[],
-        ):
-            result = create_run_config(run_id, thread_id, mock_user, additional_config)
+        result = create_run_config(run_id, thread_id, mock_user, additional_config)
 
         assert result["configurable"]["run_id"] == run_id
         assert result["configurable"]["thread_id"] == thread_id
         assert result["configurable"]["user_id"] == "user-123"
         assert result["custom"] == "value"
 
-    def test_create_run_config_with_checkpoint(self):
+    def test_create_run_config_with_checkpoint(self) -> None:
         """Test creating run config with checkpoint"""
         mock_user = Mock()
         mock_user.identity = "user-123"
@@ -658,57 +654,12 @@ class TestLangGraphServiceConfigs:
         thread_id = "thread-456"
         checkpoint = {"checkpoint_key": "checkpoint_value"}
 
-        with patch(
-            "aegra_api.services.langgraph_service.get_tracing_callbacks",
-            return_value=[],
-        ):
-            result = create_run_config(run_id, thread_id, mock_user, checkpoint=checkpoint)
+        result = create_run_config(run_id, thread_id, mock_user, checkpoint=checkpoint)
 
         assert result["configurable"]["checkpoint_key"] == "checkpoint_value"
 
-    def test_create_run_config_with_tracing_callbacks(self):
-        """Test creating run config with tracing callbacks"""
-        mock_user = Mock()
-        mock_user.identity = "user-123"
-        mock_user.display_name = "Test User"
-        mock_user.to_dict.return_value = {"identity": "user-123"}
-
-        run_id = "run-789"
-        thread_id = "thread-456"
-
-        mock_callbacks = [Mock(), Mock()]
-
-        with (
-            patch(
-                "aegra_api.services.langgraph_service.get_tracing_callbacks",
-                return_value=mock_callbacks,
-            ),
-            patch(
-                "aegra_api.services.langgraph_service.get_tracing_metadata",
-                return_value={
-                    "langfuse_session_id": thread_id,
-                    "langfuse_user_id": "user-123",
-                    "langfuse_tags": [
-                        "aegra_run",
-                        f"run:{run_id}",
-                        f"thread:{thread_id}",
-                        f"user:{mock_user.identity}",
-                    ],
-                },
-            ),
-        ):
-            result = create_run_config(run_id, thread_id, mock_user)
-
-        assert result["callbacks"] == mock_callbacks
-        assert result["metadata"]["langfuse_session_id"] == thread_id
-        assert result["metadata"]["langfuse_user_id"] == "user-123"
-        assert "aegra_run" in result["metadata"]["langfuse_tags"]
-        assert f"run:{run_id}" in result["metadata"]["langfuse_tags"]
-        assert f"thread:{thread_id}" in result["metadata"]["langfuse_tags"]
-        assert f"user:{mock_user.identity}" in result["metadata"]["langfuse_tags"]
-
-    def test_create_run_config_existing_callbacks(self):
-        """Test creating run config with existing callbacks"""
+    def test_create_run_config_preserves_existing_callbacks(self) -> None:
+        """Test creating run config keeps client-supplied callbacks untouched"""
         mock_user = Mock()
         mock_user.identity = "user-123"
         mock_user.display_name = "Test User"
@@ -719,58 +670,22 @@ class TestLangGraphServiceConfigs:
         existing_callback = Mock()
         additional_config = {"callbacks": [existing_callback]}
 
-        mock_callbacks = [Mock(), Mock()]
+        result = create_run_config(run_id, thread_id, mock_user, additional_config)
 
-        with patch(
-            "aegra_api.services.langgraph_service.get_tracing_callbacks",
-            return_value=mock_callbacks,
-        ):
-            result = create_run_config(run_id, thread_id, mock_user, additional_config)
-
-        # Should have existing + tracing callbacks
-        assert len(result["callbacks"]) == 3
-        # Verify structure is correct (don't check exact objects due to Mock ID differences)
         assert "callbacks" in result
         assert isinstance(result["callbacks"], list)
+        assert len(result["callbacks"]) == 1
 
-    def test_create_run_config_invalid_callbacks(self):
-        """Test creating run config with invalid callbacks type"""
-        mock_user = Mock()
-        mock_user.identity = "user-123"
-        mock_user.display_name = "Test User"
-        mock_user.to_dict.return_value = {"identity": "user-123"}
-
-        run_id = "run-789"
-        thread_id = "thread-456"
-        additional_config = {"callbacks": "not_a_list"}
-
-        mock_callbacks = [Mock(), Mock()]
-
-        with patch(
-            "aegra_api.services.langgraph_service.get_tracing_callbacks",
-            return_value=mock_callbacks,
-        ):
-            result = create_run_config(run_id, thread_id, mock_user, additional_config)
-
-        assert result["callbacks"] == mock_callbacks
-
-    def test_create_run_config_no_user(self):
+    def test_create_run_config_no_user(self) -> None:
         """Test creating run config without user"""
         run_id = "run-789"
         thread_id = "thread-456"
 
-        with patch(
-            "aegra_api.services.langgraph_service.get_tracing_callbacks",
-            return_value=[],
-        ):
-            result = create_run_config(run_id, thread_id, None)
+        result = create_run_config(run_id, thread_id, None)
 
         assert result["configurable"]["run_id"] == run_id
         assert result["configurable"]["thread_id"] == thread_id
         assert "user_id" not in result["configurable"]
-        # Metadata may not exist if no tracing callbacks
-        if "metadata" in result:
-            assert "langfuse_user_id" not in result["metadata"]
 
 
 @pytest.mark.asyncio

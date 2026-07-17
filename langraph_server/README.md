@@ -84,9 +84,6 @@ AEGRA_CONFIG=aegra.json
 
 # LLM (for example agents)
 OPENAI_API_KEY=sk-...
-
-# Observability (optional)
-OTEL_TARGETS=LANGFUSE,PHOENIX
 ```
 
 ## API Endpoints
@@ -166,7 +163,6 @@ langraph_server/
 │   ├── core/             # Infrastructure (database, auth, orm)
 │   ├── models/           # Pydantic request/response schemas
 │   ├── middleware/       # ASGI middleware
-│   ├── observability/    # OpenTelemetry tracing
 │   ├── utils/            # Helper functions
 │   ├── main.py           # FastAPI app entry point
 │   ├── config.py         # HTTP/store config loading
