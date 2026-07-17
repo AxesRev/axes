@@ -8,9 +8,9 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from slack_app.auth0 import require_auth0_claims
-from slack_app.tenant_routes import router as tenant_router
 
 from aegra_api.core.orm import get_session
+from tenant.routes import router as tenant_router
 
 
 @pytest.fixture
@@ -76,7 +76,7 @@ def test_get_my_app_integrations_returns_slack_integration(
     tenant_api_client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from app_integrations.github.models import AppIntegration, Tenant
+    from tenant.models import AppIntegration, Tenant
 
     tenant = Tenant(id="tenant-new", name="Owner", email="owner@example.com", auth0_sub="auth0|123")
     integration = AppIntegration(
@@ -92,8 +92,8 @@ def test_get_my_app_integrations_returns_slack_integration(
     async def fake_list(**kwargs: object) -> list[AppIntegration]:
         return [integration]
 
-    monkeypatch.setattr("slack_app.tenant_routes.get_or_create_tenant_for_auth_user", fake_get_or_create)
-    monkeypatch.setattr("slack_app.tenant_routes.list_app_integrations_for_tenant", fake_list)
+    monkeypatch.setattr("tenant.routes.get_or_create_tenant_for_auth_user", fake_get_or_create)
+    monkeypatch.setattr("tenant.routes.list_app_integrations_for_tenant", fake_list)
 
     response = tenant_api_client.get("/tenants/me/integrations")
     assert response.status_code == 200

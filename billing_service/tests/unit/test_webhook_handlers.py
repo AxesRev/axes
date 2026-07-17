@@ -5,13 +5,13 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from app_integrations.github.models import Tenant
 
 from billing.service import (
     get_tenant_billing_status,
     handle_subscription_created_webhook,
     handle_subscription_updated_webhook,
 )
+from tenant.models import Tenant
 
 
 @pytest.mark.unit

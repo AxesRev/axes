@@ -1,6 +1,6 @@
 [project]
 name = "aegra-api"
-version = "0.7.22"
+version = "0.7.29"
 description = "Aegra core API - Self-hosted Agent Protocol server"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -48,6 +48,7 @@ dependencies = [
     "python-frontmatter>=1.1.0",
     "slack-bolt>=1.28.0",
     "auth0-fastapi-api>=1.0.0b5",
+    "pymupdf>=1.28.0",
 ]
 
 [project.urls]
@@ -94,7 +95,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["aegra_api", "app_integrations"]
+known-first-party = ["aegra_api", "app_integrations", "tenant"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

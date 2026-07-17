@@ -96,28 +96,29 @@ _field_detection_graph = _field_builder.compile()
 
 def _extra_detector_context(state: State, field_name: _FieldName) -> str:
     """Add the user's current group and resource-access data when detecting `resource`."""
-    if field_name != "resource" or state.user_context is None:
+    if field_name != "resource" or not state.user_contexts:
         return ""
 
     sections: list[str] = []
-    if state.user_context.groups:
-        group_lines = "\n".join(
-            group.format_for_context() for group in state.user_context.groups[:_RESOURCE_DETECTOR_GROUP_LIMIT]
-        )
-        sections.append("Groups this user currently belongs to:\n" + group_lines)
+    for user_context in state.user_contexts:
+        if user_context.groups:
+            group_lines = "\n".join(
+                group.format_for_context() for group in user_context.groups[:_RESOURCE_DETECTOR_GROUP_LIMIT]
+            )
+            sections.append(f"Groups this user currently belongs to ({user_context.app}):\n{group_lines}")
 
-    resource_permissions = [
-        permission for permission in state.user_context.permissions if permission.target_kind == "resource"
-    ]
-    if resource_permissions:
-        permission_lines = "\n".join(
-            f"- {permission.target_name}: {permission.permission}"
-            for permission in resource_permissions[:_RESOURCE_DETECTOR_PERMISSION_LIMIT]
-        )
-        sections.append(
-            "Resources this user currently has access to (present state only — not all resources in the system):\n"
-            + permission_lines
-        )
+        resource_permissions = [
+            permission for permission in user_context.permissions if permission.target_kind == "resource"
+        ]
+        if resource_permissions:
+            permission_lines = "\n".join(
+                f"- {permission.target_name}: {permission.permission}"
+                for permission in resource_permissions[:_RESOURCE_DETECTOR_PERMISSION_LIMIT]
+            )
+            sections.append(
+                f"Resources this user currently has access to ({user_context.app}; present state only):\n"
+                + permission_lines
+            )
 
     if not sections:
         return ""
@@ -150,7 +151,8 @@ async def _detect(
     sub_input = FieldDetectionState(
         messages=[_seed(state, field_name, feedback)],
         field_name=field_name,
-        user_context=state.user_context,
+        selected_apps=state.selected_apps,
+        user_contexts=state.user_contexts,
         doc_corpus_context=state.doc_corpus_context,
     )
     field_context = dataclasses.replace(

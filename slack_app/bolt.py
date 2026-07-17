@@ -25,6 +25,8 @@ _SLACK_BOT_SCOPES = [
     "im:write",
     "im:read",
     "im:history",
+    "users:read",
+    "users:read.email",
 ]
 
 _oauth_flow: TenantAsyncOAuthFlow | None = None

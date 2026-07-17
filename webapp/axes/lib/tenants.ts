@@ -19,6 +19,11 @@ export type AppIntegrationRecord = {
   config: Record<string, unknown>;
 };
 
+export type AgentContextRecord = {
+  content: string;
+  updated_at: string | null;
+};
+
 /** Thrown when the API rejects the bearer token (missing, expired, or invalid). */
 export class ApiUnauthorizedError extends Error {
   constructor(message: string) {
@@ -222,4 +227,51 @@ export async function fetchBillingPortalUrlForAccessToken(accessToken: string): 
   }
 
   return payload.url;
+}
+
+export async function fetchAgentContextForAccessToken(accessToken: string): Promise<AgentContextRecord> {
+  const response = await fetch(`${apiBaseUrl()}/tenants/me/agent-context`, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+    cache: "no-store",
+  });
+
+  if (response.status === 401) {
+    throw new ApiUnauthorizedError("Invalid or missing access token");
+  }
+
+  if (!response.ok) {
+    const detail = await readApiErrorDetail(response);
+    throw new ApiResponseError(detail, response.status);
+  }
+
+  return (await response.json()) as AgentContextRecord;
+}
+
+export async function updateAgentContextForAccessToken(
+  accessToken: string,
+  content: string,
+): Promise<AgentContextRecord> {
+  const response = await fetch(`${apiBaseUrl()}/tenants/me/agent-context`, {
+    method: "PUT",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ content }),
+    cache: "no-store",
+  });
+
+  if (response.status === 401) {
+    throw new ApiUnauthorizedError("Invalid or missing access token");
+  }
+
+  if (!response.ok) {
+    const detail = await readApiErrorDetail(response);
+    throw new ApiResponseError(detail, response.status);
+  }
+
+  return (await response.json()) as AgentContextRecord;
 }

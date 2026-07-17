@@ -12,7 +12,6 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from aegra_api.core.orm import get_session
-from app_integrations.github.models import Tenant
 from app_integrations.salesforce.client import fetch_organization_id, make_salesforce_client
 from app_integrations.salesforce.install_state import (
     create_salesforce_install_state,
@@ -20,6 +19,7 @@ from app_integrations.salesforce.install_state import (
 )
 from app_integrations.salesforce.service import upsert_salesforce_app_integration
 from app_integrations.salesforce.settings import salesforce_settings
+from tenant.models import Tenant
 
 logger = structlog.getLogger(__name__)
 

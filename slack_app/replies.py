@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 SLACK_OUTPUT_NODES: frozenset[str] = frozenset(
-    {"permission_detection", "access_request_evaluation", "access_grant_execution"}
+    {"respond_unsupported_app", "permission_detection", "access_request_evaluation", "access_grant_execution"}
 )
 SLACK_FINAL_AI_ONLY_NODES: frozenset[str] = frozenset({"access_grant_execution"})
 

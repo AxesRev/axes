@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app_integrations.github.models import UserIdentity
+from tenant.models import UserIdentity
 
 _GITHUB_KEY = "github"
 

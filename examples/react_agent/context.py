@@ -55,6 +55,11 @@ class Context:
         metadata={"description": "Primary verified email from GitHub OAuth for the authenticated Slack user."},
     )
 
+    slack_email: str = field(
+        default="",
+        metadata={"description": "Primary email from Slack users.info for the message author."},
+    )
+
     github_installation_id: str = field(
         default="",
         metadata={
@@ -62,6 +67,11 @@ class Context:
                 "GitHub App installation ID for the org/user. Used to mint installation access tokens for grant execution."
             ),
         },
+    )
+
+    tenant_id: str = field(
+        default="",
+        metadata={"description": "Tenant ID for the Slack workspace. Used to load tenant-specific agent context."},
     )
 
     reasoning_effort: str = field(

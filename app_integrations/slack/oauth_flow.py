@@ -10,8 +10,8 @@ from slack_sdk.oauth.installation_store import Installation
 from sqlalchemy import select
 
 from aegra_api.core.orm import get_session
-from app_integrations.github.models import Tenant
 from app_integrations.slack.state_store import TenantOAuthStateStore
+from tenant.models import Tenant
 
 
 class TenantAsyncOAuthFlow(AsyncOAuthFlow):

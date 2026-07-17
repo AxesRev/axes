@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app_integrations.github.constants import GITHUB_APP_NAME
-from app_integrations.github.models import AppIntegration, Tenant
+from tenant.models import AppIntegration, Tenant
 
 logger = structlog.getLogger(__name__)
 

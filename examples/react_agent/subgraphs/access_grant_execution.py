@@ -12,11 +12,11 @@ from langgraph.runtime import Runtime
 
 from examples.react_agent.context import Context
 from examples.react_agent.edges.end import route_model_output
+from examples.react_agent.grant_execution_tools import load_grant_execution_tools
 from examples.react_agent.nodes.doc_corpus_context import (
     grant_execution_doc_corpus_search_phrase,
     make_load_doc_corpus_context,
 )
-from examples.react_agent.nodes.github_openapi_tools import build_openapi_toolkit
 from examples.react_agent.nodes.llm_call import call_model
 from examples.react_agent.nodes.tools import execute_tools
 from examples.react_agent.prompts import (
@@ -63,18 +63,18 @@ async def seed_grant(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
 
 
 async def call_grant_model(state: State, runtime: Runtime[Context]) -> dict[str, list[Any]]:
-    """Call the LLM with GitHub OpenAPIToolkit tools."""
+    """Call the LLM with grant-execution tools for the selected apps."""
     grant_runtime = Runtime(
         context=dataclasses.replace(runtime.context, system_prompt=ACCESS_GRANT_EXECUTION_BASE_PROMPT),
     )
-    openapi_tools = build_openapi_toolkit(grant_runtime).get_tools()
-    return await call_model(state, grant_runtime, tools=openapi_tools)
+    grant_tools = await load_grant_execution_tools(runtime=grant_runtime, selected_apps=state.selected_apps)
+    return await call_model(state, grant_runtime, tools=grant_tools)
 
 
 async def run_grant_tools(state: State, runtime: Runtime[Context]) -> dict[str, list[Any]]:
-    """Execute GitHub OpenAPIToolkit tools."""
-    openapi_tools = build_openapi_toolkit(runtime).get_tools()
-    return await execute_tools(state, runtime, tools=openapi_tools)
+    """Execute grant-execution tools for the selected apps."""
+    grant_tools = await load_grant_execution_tools(runtime=runtime, selected_apps=state.selected_apps)
+    return await execute_tools(state, runtime, tools=grant_tools)
 
 
 builder = StateGraph(State, context_schema=Context)

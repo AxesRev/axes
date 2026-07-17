@@ -13,6 +13,7 @@ from langgraph.runtime import Runtime
 from examples.react_agent.context import Context
 from examples.react_agent.edges.end import route_model_output
 from examples.react_agent.nodes.llm_call import call_model
+from examples.react_agent.nodes.tenant_agent_context import load_tenant_agent_context
 from examples.react_agent.nodes.tools import execute_tools
 from examples.react_agent.prompts import (
     ACCESS_EVALUATION_BASE_PROMPT,
@@ -79,12 +80,14 @@ async def extract_evaluation(state: State, runtime: Runtime[Context]) -> dict[st
 
 builder = StateGraph(State, context_schema=Context)
 
+builder.add_node("load_tenant_agent_context", load_tenant_agent_context)
 builder.add_node("seed_evaluation", seed_evaluation)
 builder.add_node("call_model", call_evaluation_model)
 builder.add_node("tools", execute_tools)
 builder.add_node("extract_evaluation", extract_evaluation)
 
-builder.add_edge("__start__", "seed_evaluation")
+builder.add_edge("__start__", "load_tenant_agent_context")
+builder.add_edge("load_tenant_agent_context", "seed_evaluation")
 builder.add_edge("seed_evaluation", "call_model")
 builder.add_conditional_edges(
     "call_model",

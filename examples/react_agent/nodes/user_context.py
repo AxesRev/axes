@@ -1,4 +1,4 @@
-"""Node that loads user context from the Neo4j MCP graph service."""
+"""Load per-app user context for the apps selected for this request."""
 
 from __future__ import annotations
 
@@ -9,34 +9,54 @@ from langgraph.runtime import Runtime
 
 from examples.react_agent.context import Context
 from examples.react_agent.state import State
-from examples.react_agent.user_context_service import fetch_user_context
+from examples.react_agent.user_context_models import UserContextData
+from examples.react_agent.user_context_service import fetch_user_context_for_app
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_APP = "github"
+
+def _resolve_identity_for_app(*, app: str, runtime: Runtime[Context]) -> tuple[str | None, str | None]:
+    if app == "github":
+        user_id = runtime.context.github_user_id.strip()
+        return (user_id or None, None)
+    if app == "salesforce":
+        slack_email = runtime.context.slack_email.strip()
+        github_email = runtime.context.github_email.strip()
+        email = slack_email or github_email
+        return (None, email or None)
+    return (None, None)
 
 
 async def load_user_context(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
-    """Fetch the requesting user's graph context via Neo4j MCP and store it on state."""
-    user_id = runtime.context.github_user_id.strip()
-    if not user_id:
-        logger.info("load_user_context: skipped — github_user_id not set")
-        return {}
+    """Fetch graph-backed user context for each selected app."""
+    if not state.selected_apps:
+        logger.info("load_user_context: no selected apps")
+        return {"user_contexts": []}
 
-    try:
-        user_context = await fetch_user_context(app=_DEFAULT_APP, user_id=user_id)
-    except RuntimeError:
-        logger.info("load_user_context: skipped — Neo4j MCP not configured")
-        return {}
+    contexts: list[UserContextData] = []
+    for app in state.selected_apps:
+        user_id, email = _resolve_identity_for_app(app=app, runtime=runtime)
+        if user_id is None and email is None:
+            logger.info("load_user_context: skipped app=%s — no identity hints", app)
+            continue
 
-    if user_context is None:
-        logger.info("load_user_context: no graph identity for app=%s user_id=%s", _DEFAULT_APP, user_id)
-        return {}
+        try:
+            user_context = await fetch_user_context_for_app(app=app, user_id=user_id, email=email)
+        except RuntimeError:
+            logger.info("load_user_context: skipped app=%s — Neo4j MCP not configured", app)
+            continue
 
-    logger.info(
-        "load_user_context: loaded user=%s groups=%d permissions=%d",
-        user_context.user_name,
-        len(user_context.groups),
-        len(user_context.permissions),
-    )
-    return {"user_context": user_context}
+        if user_context is None:
+            logger.info("load_user_context: no graph identity for app=%s", app)
+            continue
+
+        contexts.append(user_context)
+        logger.info(
+            "load_user_context: loaded app=%s user=%s groups=%d permissions=%d",
+            user_context.app,
+            user_context.user_name,
+            len(user_context.groups),
+            len(user_context.permissions),
+        )
+
+    return {"user_contexts": contexts}

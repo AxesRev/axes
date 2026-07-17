@@ -168,9 +168,9 @@ class RunEvent(Base):
 
 
 class DocEmbeddingChunk(Base):
-    """Chunk of crawled documentation with an embedding for semantic search.
+    """Chunk of ingested documentation with an embedding for semantic search.
 
-    Populated by the docs corpus ingest pipeline (Firecrawl + OpenAI embeddings).
+    Populated by app integration ingest CLIs (GitHub zip, Salesforce PDF, etc.).
     Vector dimension must match ``settings.doc_corpus.DOCS_EMBED_DIMENSIONS`` (default 1536).
     """
 
@@ -183,31 +183,13 @@ class DocEmbeddingChunk(Base):
     )
     application: Mapped[str] = mapped_column(Text, nullable=False)
     collection_key: Mapped[str] = mapped_column(Text, nullable=False)
-    source_url: Mapped[str] = mapped_column(Text, nullable=False)
     page_title: Mapped[str | None] = mapped_column(Text, nullable=True)
-    chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
     metadata_dict: Mapped[dict] = mapped_column(JSONB, server_default=text("'{}'::jsonb"), name="metadata")
     embedding: Mapped[list[float]] = mapped_column(AsyncPgVector(1536), nullable=False)
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=text("now()"))
 
-    __table_args__ = (
-        Index("idx_doc_embedding_chunks_app_collection", "application", "collection_key"),
-        Index(
-            "idx_doc_embedding_chunks_app_collection_url",
-            "application",
-            "collection_key",
-            "source_url",
-        ),
-        Index(
-            "uq_doc_embedding_chunks_natural_key",
-            "application",
-            "collection_key",
-            "source_url",
-            "chunk_index",
-            unique=True,
-        ),
-    )
+    __table_args__ = (Index("idx_doc_embedding_chunks_app_collection", "application", "collection_key"),)
 
 
 # ---------------------------------------------------------------------------

@@ -9,8 +9,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from aegra_api.core.orm import get_session
-from app_integrations.github.models import Tenant
 from app_integrations.github.router import router as github_app_router
+from tenant.models import Tenant
 
 
 @pytest.fixture

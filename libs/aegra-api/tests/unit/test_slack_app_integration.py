@@ -6,7 +6,6 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from app_integrations.github.models import AppIntegration, Tenant, UserIdentity
 from app_integrations.slack.constants import SLACK_APP_NAME
 from app_integrations.slack.service import (
     find_slack_app_integration,
@@ -14,6 +13,7 @@ from app_integrations.slack.service import (
     slack_integration_config,
     upsert_slack_app_integration,
 )
+from tenant.models import AppIntegration, Tenant, UserIdentity
 
 
 @pytest.mark.unit

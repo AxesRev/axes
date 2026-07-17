@@ -5,9 +5,9 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from slack_app.integration_service import list_app_integrations_for_tenant
 
-from app_integrations.github.models import AppIntegration
+from tenant.integration_service import list_app_integrations_for_tenant
+from tenant.models import AppIntegration
 
 
 @pytest.mark.unit

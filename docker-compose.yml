@@ -39,6 +39,7 @@ services:
       - ./libs/aegra-api/alembic:/app/alembic:ro # for migrations
       - ./.env:/app/.env:ro
       - ./app_integrations:/app/app_integrations:ro
+      - ./tenant:/app/tenant:ro
     command: >
       sh -c "
         echo 'Running database migrations...' &&

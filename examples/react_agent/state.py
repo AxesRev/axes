@@ -170,8 +170,11 @@ class State(InputState):
     access_evaluation: AccessRequestEvaluation | None = field(default=None)
     """Evaluation of whether the detected permission request should be granted."""
 
-    user_context: UserContextData | None = field(default=None)
-    """User, group, and permission context loaded from the graph via Neo4j MCP."""
+    selected_apps: list[str] = field(default_factory=list)
+    """Supported apps chosen for this request (github, salesforce)."""
+
+    user_contexts: list[UserContextData] = field(default_factory=list)
+    """Per-app user, group, and permission context loaded from the graph via Neo4j MCP."""
 
     domain_result: FieldResult | None = field(default=None)
     """Result produced by the domain detector."""
@@ -196,3 +199,6 @@ class State(InputState):
 
     doc_corpus_context: str = field(default="")
     """Semantically retrieved documentation snippets for the current user message (prompt injection)."""
+
+    tenant_agent_context: str = field(default="")
+    """Editable tenant-specific instructions loaded from PostgreSQL for access evaluation."""

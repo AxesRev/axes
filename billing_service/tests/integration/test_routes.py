@@ -67,9 +67,8 @@ def test_get_my_tenant_billing_requires_auth() -> None:
 def test_get_my_tenant_billing_returns_not_setup(
     billing_api_client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from app_integrations.github.models import Tenant
-
     from billing.schemas import TenantBillingStatusResponse
+    from tenant.models import Tenant
 
     tenant = Tenant(
         id="tenant-new",
@@ -106,9 +105,8 @@ def test_get_my_tenant_billing_returns_not_setup(
 def test_create_my_tenant_billing_portal_returns_url(
     billing_api_client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from app_integrations.github.models import Tenant
-
     from billing.schemas import BillingPortalResponse
+    from tenant.models import Tenant
 
     tenant = Tenant(
         id="tenant-new",

@@ -7,12 +7,12 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from app_integrations.github.constants import GITHUB_APP_NAME
-from app_integrations.github.models import AppIntegration, Tenant
 from app_integrations.github.service import (
     find_github_app_integration_for_tenant,
     github_integration_config,
     upsert_github_app_integration,
 )
+from tenant.models import AppIntegration, Tenant
 
 
 @pytest.mark.unit
