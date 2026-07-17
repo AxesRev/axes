@@ -2,8 +2,6 @@ include "root" {
   path = find_in_parent_folders("root.hcl")
 }
 
-# App stack: Terraform lives in this directory (not a reusable module).
-
 dependency "eks" {
   config_path = "../eks"
 
@@ -29,19 +27,11 @@ dependency "rds" {
   config_path = "../rds"
 
   mock_outputs = {
-    address = "localhost"
-    port    = 5432
-  }
-  mock_outputs_allowed_terraform_commands = ["validate", "plan"]
-}
-
-dependency "postgres-db" {
-  config_path = "../postgres-db"
-
-  mock_outputs = {
-    name         = "axes"
-    app_username = "axes_app"
-    app_password = "mock-password"
+    address         = "localhost"
+    port            = 5432
+    db_name         = "axes"
+    master_username = "postgres"
+    master_password = "mock-password"
   }
   mock_outputs_allowed_terraform_commands = ["validate", "plan"]
 }
@@ -80,9 +70,9 @@ inputs = {
 
   postgres_host     = dependency.rds.outputs.address
   postgres_port     = dependency.rds.outputs.port
-  postgres_db       = dependency.postgres-db.outputs.name
-  postgres_user     = dependency.postgres-db.outputs.app_username
-  postgres_password = dependency.postgres-db.outputs.app_password
+  postgres_db       = dependency.rds.outputs.db_name
+  postgres_user     = dependency.rds.outputs.master_username
+  postgres_password = dependency.rds.outputs.master_password
 
   neo4j_mcp_host = dependency.neo4j-mcp.outputs.http_url
   auth_type      = "noop"

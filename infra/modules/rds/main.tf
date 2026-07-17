@@ -61,6 +61,7 @@ resource "aws_secretsmanager_secret_version" "master" {
     engine   = "postgres"
     host     = aws_db_instance.this.address
     port     = aws_db_instance.this.port
+    dbname   = var.db_name
   })
 }
 
@@ -90,10 +91,9 @@ resource "aws_db_instance" "this" {
   skip_final_snapshot     = var.skip_final_snapshot
   final_snapshot_identifier = var.skip_final_snapshot ? null : "${var.identifier}-final"
 
-  # No application DB here — create those with the postgres-db module.
-  db_name = null
+  db_name = var.db_name
 
-  apply_immediately   = true
+  apply_immediately     = true
   copy_tags_to_snapshot = true
 
   tags = var.tags

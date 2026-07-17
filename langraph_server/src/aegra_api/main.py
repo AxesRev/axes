@@ -41,7 +41,6 @@ from aegra_api.core.app_loader import load_custom_app  # noqa: E402
 from aegra_api.core.auth_deps import auth_dependency  # noqa: E402
 from aegra_api.core.database import db_manager  # noqa: E402
 from aegra_api.core.health import router as health_router  # noqa: E402
-from aegra_api.core.migrations import run_migrations_async  # noqa: E402
 from aegra_api.core.route_merger import (  # noqa: E402
     merge_exception_handlers,
     merge_lifespans,
@@ -82,14 +81,6 @@ def _log_connection_help(error: Exception) -> None:
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     """FastAPI lifespan context manager for startup/shutdown"""
-    # Auto-apply pending database migrations before anything else
-    try:
-        await run_migrations_async()
-    except (ConnectionRefusedError, OSError) as e:
-        _log_connection_help(e)
-        raise
-
-    # Startup: Initialize database and LangGraph components
     try:
         await db_manager.initialize()
     except (ConnectionRefusedError, OSError) as e:

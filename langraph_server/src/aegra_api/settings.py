@@ -70,12 +70,19 @@ class DatabaseSettings(EnvBase):
     POSTGRES_HOST: str = "localhost"
     POSTGRES_PORT: str = "5433"
     POSTGRES_DB: str = "aegra"
+    POSTGRES_SSLMODE: str | None = None
     DB_ECHO_LOG: bool = False
 
     @staticmethod
     def _normalize_scheme(url: str, target_scheme: str) -> str:
         """Replace the URL scheme/driver prefix with the target scheme."""
         return re.sub(r"^postgres(?:ql)?(\+\w+)?://", f"{target_scheme}://", url)
+
+    def _ssl_query(self, *, async_driver: bool) -> str:
+        if not self.POSTGRES_SSLMODE:
+            return ""
+        key = "ssl" if async_driver else "sslmode"
+        return f"?{key}={self.POSTGRES_SSLMODE}"
 
     @computed_field
     @property
@@ -86,6 +93,7 @@ class DatabaseSettings(EnvBase):
         return (
             f"postgresql+asyncpg://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@"
             f"{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
+            f"{self._ssl_query(async_driver=True)}"
         )
 
     @computed_field
@@ -97,6 +105,7 @@ class DatabaseSettings(EnvBase):
         return (
             f"postgresql://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@"
             f"{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
+            f"{self._ssl_query(async_driver=False)}"
         )
 
 

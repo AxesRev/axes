@@ -37,6 +37,7 @@ inputs = {
   allowed_cidr_blocks        = [local.env.locals.vpc_cidr]
   allowed_security_group_ids = [dependency.eks.outputs.node_security_group_id]
 
+  db_name               = local.env.locals.database_name
   instance_class        = "db.t4g.micro"
   allocated_storage     = 20
   max_allocated_storage = 50

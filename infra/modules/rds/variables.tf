@@ -55,6 +55,12 @@ variable "master_username" {
   default     = "postgres"
 }
 
+variable "db_name" {
+  description = "Initial database name created with the instance. Null skips creation (Postgres still has the postgres DB)."
+  type        = string
+  default     = null
+}
+
 variable "database_port" {
   description = "Postgres port."
   type        = number
