@@ -8,7 +8,8 @@ resource "kubernetes_deployment_v1" "this" {
   }
 
   spec {
-    replicas = var.replicas
+    replicas                  = var.replicas
+    progress_deadline_seconds = 30
 
     selector {
       match_labels = {
