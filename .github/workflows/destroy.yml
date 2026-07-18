@@ -1,0 +1,82 @@
+name: Destroy
+
+on:
+  workflow_dispatch:
+    inputs:
+      scope:
+        description: all = tear down everything; pause = keep vpc, rds, ecr
+        required: true
+        default: all
+        type: choice
+        options:
+          - all
+          - pause
+      confirm:
+        description: Type destroy to confirm
+        required: true
+        type: string
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: destroy-dev
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: eu-west-1
+  TF_IN_AUTOMATION: "true"
+  TF_INPUT: "false"
+  TF_LOG: ""
+  TERRAFORM_VERSION: "1.15.8"
+  TERRAGRUNT_VERSION: "1.1.1"
+  DEPLOY_DIR: infra/products/dev
+
+jobs:
+  destroy:
+    if: inputs.confirm == 'destroy'
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::042993547532:role/github-actions-deploy
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+
+      - name: Setup Terragrunt
+        uses: autero1/action-terragrunt@v3
+        with:
+          terragrunt-version: ${{ env.TERRAGRUNT_VERSION }}
+
+      - name: Destroy all stacks
+        if: inputs.scope == 'all'
+        working-directory: ${{ env.DEPLOY_DIR }}
+        run: terragrunt run --all --non-interactive destroy
+
+      - name: Destroy compute stacks
+        if: inputs.scope == 'pause'
+        working-directory: ${{ env.DEPLOY_DIR }}
+        run: >
+          terragrunt run --all --non-interactive
+          --filter './langraph-server'
+          --filter './neo4j-mcp'
+          --filter './neo4j'
+          --filter './eks'
+          -- destroy
+
+  rejected:
+    if: inputs.confirm != 'destroy'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Confirmation failed
+        run: echo "Aborted. confirm must be exactly destroy." && exit 1
