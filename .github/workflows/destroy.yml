@@ -2,19 +2,6 @@ name: Destroy
 
 on:
   workflow_dispatch:
-    inputs:
-      scope:
-        description: all = tear down everything; pause = keep vpc, rds, ecr
-        required: true
-        default: all
-        type: choice
-        options:
-          - all
-          - pause
-      confirm:
-        description: Type destroy to confirm
-        required: true
-        type: string
 
 permissions:
   id-token: write
@@ -35,7 +22,6 @@ env:
 
 jobs:
   destroy:
-    if: inputs.confirm == 'destroy'
     runs-on: ubuntu-latest
     timeout-minutes: 180
     steps:
@@ -58,25 +44,6 @@ jobs:
         with:
           terragrunt-version: ${{ env.TERRAGRUNT_VERSION }}
 
-      - name: Destroy all stacks
-        if: inputs.scope == 'all'
+      - name: Destroy
         working-directory: ${{ env.DEPLOY_DIR }}
         run: terragrunt run --all --non-interactive destroy
-
-      - name: Destroy compute stacks
-        if: inputs.scope == 'pause'
-        working-directory: ${{ env.DEPLOY_DIR }}
-        run: >
-          terragrunt run --all --non-interactive
-          --filter './langraph-server'
-          --filter './neo4j-mcp'
-          --filter './neo4j'
-          --filter './eks'
-          -- destroy
-
-  rejected:
-    if: inputs.confirm != 'destroy'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Confirmation failed
-        run: echo "Aborted. confirm must be exactly destroy." && exit 1
