@@ -19,3 +19,10 @@ module "vpc" {
 
   tags = var.tags
 }
+
+resource "aws_security_group" "db_clients" {
+  name        = "${var.name}-db-clients"
+  description = "Clients allowed to reach databases in this VPC"
+  vpc_id      = module.vpc.vpc_id
+  tags        = merge(var.tags, { Name = "${var.name}-db-clients" })
+}

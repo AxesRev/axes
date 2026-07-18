@@ -73,6 +73,8 @@ module "eks" {
       desired_size = var.node_desired_size
 
       disk_size = var.node_disk_size
+
+      vpc_security_group_ids = var.additional_node_security_group_ids
     }
   }
 

@@ -40,7 +40,7 @@ variable "cluster_endpoint_private_access" {
 variable "node_instance_types" {
   description = "EC2 instance types for the managed node group."
   type        = list(string)
-  default     = ["t3.medium"]
+  default     = ["t3.small"]
 }
 
 variable "node_desired_size" {
@@ -64,7 +64,13 @@ variable "node_max_size" {
 variable "node_disk_size" {
   description = "Root volume size (GiB) for worker nodes."
   type        = number
-  default     = 50
+  default     = 20
+}
+
+variable "additional_node_security_group_ids" {
+  description = "Extra security groups attached to managed node ENIs (e.g. VPC db-clients)."
+  type        = list(string)
+  default     = []
 }
 
 variable "tags" {

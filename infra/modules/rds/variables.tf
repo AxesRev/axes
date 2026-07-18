@@ -20,7 +20,7 @@ variable "allowed_cidr_blocks" {
 }
 
 variable "allowed_security_group_ids" {
-  description = "Security groups allowed to reach Postgres (e.g. EKS node SG)."
+  description = "Security groups allowed to reach Postgres (e.g. VPC db-clients SG)."
   type        = list(string)
   default     = []
 }
