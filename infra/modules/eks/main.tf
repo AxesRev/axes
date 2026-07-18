@@ -57,7 +57,7 @@ module "eks" {
     }
     aws-ebs-csi-driver = {
       most_recent              = true
-      service_account_role_arn = module.ebs_csi_irsa.iam_role_arn
+      service_account_role_arn = module.ebs_csi_irsa.arn
     }
   }
 
@@ -82,10 +82,10 @@ module "eks" {
 }
 
 module "ebs_csi_irsa" {
-  source  = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts-eks"
+  source  = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts"
   version = "~> 6.0"
 
-  role_name             = "${var.cluster_name}-ebs-csi"
+  name                  = "${var.cluster_name}-ebs-csi"
   attach_ebs_csi_policy = true
 
   oidc_providers = {
