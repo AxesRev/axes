@@ -1,4 +1,3 @@
-# EKS-specific subnet discovery tags (kept out of the generic VPC module).
 resource "aws_ec2_tag" "private_subnet_internal_elb" {
   for_each = toset(var.subnet_ids)
 
@@ -33,20 +32,20 @@ resource "aws_ec2_tag" "public_subnet_cluster" {
 
 module "eks" {
   source  = "terraform-aws-modules/eks/aws"
-  version = "~> 20.0"
+  version = "~> 21.0"
 
-  cluster_name    = var.cluster_name
-  cluster_version = var.cluster_version
+  name               = var.cluster_name
+  kubernetes_version = var.cluster_version
 
   vpc_id     = var.vpc_id
   subnet_ids = var.subnet_ids
 
-  cluster_endpoint_public_access  = var.cluster_endpoint_public_access
-  cluster_endpoint_private_access = var.cluster_endpoint_private_access
+  endpoint_public_access  = var.cluster_endpoint_public_access
+  endpoint_private_access = var.cluster_endpoint_private_access
 
   enable_cluster_creator_admin_permissions = true
 
-  cluster_addons = {
+  addons = {
     coredns = {
       most_recent = true
     }
@@ -66,6 +65,7 @@ module "eks" {
     default = {
       name           = "${var.cluster_name}-default"
       instance_types = var.node_instance_types
+      ami_type       = var.node_ami_type
       capacity_type  = "ON_DEMAND"
 
       min_size     = var.node_min_size
@@ -83,7 +83,7 @@ module "eks" {
 
 module "ebs_csi_irsa" {
   source  = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts-eks"
-  version = "~> 5.0"
+  version = "~> 6.0"
 
   role_name             = "${var.cluster_name}-ebs-csi"
   attach_ebs_csi_policy = true

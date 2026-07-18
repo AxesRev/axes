@@ -17,7 +17,6 @@ dependency "ecr" {
   mock_outputs = {
     repository_urls = {
       "axes/langraph-server" = "042993547532.dkr.ecr.eu-west-1.amazonaws.com/axes/langraph-server"
-      "axes/neo4j-mcp"       = "042993547532.dkr.ecr.eu-west-1.amazonaws.com/axes/neo4j-mcp"
     }
   }
   mock_outputs_allowed_terraform_commands = ["validate", "plan"]
@@ -36,13 +35,8 @@ dependency "rds" {
   mock_outputs_allowed_terraform_commands = ["validate", "plan"]
 }
 
-dependency "neo4j-mcp" {
-  config_path = "../neo4j-mcp"
-
-  mock_outputs = {
-    http_url = "http://neo4j-mcp.neo4j.svc.cluster.local:8811"
-  }
-  mock_outputs_allowed_terraform_commands = ["validate", "plan"]
+locals {
+  env = read_terragrunt_config(find_in_parent_folders("env.hcl"))
 }
 
 generate "k8s_provider" {
@@ -74,6 +68,6 @@ inputs = {
   postgres_user     = dependency.rds.outputs.master_username
   postgres_password = dependency.rds.outputs.master_password
 
-  neo4j_mcp_host = dependency.neo4j-mcp.outputs.http_url
+  neo4j_mcp_host = local.env.locals.neo4j_mcp_host
   auth_type      = "noop"
 }

@@ -23,15 +23,16 @@ locals {
 }
 
 inputs = {
-  cluster_name      = local.env.locals.cluster_name
-  cluster_version   = "1.31"
+  cluster_name       = local.env.locals.cluster_name
+  cluster_version    = local.env.locals.kubernetes_version
   vpc_id            = dependency.vpc.outputs.vpc_id
   subnet_ids        = dependency.vpc.outputs.private_subnets
   public_subnet_ids = dependency.vpc.outputs.public_subnets
 
   additional_node_security_group_ids = [dependency.vpc.outputs.db_clients_security_group_id]
 
-  node_instance_types = ["t3.small"]
+  node_instance_types = ["t4g.small"]
+  node_ami_type       = "AL2023_ARM_64_STANDARD"
   node_disk_size      = 20
   node_desired_size   = 1
   node_min_size       = 1
