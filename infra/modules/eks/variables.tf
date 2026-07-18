@@ -79,6 +79,35 @@ variable "additional_node_security_group_ids" {
   default     = []
 }
 
+variable "cluster_admin_principal_arn" {
+  description = "IAM principal ARN granted cluster admin via EKS access entry (for local kubectl/MCP)."
+  type        = string
+}
+
+variable "github_actions_deploy_role_arn" {
+  description = "GitHub Actions deploy role ARN granted cluster admin via EKS access entry."
+  type        = string
+}
+
+variable "additional_access_entries" {
+  description = "Extra EKS access entries merged into the cluster access map."
+  type = map(object({
+    kubernetes_groups = optional(list(string))
+    principal_arn     = string
+    type              = optional(string, "STANDARD")
+    user_name         = optional(string)
+    tags              = optional(map(string), {})
+    policy_associations = optional(map(object({
+      policy_arn = string
+      access_scope = object({
+        namespaces = optional(list(string))
+        type       = string
+      })
+    })), {})
+  }))
+  default = {}
+}
+
 variable "tags" {
   description = "Tags applied to all resources."
   type        = map(string)

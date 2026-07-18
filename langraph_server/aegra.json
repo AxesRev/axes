@@ -2,11 +2,5 @@
   "dependencies": ["./examples"],
   "graphs": {
     "agent": "./examples/react_agent/graph.py:graph"
-  },
-  "http": {
-    "app": "slack_app.app:app"
-  },
-  "auth": {
-    "path": "slack_app.auth:auth"
   }
 }

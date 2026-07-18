@@ -31,6 +31,9 @@ inputs = {
 
   additional_node_security_group_ids = [dependency.vpc.outputs.db_clients_security_group_id]
 
+  cluster_admin_principal_arn    = "arn:aws:iam::042993547532:root"
+  github_actions_deploy_role_arn = "arn:aws:iam::042993547532:role/github-actions-deploy"
+
   node_instance_types = ["t4g.medium"]
   node_ami_type       = "AL2023_ARM_64_STANDARD"
   node_disk_size      = 20

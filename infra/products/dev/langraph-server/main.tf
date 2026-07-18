@@ -152,8 +152,11 @@ resource "kubernetes_deployment_v1" "this" {
     }
   }
 
+  depends_on = [kubernetes_job_v1.migrate]
+
   spec {
-    replicas = var.replicas
+    replicas                  = var.replicas
+    progress_deadline_seconds = 30
 
     selector {
       match_labels = {
@@ -282,8 +285,9 @@ resource "kubernetes_deployment_v1" "this" {
               path = "/health"
               port = 8000
             }
-            initial_delay_seconds = 20
-            period_seconds        = 10
+            initial_delay_seconds = 5
+            period_seconds        = 5
+            failure_threshold     = 5
           }
 
           liveness_probe {
@@ -291,15 +295,13 @@ resource "kubernetes_deployment_v1" "this" {
               path = "/health"
               port = 8000
             }
-            initial_delay_seconds = 40
+            initial_delay_seconds = 30
             period_seconds        = 20
           }
         }
       }
     }
   }
-
-  depends_on = [kubernetes_job_v1.migrate]
 }
 
 resource "kubernetes_service_v1" "this" {

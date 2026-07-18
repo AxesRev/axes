@@ -45,6 +45,34 @@ module "eks" {
 
   enable_cluster_creator_admin_permissions = true
 
+  access_entries = merge(
+    {
+      cluster_admin = {
+        principal_arn = var.cluster_admin_principal_arn
+        policy_associations = {
+          admin = {
+            policy_arn = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+            access_scope = {
+              type = "cluster"
+            }
+          }
+        }
+      }
+      github_actions = {
+        principal_arn = var.github_actions_deploy_role_arn
+        policy_associations = {
+          admin = {
+            policy_arn = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+            access_scope = {
+              type = "cluster"
+            }
+          }
+        }
+      }
+    },
+    var.additional_access_entries,
+  )
+
   addons = {
     coredns = {
       most_recent = true
