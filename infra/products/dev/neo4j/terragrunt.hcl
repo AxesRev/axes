@@ -37,6 +37,6 @@ EOF
 
 inputs = {
   namespace    = "neo4j"
-  image        = "neo4j:5-community"
+  image        = "neo4j:5.26.28-community"
   storage_size = "20Gi"
 }
