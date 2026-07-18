@@ -24,7 +24,7 @@ env:
   IMAGE_TAG: ${{ github.sha }}
 
 jobs:
-  deploy:
+  apply-infra:
     runs-on: ubuntu-latest
     timeout-minutes: 180
     steps:
@@ -55,6 +55,30 @@ jobs:
           --filter '!./langraph-server'
           -- apply
 
+  build-images:
+    needs: apply-infra
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: langraph-server
+            context: .
+            dockerfile: langraph_server/Dockerfile
+            repository: axes/langraph-server
+          - name: neo4j-mcp
+            context: neo4j_mcp
+            dockerfile: neo4j_mcp/Dockerfile
+            repository: axes/neo4j-mcp
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::042993547532:role/github-actions-deploy
+          aws-region: ${{ env.AWS_REGION }}
+
       - name: Login to Amazon ECR
         id: ecr
         uses: aws-actions/amazon-ecr-login@v2
@@ -65,31 +89,42 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build and push langraph-server
+      - name: Build and push ${{ matrix.name }}
         uses: docker/build-push-action@v6
         with:
-          context: .
-          file: langraph_server/Dockerfile
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
           platforms: linux/arm64
           push: true
           tags: |
-            ${{ steps.ecr.outputs.registry }}/axes/langraph-server:${{ env.IMAGE_TAG }}
-            ${{ steps.ecr.outputs.registry }}/axes/langraph-server:latest
-          cache-from: type=gha,scope=langraph-server-arm64
-          cache-to: type=gha,mode=max,scope=langraph-server-arm64
+            ${{ steps.ecr.outputs.registry }}/${{ matrix.repository }}:${{ env.IMAGE_TAG }}
+            ${{ steps.ecr.outputs.registry }}/${{ matrix.repository }}:latest
+          cache-from: type=gha,scope=${{ matrix.name }}-arm64
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}-arm64
 
-      - name: Build and push neo4j-mcp
-        uses: docker/build-push-action@v6
+  apply-apps:
+    needs: [apply-infra, build-images]
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
         with:
-          context: neo4j_mcp
-          file: neo4j_mcp/Dockerfile
-          platforms: linux/arm64
-          push: true
-          tags: |
-            ${{ steps.ecr.outputs.registry }}/axes/neo4j-mcp:${{ env.IMAGE_TAG }}
-            ${{ steps.ecr.outputs.registry }}/axes/neo4j-mcp:latest
-          cache-from: type=gha,scope=neo4j-mcp-arm64
-          cache-to: type=gha,mode=max,scope=neo4j-mcp-arm64
+          role-to-assume: arn:aws:iam::042993547532:role/github-actions-deploy
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+
+      - name: Setup Terragrunt
+        uses: autero1/action-terragrunt@v3
+        with:
+          terragrunt-version: ${{ env.TERRAGRUNT_VERSION }}
 
       - name: Apply apps
         working-directory: ${{ env.DEPLOY_DIR }}
