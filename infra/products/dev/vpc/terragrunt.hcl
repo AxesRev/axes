@@ -18,6 +18,16 @@ inputs = {
   private_subnets = ["10.20.1.0/24", "10.20.2.0/24"]
   public_subnets  = ["10.20.101.0/24", "10.20.102.0/24"]
 
+  private_subnet_tags = {
+    "kubernetes.io/role/internal-elb"                    = "1"
+    "kubernetes.io/cluster/${local.env.locals.cluster_name}" = "shared"
+  }
+
+  public_subnet_tags = {
+    "kubernetes.io/role/elb"                             = "1"
+    "kubernetes.io/cluster/${local.env.locals.cluster_name}" = "shared"
+  }
+
   enable_nat_gateway = true
   single_nat_gateway = true
 }

@@ -19,12 +19,6 @@ variable "subnet_ids" {
   type        = list(string)
 }
 
-variable "public_subnet_ids" {
-  description = "Public subnet IDs to tag for internet-facing load balancers. Empty skips those tags."
-  type        = list(string)
-  default     = []
-}
-
 variable "cluster_endpoint_public_access" {
   description = "Expose the Kubernetes API publicly."
   type        = bool
