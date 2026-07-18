@@ -3,7 +3,7 @@ locals {
   aws_region    = "eu-west-1"
   vpc_name      = "axes-dev"
   cluster_name       = "axes-dev"
-  kubernetes_version = "1.32"
+  kubernetes_version = "1.36"
   vpc_cidr      = "10.20.0.0/16"
   database_name = "axes"
 

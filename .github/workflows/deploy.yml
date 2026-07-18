@@ -1,8 +1,8 @@
 name: Deploy
 
 on:
-  # push:
-  #   branches: [main]
+  push:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -24,7 +24,44 @@ env:
   IMAGE_TAG: ${{ github.sha }}
 
 jobs:
-  deploy:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      infra: ${{ steps.flags.outputs.infra }}
+      langraph_server: ${{ steps.flags.outputs.langraph_server }}
+      neo4j_mcp: ${{ steps.flags.outputs.neo4j_mcp }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Detect path changes
+        id: filter
+        if: github.event_name == 'push'
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            infra:
+              - 'infra/**'
+            langraph_server:
+              - 'langraph_server/**'
+            neo4j_mcp:
+              - 'neo4j_mcp/**'
+
+      - name: Set change flags
+        id: flags
+        run: |
+          if [ "${{ github.event_name }}" != "push" ]; then
+            echo "infra=true" >> "$GITHUB_OUTPUT"
+            echo "langraph_server=true" >> "$GITHUB_OUTPUT"
+            echo "neo4j_mcp=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "infra=${{ steps.filter.outputs.infra }}" >> "$GITHUB_OUTPUT"
+            echo "langraph_server=${{ steps.filter.outputs.langraph_server }}" >> "$GITHUB_OUTPUT"
+            echo "neo4j_mcp=${{ steps.filter.outputs.neo4j_mcp }}" >> "$GITHUB_OUTPUT"
+          fi
+
+  apply-infra:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.infra == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 180
     steps:
@@ -55,46 +92,173 @@ jobs:
           --filter '!./langraph-server'
           -- apply
 
+  image-langraph-server:
+    needs: [detect-changes, apply-infra]
+    if: |
+      always()
+      && !cancelled()
+      && (needs.apply-infra.result == 'success' || needs.apply-infra.result == 'skipped')
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::042993547532:role/github-actions-deploy
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: actions/checkout@v4
+        if: needs.detect-changes.outputs.langraph_server == 'true'
+
       - name: Login to Amazon ECR
         id: ecr
+        if: needs.detect-changes.outputs.langraph_server == 'true'
         uses: aws-actions/amazon-ecr-login@v2
 
       - name: Set up QEMU
+        if: needs.detect-changes.outputs.langraph_server == 'true'
         uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
+        if: needs.detect-changes.outputs.langraph_server == 'true'
         uses: docker/setup-buildx-action@v3
 
-      - name: Build and push langraph-server
+      - name: Build and push
+        if: needs.detect-changes.outputs.langraph_server == 'true'
         uses: docker/build-push-action@v6
         with:
           context: .
           file: langraph_server/Dockerfile
           platforms: linux/arm64
           push: true
-          tags: |
-            ${{ steps.ecr.outputs.registry }}/axes/langraph-server:${{ env.IMAGE_TAG }}
-            ${{ steps.ecr.outputs.registry }}/axes/langraph-server:latest
+          tags: ${{ steps.ecr.outputs.registry }}/axes/langraph-server:${{ env.IMAGE_TAG }}
           cache-from: type=gha,scope=langraph-server-arm64
           cache-to: type=gha,mode=max,scope=langraph-server-arm64
 
-      - name: Build and push neo4j-mcp
+      - name: Resolve image tag
+        id: tag
+        env:
+          REPOSITORY: axes/langraph-server
+          BUILD: ${{ needs.detect-changes.outputs.langraph_server }}
+        run: |
+          if [ "$BUILD" = "true" ]; then
+            echo "tag=${{ env.IMAGE_TAG }}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          TAGS=$(aws ecr describe-images \
+            --repository-name "$REPOSITORY" \
+            --query 'sort_by(imageDetails,& imagePushedAt)[-1].imageTags' \
+            --output text)
+          TAG=$(echo "$TAGS" | tr '\t' '\n' | grep -v '^latest$' | head -n1)
+          TAG=${TAG:-$(echo "$TAGS" | tr '\t' '\n' | head -n1)}
+          if [ -z "$TAG" ] || [ "$TAG" = "None" ]; then
+            echo "No images found in ECR repository $REPOSITORY" >&2
+            exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+  image-neo4j-mcp:
+    needs: [detect-changes, apply-infra]
+    if: |
+      always()
+      && !cancelled()
+      && (needs.apply-infra.result == 'success' || needs.apply-infra.result == 'skipped')
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::042993547532:role/github-actions-deploy
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: actions/checkout@v4
+        if: needs.detect-changes.outputs.neo4j_mcp == 'true'
+
+      - name: Login to Amazon ECR
+        id: ecr
+        if: needs.detect-changes.outputs.neo4j_mcp == 'true'
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up QEMU
+        if: needs.detect-changes.outputs.neo4j_mcp == 'true'
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        if: needs.detect-changes.outputs.neo4j_mcp == 'true'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push
+        if: needs.detect-changes.outputs.neo4j_mcp == 'true'
         uses: docker/build-push-action@v6
         with:
           context: neo4j_mcp
           file: neo4j_mcp/Dockerfile
           platforms: linux/arm64
           push: true
-          tags: |
-            ${{ steps.ecr.outputs.registry }}/axes/neo4j-mcp:${{ env.IMAGE_TAG }}
-            ${{ steps.ecr.outputs.registry }}/axes/neo4j-mcp:latest
+          tags: ${{ steps.ecr.outputs.registry }}/axes/neo4j-mcp:${{ env.IMAGE_TAG }}
           cache-from: type=gha,scope=neo4j-mcp-arm64
           cache-to: type=gha,mode=max,scope=neo4j-mcp-arm64
+
+      - name: Resolve image tag
+        id: tag
+        env:
+          REPOSITORY: axes/neo4j-mcp
+          BUILD: ${{ needs.detect-changes.outputs.neo4j_mcp }}
+        run: |
+          if [ "$BUILD" = "true" ]; then
+            echo "tag=${{ env.IMAGE_TAG }}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          TAGS=$(aws ecr describe-images \
+            --repository-name "$REPOSITORY" \
+            --query 'sort_by(imageDetails,& imagePushedAt)[-1].imageTags' \
+            --output text)
+          TAG=$(echo "$TAGS" | tr '\t' '\n' | grep -v '^latest$' | head -n1)
+          TAG=${TAG:-$(echo "$TAGS" | tr '\t' '\n' | head -n1)}
+          if [ -z "$TAG" ] || [ "$TAG" = "None" ]; then
+            echo "No images found in ECR repository $REPOSITORY" >&2
+            exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+  apply-apps:
+    needs: [apply-infra, image-langraph-server, image-neo4j-mcp]
+    if: |
+      always()
+      && !cancelled()
+      && (needs.apply-infra.result == 'success' || needs.apply-infra.result == 'skipped')
+      && needs.image-langraph-server.result == 'success'
+      && needs.image-neo4j-mcp.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::042993547532:role/github-actions-deploy
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+
+      - name: Setup Terragrunt
+        uses: autero1/action-terragrunt@v3
+        with:
+          terragrunt-version: ${{ env.TERRAGRUNT_VERSION }}
 
       - name: Apply apps
         working-directory: ${{ env.DEPLOY_DIR }}
         env:
-          IMAGE_TAG: ${{ env.IMAGE_TAG }}
+          LANGRAPH_SERVER_IMAGE_TAG: ${{ needs.image-langraph-server.outputs.tag }}
+          NEO4J_MCP_IMAGE_TAG: ${{ needs.image-neo4j-mcp.outputs.tag }}
         run: >
           terragrunt run --all --non-interactive
           --filter './neo4j-mcp'

@@ -7,7 +7,7 @@ variable "namespace" {
 variable "image" {
   description = "Neo4j container image."
   type        = string
-  default     = "neo4j:5-community"
+  default     = "neo4j:5.26.28-community"
 }
 
 variable "storage_size" {

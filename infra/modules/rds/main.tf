@@ -93,6 +93,8 @@ resource "aws_db_instance" "this" {
 
   db_name = var.db_name
 
+  allow_major_version_upgrade = true
+
   apply_immediately     = true
   copy_tags_to_snapshot = true
 

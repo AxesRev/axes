@@ -17,11 +17,11 @@ remote_state {
   backend = "s3"
 
   config = {
-    bucket         = "axes-terraform-state-042993547532"
-    key            = "${path_relative_to_include()}/terraform.tfstate"
-    region         = "eu-west-1"
-    dynamodb_table = "axes-terraform-locks"
-    encrypt        = true
+    bucket       = "axes-terraform-state-042993547532"
+    key          = "${path_relative_to_include()}/terraform.tfstate"
+    region       = "eu-west-1"
+    encrypt      = true
+    use_lockfile = true
   }
 
   generate = {

@@ -1,38 +1,6 @@
-resource "aws_ec2_tag" "private_subnet_internal_elb" {
-  for_each = toset(var.subnet_ids)
-
-  resource_id = each.value
-  key         = "kubernetes.io/role/internal-elb"
-  value       = "1"
-}
-
-resource "aws_ec2_tag" "private_subnet_cluster" {
-  for_each = toset(var.subnet_ids)
-
-  resource_id = each.value
-  key         = "kubernetes.io/cluster/${var.cluster_name}"
-  value       = "shared"
-}
-
-resource "aws_ec2_tag" "public_subnet_elb" {
-  for_each = toset(var.public_subnet_ids)
-
-  resource_id = each.value
-  key         = "kubernetes.io/role/elb"
-  value       = "1"
-}
-
-resource "aws_ec2_tag" "public_subnet_cluster" {
-  for_each = toset(var.public_subnet_ids)
-
-  resource_id = each.value
-  key         = "kubernetes.io/cluster/${var.cluster_name}"
-  value       = "shared"
-}
-
 module "eks" {
   source  = "terraform-aws-modules/eks/aws"
-  version = "~> 21.0"
+  version = "~> 21.24"
 
   name               = var.cluster_name
   kubernetes_version = var.cluster_version
@@ -45,6 +13,34 @@ module "eks" {
 
   enable_cluster_creator_admin_permissions = true
 
+  access_entries = merge(
+    {
+      cluster_admin = {
+        principal_arn = var.cluster_admin_principal_arn
+        policy_associations = {
+          admin = {
+            policy_arn = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+            access_scope = {
+              type = "cluster"
+            }
+          }
+        }
+      }
+      github_actions = {
+        principal_arn = var.github_actions_deploy_role_arn
+        policy_associations = {
+          admin = {
+            policy_arn = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+            access_scope = {
+              type = "cluster"
+            }
+          }
+        }
+      }
+    },
+    var.additional_access_entries,
+  )
+
   addons = {
     coredns = {
       most_recent = true
@@ -53,7 +49,8 @@ module "eks" {
       most_recent = true
     }
     vpc-cni = {
-      most_recent = true
+      most_recent     = true
+      before_compute  = true
     }
     aws-ebs-csi-driver = {
       most_recent              = true
@@ -74,7 +71,8 @@ module "eks" {
 
       disk_size = var.node_disk_size
 
-      vpc_security_group_ids = var.additional_node_security_group_ids
+      attach_cluster_primary_security_group = true
+      vpc_security_group_ids                = var.additional_node_security_group_ids
     }
   }
 
@@ -83,7 +81,7 @@ module "eks" {
 
 module "ebs_csi_irsa" {
   source  = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts"
-  version = "~> 6.0"
+  version = "~> 6.6"
 
   name                  = "${var.cluster_name}-ebs-csi"
   attach_ebs_csi_policy = true

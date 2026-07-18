@@ -8,7 +8,8 @@ resource "kubernetes_deployment_v1" "this" {
   }
 
   spec {
-    replicas = var.replicas
+    replicas                  = var.replicas
+    progress_deadline_seconds = 30
 
     selector {
       match_labels = {
@@ -116,11 +117,32 @@ resource "kubernetes_deployment_v1" "this" {
           }
 
           readiness_probe {
-            tcp_socket {
+            http_get {
+              path = "/health"
               port = 8811
+
+              http_header {
+                name  = "Host"
+                value = "neo4j-mcp"
+              }
             }
-            initial_delay_seconds = 10
-            period_seconds        = 10
+            initial_delay_seconds = 5
+            period_seconds        = 5
+            failure_threshold     = 5
+          }
+
+          liveness_probe {
+            http_get {
+              path = "/health"
+              port = 8811
+
+              http_header {
+                name  = "Host"
+                value = "neo4j-mcp"
+              }
+            }
+            initial_delay_seconds = 30
+            period_seconds        = 20
           }
         }
       }
