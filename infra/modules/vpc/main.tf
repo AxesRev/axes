@@ -26,3 +26,10 @@ resource "aws_security_group" "db_clients" {
   vpc_id      = module.vpc.vpc_id
   tags        = merge(var.tags, { Name = "${var.name}-db-clients" })
 }
+
+resource "aws_vpc_security_group_egress_rule" "db_clients_all" {
+  security_group_id = aws_security_group.db_clients.id
+  cidr_ipv4         = "0.0.0.0/0"
+  ip_protocol       = "-1"
+  description       = "Allow all outbound"
+}

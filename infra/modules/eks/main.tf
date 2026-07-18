@@ -74,7 +74,8 @@ module "eks" {
 
       disk_size = var.node_disk_size
 
-      vpc_security_group_ids = var.additional_node_security_group_ids
+      attach_cluster_primary_security_group = true
+      vpc_security_group_ids                = var.additional_node_security_group_ids
     }
   }
 
