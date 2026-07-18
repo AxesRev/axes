@@ -116,8 +116,14 @@ resource "kubernetes_deployment_v1" "this" {
           }
 
           readiness_probe {
-            tcp_socket {
+            http_get {
+              path = "/health"
               port = 8811
+
+              http_header {
+                name  = "Host"
+                value = "neo4j-mcp"
+              }
             }
             initial_delay_seconds = 10
             period_seconds        = 10

@@ -18,7 +18,9 @@ from argparse import Namespace
 
 from dotenv import load_dotenv
 from mcp_neo4j_cypher import server as neo4j_mcp_server
+from mcp_neo4j_cypher.server import create_mcp_server as _create_mcp_server
 from mcp_neo4j_cypher.utils import process_config
+from starlette.responses import JSONResponse
 
 # ``process_config`` expects an argparse-like namespace; configuration comes from env only.
 _PROCESS_CONFIG_ARGS = Namespace(
@@ -52,12 +54,23 @@ def _force_http_listener_defaults() -> None:
         os.environ["NEO4J_USERNAME"] = os.environ["NEO4J_USER"]
 
 
+def _create_mcp_server_with_health(*args, **kwargs):
+    mcp = _create_mcp_server(*args, **kwargs)
+
+    @mcp.custom_route("/health", methods=["GET"])
+    async def health(_request):
+        return JSONResponse({"status": "ok"})
+
+    return mcp
+
+
 def main() -> None:
     """Load ``.env`` from cwd (or parents), apply HTTP defaults, run MCP from environment only."""
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s %(message)s")
     load_dotenv(override=False)
     _force_http_listener_defaults()
 
+    neo4j_mcp_server.create_mcp_server = _create_mcp_server_with_health
     config = process_config(_PROCESS_CONFIG_ARGS)
     asyncio.run(neo4j_mcp_server.main(**config))
 
