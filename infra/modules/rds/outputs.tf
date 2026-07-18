@@ -39,3 +39,7 @@ output "connection_host" {
   description = "Hostname for app connection strings (no port)."
   value       = aws_db_instance.this.address
 }
+
+output "restored_from_snapshot" {
+  value = local.snapshot_identifier
+}

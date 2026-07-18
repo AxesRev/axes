@@ -86,7 +86,19 @@ variable "deletion_protection" {
 }
 
 variable "skip_final_snapshot" {
-  description = "Skip final snapshot on destroy."
+  description = "Skip final snapshot on destroy. Set false to keep a snapshot for later restore."
+  type        = bool
+  default     = false
+}
+
+variable "snapshot_identifier" {
+  description = "Explicit snapshot ID to restore from on create. Overrides restore_latest_snapshot."
+  type        = string
+  default     = null
+}
+
+variable "restore_latest_snapshot" {
+  description = "If true and snapshot_identifier is null, restore from the newest manual snapshot for this identifier when one exists."
   type        = bool
   default     = true
 }

@@ -32,7 +32,8 @@ inputs = {
   instance_class        = "db.t4g.micro"
   allocated_storage     = 20
   max_allocated_storage = 50
-  multi_az              = false
-  deletion_protection   = false
-  skip_final_snapshot   = true
+  multi_az                = false
+  deletion_protection     = false
+  skip_final_snapshot     = false
+  restore_latest_snapshot = true
 }
