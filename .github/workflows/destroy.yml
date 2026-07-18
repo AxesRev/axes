@@ -8,7 +8,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: destroy-dev
+  group: deploy-dev
   cancel-in-progress: false
 
 env:
@@ -44,6 +44,9 @@ jobs:
         with:
           terragrunt-version: ${{ env.TERRAGRUNT_VERSION }}
 
-      - name: Destroy
+      - name: Destroy (keep neo4j-data EBS)
         working-directory: ${{ env.DEPLOY_DIR }}
-        run: terragrunt run --all --non-interactive destroy
+        run: >
+          terragrunt run --all --non-interactive
+          --filter '!./neo4j-data'
+          -- destroy

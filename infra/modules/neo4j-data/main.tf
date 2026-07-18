@@ -18,4 +18,8 @@ resource "aws_ebs_volume" "this" {
   tags = merge(var.tags, {
     Name = var.name
   })
+
+  lifecycle {
+    ignore_changes = [availability_zone]
+  }
 }
