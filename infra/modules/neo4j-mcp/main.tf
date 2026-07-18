@@ -126,8 +126,23 @@ resource "kubernetes_deployment_v1" "this" {
                 value = "neo4j-mcp"
               }
             }
-            initial_delay_seconds = 10
-            period_seconds        = 10
+            initial_delay_seconds = 5
+            period_seconds        = 5
+            failure_threshold     = 5
+          }
+
+          liveness_probe {
+            http_get {
+              path = "/health"
+              port = 8811
+
+              http_header {
+                name  = "Host"
+                value = "neo4j-mcp"
+              }
+            }
+            initial_delay_seconds = 30
+            period_seconds        = 20
           }
         }
       }
