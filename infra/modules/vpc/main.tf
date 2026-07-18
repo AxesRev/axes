@@ -1,6 +1,6 @@
 module "vpc" {
   source  = "terraform-aws-modules/vpc/aws"
-  version = "~> 5.0"
+  version = "~> 6.0"
 
   name = var.name
   cidr = var.cidr
@@ -18,4 +18,11 @@ module "vpc" {
   private_subnet_tags = var.private_subnet_tags
 
   tags = var.tags
+}
+
+resource "aws_security_group" "db_clients" {
+  name        = "${var.name}-db-clients"
+  description = "Clients allowed to reach databases in this VPC"
+  vpc_id      = module.vpc.vpc_id
+  tags        = merge(var.tags, { Name = "${var.name}-db-clients" })
 }

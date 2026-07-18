@@ -2,8 +2,6 @@ include "root" {
   path = find_in_parent_folders("root.hcl")
 }
 
-# App stack: Terraform lives in this directory (not a reusable module).
-
 dependency "eks" {
   config_path = "../eks"
 
@@ -19,7 +17,6 @@ dependency "ecr" {
   mock_outputs = {
     repository_urls = {
       "axes/langraph-server" = "042993547532.dkr.ecr.eu-west-1.amazonaws.com/axes/langraph-server"
-      "axes/neo4j-mcp"       = "042993547532.dkr.ecr.eu-west-1.amazonaws.com/axes/neo4j-mcp"
     }
   }
   mock_outputs_allowed_terraform_commands = ["validate", "plan"]
@@ -29,30 +26,17 @@ dependency "rds" {
   config_path = "../rds"
 
   mock_outputs = {
-    address = "localhost"
-    port    = 5432
+    address         = "localhost"
+    port            = 5432
+    db_name         = "axes"
+    master_username = "postgres"
+    master_password = "mock-password"
   }
   mock_outputs_allowed_terraform_commands = ["validate", "plan"]
 }
 
-dependency "postgres-db" {
-  config_path = "../postgres-db"
-
-  mock_outputs = {
-    name         = "axes"
-    app_username = "axes_app"
-    app_password = "mock-password"
-  }
-  mock_outputs_allowed_terraform_commands = ["validate", "plan"]
-}
-
-dependency "neo4j-mcp" {
-  config_path = "../neo4j-mcp"
-
-  mock_outputs = {
-    http_url = "http://neo4j-mcp.neo4j.svc.cluster.local:8811"
-  }
-  mock_outputs_allowed_terraform_commands = ["validate", "plan"]
+locals {
+  env = read_terragrunt_config(find_in_parent_folders("env.hcl"))
 }
 
 generate "k8s_provider" {
@@ -80,10 +64,10 @@ inputs = {
 
   postgres_host     = dependency.rds.outputs.address
   postgres_port     = dependency.rds.outputs.port
-  postgres_db       = dependency.postgres-db.outputs.name
-  postgres_user     = dependency.postgres-db.outputs.app_username
-  postgres_password = dependency.postgres-db.outputs.app_password
+  postgres_db       = dependency.rds.outputs.db_name
+  postgres_user     = dependency.rds.outputs.master_username
+  postgres_password = dependency.rds.outputs.master_password
 
-  neo4j_mcp_host = dependency.neo4j-mcp.outputs.http_url
+  neo4j_mcp_host = local.env.locals.neo4j_mcp_host
   auth_type      = "noop"
 }

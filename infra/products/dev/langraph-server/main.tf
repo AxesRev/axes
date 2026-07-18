@@ -1,3 +1,7 @@
+locals {
+  migrate_job_name = "langraph-server-migrate-${substr(sha1(var.image), 0, 10)}"
+}
+
 resource "kubernetes_namespace_v1" "this" {
   metadata {
     name = var.namespace
@@ -19,9 +23,124 @@ resource "kubernetes_secret_v1" "postgres" {
     POSTGRES_DB       = var.postgres_db
     POSTGRES_USER     = var.postgres_user
     POSTGRES_PASSWORD = var.postgres_password
+    POSTGRES_SSLMODE  = "require"
   }
 
   type = "Opaque"
+}
+
+resource "kubernetes_job_v1" "migrate" {
+  metadata {
+    name      = local.migrate_job_name
+    namespace = kubernetes_namespace_v1.this.metadata[0].name
+    labels = {
+      "app.kubernetes.io/name"       = "langraph-server-migrate"
+      "app.kubernetes.io/managed-by" = "terraform"
+    }
+  }
+
+  wait_for_completion = true
+
+  timeouts {
+    create = "15m"
+  }
+
+  spec {
+    ttl_seconds_after_finished = 600
+    backoff_limit              = 2
+
+    template {
+      metadata {
+        labels = {
+          "app.kubernetes.io/name" = "langraph-server-migrate"
+        }
+      }
+
+      spec {
+        restart_policy = "Never"
+
+        container {
+          name  = "migrate"
+          image = var.image
+
+          command = ["alembic", "upgrade", "head"]
+
+          env {
+            name = "POSTGRES_HOST"
+            value_from {
+              secret_key_ref {
+                name = kubernetes_secret_v1.postgres.metadata[0].name
+                key  = "POSTGRES_HOST"
+              }
+            }
+          }
+
+          env {
+            name = "POSTGRES_PORT"
+            value_from {
+              secret_key_ref {
+                name = kubernetes_secret_v1.postgres.metadata[0].name
+                key  = "POSTGRES_PORT"
+              }
+            }
+          }
+
+          env {
+            name = "POSTGRES_DB"
+            value_from {
+              secret_key_ref {
+                name = kubernetes_secret_v1.postgres.metadata[0].name
+                key  = "POSTGRES_DB"
+              }
+            }
+          }
+
+          env {
+            name = "POSTGRES_USER"
+            value_from {
+              secret_key_ref {
+                name = kubernetes_secret_v1.postgres.metadata[0].name
+                key  = "POSTGRES_USER"
+              }
+            }
+          }
+
+          env {
+            name = "POSTGRES_PASSWORD"
+            value_from {
+              secret_key_ref {
+                name = kubernetes_secret_v1.postgres.metadata[0].name
+                key  = "POSTGRES_PASSWORD"
+              }
+            }
+          }
+
+          env {
+            name = "POSTGRES_SSLMODE"
+            value_from {
+              secret_key_ref {
+                name = kubernetes_secret_v1.postgres.metadata[0].name
+                key  = "POSTGRES_SSLMODE"
+              }
+            }
+          }
+
+          resources {
+            requests = {
+              cpu    = "100m"
+              memory = "256Mi"
+            }
+            limits = {
+              cpu    = "500m"
+              memory = "512Mi"
+            }
+          }
+        }
+      }
+    }
+  }
+
+  depends_on = [kubernetes_secret_v1.postgres]
 }
 
 resource "kubernetes_deployment_v1" "this" {
@@ -129,6 +248,16 @@ resource "kubernetes_deployment_v1" "this" {
             }
           }
 
+          env {
+            name = "POSTGRES_SSLMODE"
+            value_from {
+              secret_key_ref {
+                name = kubernetes_secret_v1.postgres.metadata[0].name
+                key  = "POSTGRES_SSLMODE"
+              }
+            }
+          }
+
           dynamic "env" {
             for_each = var.neo4j_mcp_host != "" ? [1] : []
             content {
@@ -169,6 +298,8 @@ resource "kubernetes_deployment_v1" "this" {
       }
     }
   }
+
+  depends_on = [kubernetes_job_v1.migrate]
 }
 
 resource "kubernetes_service_v1" "this" {

@@ -20,7 +20,7 @@ variable "allowed_cidr_blocks" {
 }
 
 variable "allowed_security_group_ids" {
-  description = "Security groups allowed to reach Postgres (e.g. EKS node SG)."
+  description = "Security groups allowed to reach Postgres (e.g. VPC db-clients SG)."
   type        = list(string)
   default     = []
 }
@@ -28,7 +28,7 @@ variable "allowed_security_group_ids" {
 variable "engine_version" {
   description = "PostgreSQL engine version."
   type        = string
-  default     = "16.6"
+  default     = "16.14"
 }
 
 variable "instance_class" {
@@ -53,6 +53,12 @@ variable "master_username" {
   description = "Master username."
   type        = string
   default     = "postgres"
+}
+
+variable "db_name" {
+  description = "Initial database name created with the instance. Null skips creation (Postgres still has the postgres DB)."
+  type        = string
+  default     = null
 }
 
 variable "database_port" {

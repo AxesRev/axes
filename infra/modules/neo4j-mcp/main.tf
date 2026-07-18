@@ -24,6 +24,22 @@ resource "kubernetes_deployment_v1" "this" {
       }
 
       spec {
+        enable_service_links = false
+
+        affinity {
+          pod_affinity {
+            required_during_scheduling_ignored_during_execution {
+              label_selector {
+                match_labels = {
+                  "app.kubernetes.io/name" = "neo4j"
+                }
+              }
+              namespaces   = [var.namespace]
+              topology_key = "kubernetes.io/hostname"
+            }
+          }
+        }
+
         container {
           name  = "neo4j-mcp"
           image = var.image

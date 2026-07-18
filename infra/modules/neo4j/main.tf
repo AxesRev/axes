@@ -60,6 +60,8 @@ resource "kubernetes_stateful_set_v1" "this" {
     }
   }
 
+  wait_for_rollout = false
+
   spec {
     service_name = "neo4j"
     replicas     = 1
@@ -78,6 +80,8 @@ resource "kubernetes_stateful_set_v1" "this" {
       }
 
       spec {
+        enable_service_links = false
+
         container {
           name  = "neo4j"
           image = var.image
@@ -114,12 +118,12 @@ resource "kubernetes_stateful_set_v1" "this" {
 
           resources {
             requests = {
-              cpu    = "250m"
-              memory = "1Gi"
+              cpu    = "100m"
+              memory = "512Mi"
             }
             limits = {
               cpu    = "1"
-              memory = "2Gi"
+              memory = "1536Mi"
             }
           }
 
