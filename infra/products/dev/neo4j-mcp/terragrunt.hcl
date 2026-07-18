@@ -62,5 +62,5 @@ inputs = {
   neo4j_bolt_uri   = dependency.neo4j.outputs.bolt_uri
   auth_secret_name = dependency.neo4j.outputs.auth_secret_name
 
-  image = "${dependency.ecr.outputs.repository_urls["axes/neo4j-mcp"]}:${get_env("IMAGE_TAG", "latest")}"
+  image = "${dependency.ecr.outputs.repository_urls["axes/neo4j-mcp"]}:${get_env("NEO4J_MCP_IMAGE_TAG", get_env("IMAGE_TAG", "latest"))}"
 }
