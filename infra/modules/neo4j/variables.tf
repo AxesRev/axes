@@ -10,27 +10,23 @@ variable "image" {
   default     = "neo4j:5.26.28-community"
 }
 
-variable "storage_size" {
-  description = "Persistent volume size for Neo4j data."
+variable "volume_id" {
+  description = "Existing EBS volume ID to mount (survives cluster destroy)."
   type        = string
-  default     = "20Gi"
+}
+
+variable "availability_zone" {
+  description = "AZ of the EBS volume. Used for PV node affinity."
+  type        = string
+}
+
+variable "size_gb" {
+  description = "EBS volume size in GiB (must match the volume)."
+  type        = number
 }
 
 variable "password" {
-  description = "Neo4j password. If null, a random password is generated."
+  description = "Neo4j password (from neo4j-data stack)."
   type        = string
-  default     = null
   sensitive   = true
-}
-
-variable "create_storage_class" {
-  description = "Create a gp3 StorageClass (EBS CSI). Set false if one already exists."
-  type        = bool
-  default     = true
-}
-
-variable "storage_class_name" {
-  description = "StorageClass name for the Neo4j PVC."
-  type        = string
-  default     = "gp3"
 }

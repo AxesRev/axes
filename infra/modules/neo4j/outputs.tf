@@ -15,6 +15,10 @@ output "auth_secret_name" {
 }
 
 output "password" {
-  value     = local.password
+  value     = var.password
   sensitive = true
+}
+
+output "volume_id" {
+  value = var.volume_id
 }

@@ -1,13 +1,8 @@
 locals {
-  password = var.password != null ? var.password : random_password.this[0].result
-  auth     = "neo4j/${local.password}"
-}
-
-resource "random_password" "this" {
-  count = var.password == null ? 1 : 0
-
-  length  = 24
-  special = false
+  auth        = "neo4j/${var.password}"
+  storage     = "${var.size_gb}Gi"
+  volume_name = "neo4j-data"
+  claim_name  = "neo4j-data"
 }
 
 resource "kubernetes_namespace_v1" "this" {
@@ -28,27 +23,67 @@ resource "kubernetes_secret_v1" "auth" {
   data = {
     NEO4J_AUTH     = local.auth
     NEO4J_USER     = "neo4j"
-    NEO4J_PASSWORD = local.password
+    NEO4J_PASSWORD = var.password
   }
 
   type = "Opaque"
 }
 
-resource "kubernetes_storage_class_v1" "gp3" {
-  count = var.create_storage_class ? 1 : 0
-
+resource "kubernetes_persistent_volume_v1" "this" {
   metadata {
-    name = var.storage_class_name
+    name = local.volume_name
   }
 
-  storage_provisioner    = "ebs.csi.aws.com"
-  reclaim_policy         = "Delete"
-  volume_binding_mode    = "WaitForFirstConsumer"
-  allow_volume_expansion = true
+  spec {
+    capacity = {
+      storage = local.storage
+    }
+    access_modes                     = ["ReadWriteOnce"]
+    persistent_volume_reclaim_policy = "Retain"
+    storage_class_name               = ""
+    volume_mode                      = "Filesystem"
 
-  parameters = {
-    type = "gp3"
+    persistent_volume_source {
+      csi {
+        driver        = "ebs.csi.aws.com"
+        volume_handle = var.volume_id
+        fs_type       = "ext4"
+      }
+    }
+
+    node_affinity {
+      required {
+        node_selector_term {
+          match_expressions {
+            key      = "topology.kubernetes.io/zone"
+            operator = "In"
+            values   = [var.availability_zone]
+          }
+        }
+      }
+    }
   }
+}
+
+resource "kubernetes_persistent_volume_claim_v1" "this" {
+  metadata {
+    name      = local.claim_name
+    namespace = kubernetes_namespace_v1.this.metadata[0].name
+  }
+
+  spec {
+    access_modes       = ["ReadWriteOnce"]
+    storage_class_name = ""
+    volume_name        = kubernetes_persistent_volume_v1.this.metadata[0].name
+
+    resources {
+      requests = {
+        storage = local.storage
+      }
+    }
+  }
+
+  depends_on = [kubernetes_persistent_volume_v1.this]
 }
 
 resource "kubernetes_stateful_set_v1" "this" {
@@ -150,26 +185,19 @@ resource "kubernetes_stateful_set_v1" "this" {
             mount_path = "/data"
           }
         }
-      }
-    }
 
-    volume_claim_template {
-      metadata {
-        name = "data"
-      }
+        volume {
+          name = "data"
 
-      spec {
-        access_modes       = ["ReadWriteOnce"]
-        storage_class_name = var.create_storage_class ? kubernetes_storage_class_v1.gp3[0].metadata[0].name : var.storage_class_name
-
-        resources {
-          requests = {
-            storage = var.storage_size
+          persistent_volume_claim {
+            claim_name = kubernetes_persistent_volume_claim_v1.this.metadata[0].name
           }
         }
       }
     }
   }
+
+  depends_on = [kubernetes_persistent_volume_claim_v1.this]
 }
 
 resource "kubernetes_service_v1" "this" {

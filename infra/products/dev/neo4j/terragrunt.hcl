@@ -15,6 +15,18 @@ dependency "eks" {
   mock_outputs_allowed_terraform_commands = ["validate", "plan"]
 }
 
+dependency "neo4j_data" {
+  config_path = "../neo4j-data"
+
+  mock_outputs = {
+    volume_id         = "vol-mock"
+    availability_zone = "eu-west-1a"
+    size_gb           = 20
+    password          = "mock-password"
+  }
+  mock_outputs_allowed_terraform_commands = ["validate", "plan"]
+}
+
 generate "k8s_provider" {
   path      = "k8s_provider.tf"
   if_exists = "overwrite_terragrunt"
@@ -36,7 +48,10 @@ EOF
 }
 
 inputs = {
-  namespace    = "neo4j"
-  image        = "neo4j:5.26.28-community"
-  storage_size = "20Gi"
+  namespace          = "neo4j"
+  image              = "neo4j:5.26.28-community"
+  volume_id          = dependency.neo4j_data.outputs.volume_id
+  availability_zone  = dependency.neo4j_data.outputs.availability_zone
+  size_gb            = dependency.neo4j_data.outputs.size_gb
+  password           = dependency.neo4j_data.outputs.password
 }
