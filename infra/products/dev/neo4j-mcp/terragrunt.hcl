@@ -12,7 +12,7 @@ dependency "eks" {
   mock_outputs = {
     cluster_name = "axes-dev"
   }
-  mock_outputs_allowed_terraform_commands = ["validate", "plan"]
+  mock_outputs_allowed_terraform_commands = ["validate", "plan", "destroy"]
 }
 
 dependency "ecr" {
@@ -23,7 +23,7 @@ dependency "ecr" {
       "axes/neo4j-mcp" = "042993547532.dkr.ecr.eu-west-1.amazonaws.com/axes/neo4j-mcp"
     }
   }
-  mock_outputs_allowed_terraform_commands = ["validate", "plan"]
+  mock_outputs_allowed_terraform_commands = ["validate", "plan", "destroy"]
 }
 
 dependency "neo4j" {
@@ -34,7 +34,7 @@ dependency "neo4j" {
     bolt_uri         = "bolt://neo4j.neo4j.svc.cluster.local:7687"
     auth_secret_name = "neo4j-auth"
   }
-  mock_outputs_allowed_terraform_commands = ["validate", "plan"]
+  mock_outputs_allowed_terraform_commands = ["validate", "plan", "destroy"]
 }
 
 generate "k8s_provider" {

@@ -12,7 +12,7 @@ dependency "eks" {
   mock_outputs = {
     cluster_name = "axes-dev"
   }
-  mock_outputs_allowed_terraform_commands = ["validate", "plan"]
+  mock_outputs_allowed_terraform_commands = ["validate", "plan", "destroy"]
 }
 
 generate "k8s_provider" {

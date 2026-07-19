@@ -8,7 +8,7 @@ dependency "eks" {
   mock_outputs = {
     cluster_name = "axes-dev"
   }
-  mock_outputs_allowed_terraform_commands = ["validate", "plan"]
+  mock_outputs_allowed_terraform_commands = ["validate", "plan", "destroy"]
 }
 
 dependency "ecr" {
@@ -19,7 +19,7 @@ dependency "ecr" {
       "axes/langraph-server" = "042993547532.dkr.ecr.eu-west-1.amazonaws.com/axes/langraph-server"
     }
   }
-  mock_outputs_allowed_terraform_commands = ["validate", "plan"]
+  mock_outputs_allowed_terraform_commands = ["validate", "plan", "destroy"]
 }
 
 dependency "rds" {
@@ -32,7 +32,7 @@ dependency "rds" {
     master_username = "postgres"
     master_password = "mock-password"
   }
-  mock_outputs_allowed_terraform_commands = ["validate", "plan"]
+  mock_outputs_allowed_terraform_commands = ["validate", "plan", "destroy"]
 }
 
 locals {

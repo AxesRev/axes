@@ -14,7 +14,7 @@ dependency "vpc" {
     private_subnets              = ["subnet-a", "subnet-b"]
     db_clients_security_group_id = "sg-mock"
   }
-  mock_outputs_allowed_terraform_commands = ["validate", "plan"]
+  mock_outputs_allowed_terraform_commands = ["validate", "plan", "destroy"]
 }
 
 locals {

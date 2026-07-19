@@ -60,7 +60,10 @@ module "eks" {
 
   eks_managed_node_groups = {
     default = {
-      name           = "${var.cluster_name}-default"
+      # Stable name so failed/cancelled applies cannot leave untracked hash-suffixed NGs.
+      name            = "${var.cluster_name}-default"
+      use_name_prefix = false
+
       instance_types = var.node_instance_types
       ami_type       = var.node_ami_type
       capacity_type  = "ON_DEMAND"
