@@ -41,5 +41,5 @@ output "connection_host" {
 }
 
 output "restored_from_snapshot" {
-  value = local.snapshot_identifier
+  value = aws_db_instance.this.snapshot_identifier
 }

@@ -92,15 +92,9 @@ variable "skip_final_snapshot" {
 }
 
 variable "snapshot_identifier" {
-  description = "Explicit snapshot ID to restore from on create. Overrides restore_latest_snapshot."
+  description = "Snapshot ID to restore from on create. Null creates an empty instance. Ignored after create."
   type        = string
   default     = null
-}
-
-variable "restore_latest_snapshot" {
-  description = "If true and snapshot_identifier is null, restore from the newest manual snapshot for this identifier when one exists."
-  type        = bool
-  default     = true
 }
 
 variable "tags" {
