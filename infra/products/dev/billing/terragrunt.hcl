@@ -40,15 +40,6 @@ dependency "rds" {
   mock_outputs_allowed_terraform_commands = ["validate", "plan", "destroy"]
 }
 
-dependency "slack-app" {
-  config_path = "../slack-app"
-
-  mock_outputs = {
-    internal_url = "http://internal-nlb.example"
-  }
-  mock_outputs_allowed_terraform_commands = ["validate", "plan", "destroy"]
-}
-
 locals {
   env = read_terragrunt_config(find_in_parent_folders("env.hcl"))
 }
@@ -60,7 +51,6 @@ inputs = {
 
   private_subnet_ids           = dependency.vpc.outputs.private_subnets
   db_clients_security_group_id = dependency.vpc.outputs.db_clients_security_group_id
-  tenant_api_url               = dependency.slack-app.outputs.internal_url
 
   postgres_host     = dependency.rds.outputs.address
   postgres_port     = dependency.rds.outputs.port
@@ -69,8 +59,6 @@ inputs = {
   postgres_password = dependency.rds.outputs.master_password
 
   internal_api_secret   = get_env("INTERNAL_API_SECRET", "")
-  auth0_domain          = get_env("AUTH0_DOMAIN", "")
-  auth0_client_id       = get_env("AUTH0_CLIENT_ID", "")
   paddle_api_key        = get_env("PADDLE_API_KEY", "")
   paddle_webhook_secret = get_env("PADDLE_WEBHOOK_SECRET", "")
   paddle_usage_price_id = get_env("PADDLE_USAGE_PRICE_ID", "")

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { auth0 } from "@/lib/auth0";
 import { isPaddleBillingConfigured } from "@/lib/paddle/config";
-import { fetchBillingStatusForAccessToken } from "@/lib/tenants";
+import { fetchBillingStatusForTenant, resolveTenantForSession } from "@/lib/tenants";
 
 export async function GET(): Promise<NextResponse> {
   if (!isPaddleBillingConfigured()) {
@@ -18,7 +18,8 @@ export async function GET(): Promise<NextResponse> {
   }
 
   try {
-    const status = await fetchBillingStatusForAccessToken(session.tokenSet.idToken);
+    const tenant = await resolveTenantForSession(session);
+    const status = await fetchBillingStatusForTenant(tenant.id);
     return NextResponse.json(status);
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);

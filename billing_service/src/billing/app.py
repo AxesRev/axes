@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import hmac
 import json
 from typing import Any
 
 from aegra_api.core.database import db_manager
 from aegra_api.core.orm import get_metadata_session_maker
 
-from billing.auth import claims_from_authorization
+from billing.config import billing_settings
 from billing.errors import HttpError
 from billing.routes import create_my_billing_portal, get_my_billing, paddle_billing_webhook
 
@@ -30,6 +31,12 @@ def _header(event: dict[str, Any], name: str) -> str | None:
         if key.lower() == target and isinstance(value, str):
             return value
     return None
+
+
+def _query(event: dict[str, Any], name: str) -> str | None:
+    params = event.get("queryStringParameters") or {}
+    value = params.get(name)
+    return value if isinstance(value, str) and value else None
 
 
 def _method_and_path(event: dict[str, Any]) -> tuple[str, str]:
@@ -53,6 +60,20 @@ def _body_bytes(event: dict[str, Any]) -> bytes:
     return str(body).encode()
 
 
+def _require_internal_secret(event: dict[str, Any]) -> None:
+    expected = billing_settings.INTERNAL_API_SECRET
+    provided = _header(event, "x-internal-secret")
+    if not expected or not provided or not hmac.compare_digest(provided, expected):
+        raise HttpError(401, "Invalid internal secret")
+
+
+def _tenant_id(event: dict[str, Any]) -> str:
+    tenant_id = _header(event, "x-tenant-id") or _query(event, "tenant_id")
+    if not tenant_id:
+        raise HttpError(400, "tenant_id is required")
+    return tenant_id
+
+
 async def _with_session():
     await db_manager.initialize_metadata()
     return get_metadata_session_maker()()
@@ -65,15 +86,15 @@ async def _handle(event: dict[str, Any]) -> dict[str, object]:
 
     try:
         if method == "GET" and path == "/billing/me":
-            claims = claims_from_authorization(_header(event, "authorization"))
+            _require_internal_secret(event)
             async with await _with_session() as session:
-                payload = await get_my_billing(claims=claims, session=session)
+                payload = await get_my_billing(tenant_id=_tenant_id(event), session=session)
             return _json_response(200, payload)
 
         if method == "POST" and path == "/billing/me/portal":
-            claims = claims_from_authorization(_header(event, "authorization"))
+            _require_internal_secret(event)
             async with await _with_session() as session:
-                payload = await create_my_billing_portal(claims=claims, session=session)
+                payload = await create_my_billing_portal(tenant_id=_tenant_id(event), session=session)
             return _json_response(200, payload)
 
         if method == "POST" and path == "/billing/webhooks":

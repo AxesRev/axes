@@ -14,6 +14,8 @@ import pytest
 
 from billing.app import handler
 
+INTERNAL_SECRET = "test-internal-secret"
+
 
 def _webhook_signature(*, body: bytes, secret: str) -> str:
     timestamp = int(time.time())
@@ -57,19 +59,17 @@ def billing_session(monkeypatch: pytest.MonkeyPatch) -> AsyncMock:
         return fake_session()
 
     monkeypatch.setattr("billing.app._with_session", fake_with_session)
-    monkeypatch.setattr(
-        "billing.app.claims_from_authorization",
-        lambda _authorization: {"sub": "auth0|123", "email": "owner@example.com", "name": "Owner"},
-    )
+    monkeypatch.setattr("billing.config.billing_settings.INTERNAL_API_SECRET", INTERNAL_SECRET)
+    monkeypatch.setattr("billing.app.billing_settings.INTERNAL_API_SECRET", INTERNAL_SECRET)
     monkeypatch.setattr("billing.config.billing_settings.PADDLE_API_KEY", "test_sdbx_key")
     return session
 
 
 @pytest.mark.integration
-def test_get_my_tenant_billing_requires_auth() -> None:
+def test_get_my_tenant_billing_requires_internal_secret() -> None:
     status_code, payload = _invoke(method="GET", path="/billing/me")
     assert status_code == 401
-    assert payload["detail"] == "Missing bearer token"
+    assert payload["detail"] == "Invalid internal secret"
 
 
 @pytest.mark.integration
@@ -90,15 +90,16 @@ def test_get_my_tenant_billing_returns_not_setup(billing_session: AsyncMock, mon
         auth0_sub="auth0|123",
     )
 
-    async def fake_tenant_for_user(_claims: object, _session: object) -> Tenant:
+    async def fake_tenant_by_id(*, tenant_id: str, session: object) -> Tenant:
+        assert tenant_id == "tenant-new"
         return tenant
 
-    monkeypatch.setattr("billing.routes._tenant_for_billing_user", fake_tenant_for_user)
+    monkeypatch.setattr("billing.routes._tenant_by_id", fake_tenant_by_id)
 
     status_code, payload = _invoke(
         method="GET",
         path="/billing/me",
-        headers={"authorization": "Bearer test"},
+        headers={"X-Internal-Secret": INTERNAL_SECRET, "X-Tenant-Id": "tenant-new"},
     )
     assert status_code == 200
     assert payload == {
@@ -125,19 +126,19 @@ def test_create_my_tenant_billing_portal_returns_url(
         paddle_subscription_id="sub_123",
     )
 
-    async def fake_tenant_for_user(_claims: object, _session: object) -> Tenant:
+    async def fake_tenant_by_id(*, tenant_id: str, session: object) -> Tenant:
         return tenant
 
     async def fake_portal(**kwargs: object) -> BillingPortalResponse:
         return BillingPortalResponse(url="https://sandbox-customer-portal.paddle.com/example")
 
-    monkeypatch.setattr("billing.routes._tenant_for_billing_user", fake_tenant_for_user)
+    monkeypatch.setattr("billing.routes._tenant_by_id", fake_tenant_by_id)
     monkeypatch.setattr("billing.routes.create_tenant_billing_portal_url", fake_portal)
 
     status_code, payload = _invoke(
         method="POST",
         path="/billing/me/portal",
-        headers={"authorization": "Bearer test"},
+        headers={"X-Internal-Secret": INTERNAL_SECRET, "X-Tenant-Id": "tenant-new"},
     )
     assert status_code == 200
     assert payload == {"url": "https://sandbox-customer-portal.paddle.com/example"}

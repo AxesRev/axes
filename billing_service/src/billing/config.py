@@ -23,7 +23,6 @@ class BillingSettings(BaseSettings):
     PADDLE_WEBHOOK_SECRET: str = ""
     PADDLE_USAGE_PRICE_ID: str = ""
     BILLING_TOKENS_PER_UNIT: int = 1000
-    TENANT_API_URL: str = "http://127.0.0.1:8000"
     INTERNAL_API_SECRET: str = ""
 
 

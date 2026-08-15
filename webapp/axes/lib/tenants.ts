@@ -186,17 +186,26 @@ export function salesforceOrgId(integration: AppIntegrationRecord | null): strin
   return configString(integration, "org_id");
 }
 
-export async function fetchBillingStatusForAccessToken(accessToken: string): Promise<TenantBillingStatus> {
+function internalApiSecret(): string {
+  const secret = process.env.INTERNAL_API_SECRET ?? "";
+  if (!secret) {
+    throw new Error("INTERNAL_API_SECRET is not configured");
+  }
+  return secret;
+}
+
+export async function fetchBillingStatusForTenant(tenantId: string): Promise<TenantBillingStatus> {
   const response = await fetch(`${billingApiBaseUrl()}/billing/me`, {
     method: "GET",
     headers: {
-      Authorization: `Bearer ${accessToken}`,
+      "X-Internal-Secret": internalApiSecret(),
+      "X-Tenant-Id": tenantId,
     },
     cache: "no-store",
   });
 
   if (response.status === 401) {
-    throw new ApiUnauthorizedError("Invalid or missing access token");
+    throw new ApiUnauthorizedError("Invalid or missing internal secret");
   }
 
   if (!response.ok) {
@@ -207,17 +216,18 @@ export async function fetchBillingStatusForAccessToken(accessToken: string): Pro
   return (await response.json()) as TenantBillingStatus;
 }
 
-export async function fetchBillingPortalUrlForAccessToken(accessToken: string): Promise<string> {
+export async function fetchBillingPortalUrlForTenant(tenantId: string): Promise<string> {
   const response = await fetch(`${billingApiBaseUrl()}/billing/me/portal`, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${accessToken}`,
+      "X-Internal-Secret": internalApiSecret(),
+      "X-Tenant-Id": tenantId,
     },
     cache: "no-store",
   });
 
   if (response.status === 401) {
-    throw new ApiUnauthorizedError("Invalid or missing access token");
+    throw new ApiUnauthorizedError("Invalid or missing internal secret");
   }
 
   if (!response.ok) {

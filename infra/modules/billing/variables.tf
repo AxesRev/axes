@@ -17,11 +17,6 @@ variable "db_clients_security_group_id" {
   type        = string
 }
 
-variable "tenant_api_url" {
-  description = "In-VPC URL for POST /internal/tenants/resolve."
-  type        = string
-}
-
 variable "postgres_host" {
   type = string
 }
@@ -46,14 +41,6 @@ variable "postgres_password" {
 variable "internal_api_secret" {
   type      = string
   sensitive = true
-}
-
-variable "auth0_domain" {
-  type = string
-}
-
-variable "auth0_client_id" {
-  type = string
 }
 
 variable "paddle_api_key" {

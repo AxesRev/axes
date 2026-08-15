@@ -54,8 +54,6 @@ jobs:
             billing:
               - 'billing_service/**'
               - 'tenant/**'
-              - 'slack_app/auth0.py'
-              - 'slack_app/config.py'
               - 'langraph_server/src/aegra_api/**'
 
       - name: Set change flags
@@ -418,8 +416,6 @@ jobs:
           SLACK_CLIENT_SECRET: ${{ secrets.SLACK_CLIENT_SECRET }}
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
           INTERNAL_API_SECRET: ${{ secrets.INTERNAL_API_SECRET }}
-          AUTH0_DOMAIN: ${{ secrets.AUTH0_DOMAIN }}
-          AUTH0_CLIENT_ID: ${{ secrets.AUTH0_CLIENT_ID }}
           PADDLE_API_KEY: ${{ secrets.PADDLE_API_KEY }}
           PADDLE_WEBHOOK_SECRET: ${{ secrets.PADDLE_WEBHOOK_SECRET }}
           PADDLE_USAGE_PRICE_ID: ${{ secrets.PADDLE_USAGE_PRICE_ID }}

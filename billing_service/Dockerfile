@@ -22,7 +22,6 @@ COPY --from=builder /var/lang/bin/ /var/lang/bin/
 
 COPY langraph_server/src/aegra_api ${LAMBDA_TASK_ROOT}/aegra_api
 COPY billing_service/src/billing ${LAMBDA_TASK_ROOT}/billing
-COPY slack_app ${LAMBDA_TASK_ROOT}/slack_app
 COPY tenant ${LAMBDA_TASK_ROOT}/tenant
 
 CMD ["billing.app.handler"]

@@ -35,10 +35,7 @@ locals {
     POSTGRES_SSLMODE        = "require"
     SQLALCHEMY_POOL_SIZE    = "1"
     SQLALCHEMY_MAX_OVERFLOW = "0"
-    TENANT_API_URL          = var.tenant_api_url
     INTERNAL_API_SECRET     = var.internal_api_secret
-    AUTH0_DOMAIN            = var.auth0_domain
-    AUTH0_CLIENT_ID         = var.auth0_client_id
     PADDLE_API_KEY          = var.paddle_api_key
     PADDLE_WEBHOOK_SECRET   = var.paddle_webhook_secret
     PADDLE_USAGE_PRICE_ID   = var.paddle_usage_price_id
