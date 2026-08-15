@@ -38,10 +38,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY --from=builder /usr/local/lib/python${PY_VERSION}/site-packages/ /usr/local/lib/python${PY_VERSION}/site-packages/
 COPY --from=builder /usr/local/bin/ /usr/local/bin/
 
-COPY langraph_server/src/ ./
 COPY slack_app ./slack_app
-COPY app_integrations ./app_integrations
-COPY tenant ./tenant
 
 EXPOSE 8000
 

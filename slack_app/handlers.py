@@ -7,12 +7,11 @@ from typing import Any
 
 from langgraph_sdk import get_client
 
-from aegra_api.core.orm import get_session
-from app_integrations.github.identity_linking import handle_access_request
-from app_integrations.slack.service import get_or_create_slack_user_identity_for_team
 from slack_app.client import fetch_user_email, post_message
 from slack_app.config import slack_settings
+from slack_app.db import session_scope
 from slack_app.replies import slack_replies_from_updates
+from slack_app.store import get_or_create_slack_user_identity_for_team, resolve_github_access
 
 logger = logging.getLogger(__name__)
 
@@ -72,22 +71,20 @@ async def handle_message_event(event: dict[str, Any], *, team_id: str | None = N
     logger.info("Received message from %s in channel %s: %s", user_id, channel, text)
 
     access_result = None
-    async for session in get_session():
+    tenant_id = ""
+    async with session_scope() as session:
         identity = await get_or_create_slack_user_identity_for_team(
             slack_user_id=user_id,
             team_id=resolved_team_id,
             session=session,
         )
-        if identity is None:
-            break
-
-        access_result = await handle_access_request(
-            identity,
-            {"text": text, "channel": channel},
-            session,
-            server_url=slack_settings.integrations_public_url,
-        )
-        break
+        if identity is not None:
+            access_result = await resolve_github_access(
+                identity,
+                session,
+                server_url=slack_settings.integrations_public_url,
+            )
+            tenant_id = identity.tenant_id
 
     if access_result is None:
         logger.info(
@@ -98,23 +95,19 @@ async def handle_message_event(event: dict[str, Any], *, team_id: str | None = N
         return
 
     if not access_result.linked:
-        not_linked = access_result.not_linked
-        connect_url = not_linked.connect_url if not_linked else ""
         await post_message(
             channel=channel,
             text=(
                 "Before I can act on your behalf, I need to know your GitHub account. "
-                f"Please connect it here: {connect_url}"
+                f"Please connect it here: {access_result.connect_url}"
             ),
             thread_ts=reply_thread_ts,
         )
         return
 
-    assert access_result.identity is not None
-    github_user_id = access_result.identity.github_user_id
-    github_email = access_result.identity.github_email
-    github_installation_id = access_result.identity.github_installation_id
-    tenant_id = identity.tenant_id
+    github_user_id = access_result.github_user_id
+    github_email = access_result.github_email
+    github_installation_id = access_result.github_installation_id
     slack_email = await fetch_user_email(user_id) or ""
 
     # --- Agent invocation ------------------------------------------------------
