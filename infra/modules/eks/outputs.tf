@@ -25,3 +25,7 @@ output "cluster_security_group_id" {
 output "node_security_group_id" {
   value = module.eks.node_security_group_id
 }
+
+output "node_autoscaling_group_names" {
+  value = module.eks.eks_managed_node_groups_autoscaling_group_names
+}

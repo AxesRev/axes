@@ -33,6 +33,10 @@ jobs:
             context: neo4j_mcp
             dockerfile: neo4j_mcp/Dockerfile
             repository: axes/neo4j-mcp
+          - name: slack-app
+            context: .
+            dockerfile: slack_app/Dockerfile
+            repository: axes/slack-app
 
     steps:
       - uses: actions/checkout@v4
