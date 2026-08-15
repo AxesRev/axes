@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from billing.models import Tenant
+from billing.models import BillingAccount
 from billing.service import (
     get_tenant_billing_status,
     handle_subscription_created_webhook,
@@ -16,15 +16,10 @@ from billing.service import (
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_handle_subscription_created_webhook_links_tenant() -> None:
-    tenant = Tenant(
-        id="tenant-1",
-        name="Owner",
-        email="owner@example.com",
-        auth0_sub="auth0|123",
-    )
+async def test_handle_subscription_created_webhook_links_account() -> None:
     session = AsyncMock()
-    session.get = AsyncMock(return_value=tenant)
+    session.get = AsyncMock(return_value=None)
+    session.add = MagicMock()
     session.commit = AsyncMock()
     session.refresh = AsyncMock()
 
@@ -38,26 +33,26 @@ async def test_handle_subscription_created_webhook_links_tenant() -> None:
         session=session,
     )
 
-    assert tenant.paddle_customer_id == "ctm_123"
-    assert tenant.paddle_subscription_id == "sub_123"
-    assert tenant.paddle_subscription_status == "active"
+    account = session.add.call_args[0][0]
+    assert isinstance(account, BillingAccount)
+    assert account.tenant_id == "tenant-1"
+    assert account.paddle_customer_id == "ctm_123"
+    assert account.paddle_subscription_id == "sub_123"
+    assert account.paddle_subscription_status == "active"
     session.commit.assert_awaited_once()
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_handle_subscription_updated_webhook_updates_status() -> None:
-    tenant = Tenant(
-        id="tenant-1",
-        name="Owner",
-        email="owner@example.com",
-        auth0_sub="auth0|123",
+    account = BillingAccount(
+        tenant_id="tenant-1",
         paddle_customer_id="ctm_123",
         paddle_subscription_id="sub_123",
         paddle_subscription_status="active",
     )
     execute_result = MagicMock()
-    execute_result.scalar_one_or_none.return_value = tenant
+    execute_result.scalar_one_or_none.return_value = account
     session = AsyncMock()
     session.execute = AsyncMock(return_value=execute_result)
     session.commit = AsyncMock()
@@ -67,25 +62,32 @@ async def test_handle_subscription_updated_webhook_updates_status() -> None:
         session=session,
     )
 
-    assert tenant.paddle_subscription_status == "past_due"
+    assert account.paddle_subscription_status == "past_due"
     session.commit.assert_awaited_once()
 
 
 @pytest.mark.unit
-def test_get_tenant_billing_status_reads_db_only() -> None:
-    tenant = Tenant(
-        id="tenant-1",
-        name="Owner",
-        email="owner@example.com",
-        auth0_sub="auth0|123",
+def test_get_tenant_billing_status_reads_account() -> None:
+    account = BillingAccount(
+        tenant_id="tenant-1",
         paddle_customer_id="ctm_123",
         paddle_subscription_id="sub_123",
         paddle_subscription_status="active",
     )
 
-    status = get_tenant_billing_status(tenant=tenant)
+    status = get_tenant_billing_status(account=account)
 
     assert status.billing_setup is True
     assert status.paddle_customer_id == "ctm_123"
     assert status.paddle_subscription_id == "sub_123"
     assert status.subscription_status == "active"
+
+
+@pytest.mark.unit
+def test_get_tenant_billing_status_missing_account() -> None:
+    status = get_tenant_billing_status(account=None)
+
+    assert status.billing_setup is False
+    assert status.paddle_customer_id is None
+    assert status.paddle_subscription_id is None
+    assert status.subscription_status is None

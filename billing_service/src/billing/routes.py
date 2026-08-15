@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from billing.config import billing_settings
 from billing.errors import HttpError
-from billing.models import Tenant
+from billing.models import BillingAccount
 from billing.paddle_client import PaddleApiError
 from billing.service import create_tenant_billing_portal_url, get_tenant_billing_status, handle_paddle_webhook_event
 from billing.webhooks import WebhookVerificationError, verify_paddle_webhook_signature
@@ -17,28 +17,25 @@ from billing.webhooks import WebhookVerificationError, verify_paddle_webhook_sig
 logger = structlog.getLogger(__name__)
 
 
-async def _tenant_by_id(*, tenant_id: str, session: AsyncSession) -> Tenant:
+async def _account_by_tenant_id(*, tenant_id: str, session: AsyncSession) -> BillingAccount | None:
     if not tenant_id.strip():
         raise HttpError(400, "tenant_id is required")
-    tenant = await session.get(Tenant, tenant_id)
-    if tenant is None:
-        raise HttpError(404, "tenant not found")
-    return tenant
+    return await session.get(BillingAccount, tenant_id)
 
 
 async def get_my_billing(*, tenant_id: str, session: AsyncSession) -> dict[str, object]:
-    tenant = await _tenant_by_id(tenant_id=tenant_id, session=session)
-    return get_tenant_billing_status(tenant=tenant).model_dump()
+    account = await _account_by_tenant_id(tenant_id=tenant_id, session=session)
+    return get_tenant_billing_status(account=account).model_dump()
 
 
 async def create_my_billing_portal(*, tenant_id: str, session: AsyncSession) -> dict[str, object]:
     if not billing_settings.PADDLE_API_KEY.strip():
         raise HttpError(503, "Paddle billing is not configured on the server")
 
-    tenant = await _tenant_by_id(tenant_id=tenant_id, session=session)
+    account = await _account_by_tenant_id(tenant_id=tenant_id, session=session)
 
     try:
-        portal = await create_tenant_billing_portal_url(tenant=tenant)
+        portal = await create_tenant_billing_portal_url(account=account)
     except ValueError as error:
         raise HttpError(404, str(error)) from error
     except PaddleApiError as error:
@@ -46,7 +43,7 @@ async def create_my_billing_portal(*, tenant_id: str, session: AsyncSession) -> 
             "billing_portal_paddle_error",
             detail=error.detail,
             status_code=error.status_code,
-            tenant_id=tenant.id,
+            tenant_id=tenant_id,
         )
         raise HttpError(502, error.detail) from error
     return portal.model_dump()

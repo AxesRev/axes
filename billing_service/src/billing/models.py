@@ -13,6 +13,15 @@ class Base(DeclarativeBase):
     pass
 
 
+class BillingAccount(Base):
+    __tablename__ = "billing_accounts"
+
+    tenant_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    paddle_customer_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    paddle_subscription_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    paddle_subscription_status: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
 class Tenant(Base):
     __tablename__ = "tenants"
 
@@ -20,9 +29,6 @@ class Tenant(Base):
     name: Mapped[str] = mapped_column(Text, nullable=False)
     email: Mapped[str | None] = mapped_column(Text, nullable=True)
     auth0_sub: Mapped[str | None] = mapped_column(Text, nullable=True)
-    paddle_customer_id: Mapped[str | None] = mapped_column(Text, nullable=True)
-    paddle_subscription_id: Mapped[str | None] = mapped_column(Text, nullable=True)
-    paddle_subscription_status: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class UserIdentity(Base):

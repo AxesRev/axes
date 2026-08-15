@@ -80,21 +80,8 @@ def test_health() -> None:
 
 
 @pytest.mark.integration
-def test_get_my_tenant_billing_returns_not_setup(billing_session: AsyncMock, monkeypatch: pytest.MonkeyPatch) -> None:
-    from billing.models import Tenant
-
-    tenant = Tenant(
-        id="tenant-new",
-        name="Owner",
-        email="owner@example.com",
-        auth0_sub="auth0|123",
-    )
-
-    async def fake_tenant_by_id(*, tenant_id: str, session: object) -> Tenant:
-        assert tenant_id == "tenant-new"
-        return tenant
-
-    monkeypatch.setattr("billing.routes._tenant_by_id", fake_tenant_by_id)
+def test_get_my_tenant_billing_returns_not_setup(billing_session: AsyncMock) -> None:
+    billing_session.get = AsyncMock(return_value=None)
 
     status_code, payload = _invoke(
         method="GET",
@@ -114,25 +101,19 @@ def test_get_my_tenant_billing_returns_not_setup(billing_session: AsyncMock, mon
 def test_create_my_tenant_billing_portal_returns_url(
     billing_session: AsyncMock, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from billing.models import Tenant
+    from billing.models import BillingAccount
     from billing.schemas import BillingPortalResponse
 
-    tenant = Tenant(
-        id="tenant-new",
-        name="Owner",
-        email="owner@example.com",
-        auth0_sub="auth0|123",
+    account = BillingAccount(
+        tenant_id="tenant-new",
         paddle_customer_id="ctm_123",
         paddle_subscription_id="sub_123",
     )
-
-    async def fake_tenant_by_id(*, tenant_id: str, session: object) -> Tenant:
-        return tenant
+    billing_session.get = AsyncMock(return_value=account)
 
     async def fake_portal(**kwargs: object) -> BillingPortalResponse:
         return BillingPortalResponse(url="https://sandbox-customer-portal.paddle.com/example")
 
-    monkeypatch.setattr("billing.routes._tenant_by_id", fake_tenant_by_id)
     monkeypatch.setattr("billing.routes.create_tenant_billing_portal_url", fake_portal)
 
     status_code, payload = _invoke(
