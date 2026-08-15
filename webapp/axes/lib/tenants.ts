@@ -183,7 +183,7 @@ export function salesforceOrgId(integration: AppIntegrationRecord | null): strin
 }
 
 export async function fetchBillingStatusForAccessToken(accessToken: string): Promise<TenantBillingStatus> {
-  const response = await fetch(`${apiBaseUrl()}/tenants/me/billing`, {
+  const response = await fetch(`${apiBaseUrl()}/billing/me`, {
     method: "GET",
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -204,7 +204,7 @@ export async function fetchBillingStatusForAccessToken(accessToken: string): Pro
 }
 
 export async function fetchBillingPortalUrlForAccessToken(accessToken: string): Promise<string> {
-  const response = await fetch(`${apiBaseUrl()}/tenants/me/billing/portal`, {
+  const response = await fetch(`${apiBaseUrl()}/billing/me/portal`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${accessToken}`,

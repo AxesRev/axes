@@ -16,4 +16,5 @@ def test_import_billing_service() -> None:
 def test_import_billing_routes() -> None:
     from billing.routes import router  # noqa: PLC0415
 
+    assert router.prefix == "/billing"
     assert router.tags == ["billing"]

@@ -1,9 +1,10 @@
-"""Tenant billing routes secured with Auth0 access tokens."""
+"""Billing HTTP API. Public paths are /billing/*, not /tenants/*."""
 
 from __future__ import annotations
 
 import json
 
+import httpx
 import structlog
 from aegra_api.core.orm import get_session
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -14,10 +15,11 @@ from billing.config import billing_settings
 from billing.paddle_client import PaddleApiError
 from billing.schemas import BillingPortalResponse, TenantBillingStatusResponse
 from billing.service import create_tenant_billing_portal_url, get_tenant_billing_status, handle_paddle_webhook_event
+from billing.tenant_client import resolve_tenant_for_auth_user
 from billing.webhooks import WebhookVerificationError, verify_paddle_webhook_signature
-from tenant.service import get_or_create_tenant_for_auth_user
+from tenant.models import Tenant
 
-router = APIRouter(tags=["billing"])
+router = APIRouter(prefix="/billing", tags=["billing"])
 
 logger = structlog.getLogger(__name__)
 
@@ -27,29 +29,48 @@ def _claim_str(claims: dict[str, object], key: str) -> str | None:
     return value if isinstance(value, str) and value else None
 
 
-@router.get("/tenants/me/billing", response_model=TenantBillingStatusResponse)
-async def get_my_tenant_billing(
-    claims: dict = Depends(require_auth0_claims),
-    session: AsyncSession = Depends(get_session),
-) -> TenantBillingStatusResponse:
+async def _tenant_for_billing_user(
+    claims: dict,
+    session: AsyncSession,
+) -> Tenant:
     auth0_sub = _claim_str(claims, "sub")
     if not auth0_sub:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Access token is missing sub claim",
         )
+    try:
+        ref = await resolve_tenant_for_auth_user(
+            auth0_sub=auth0_sub,
+            email=_claim_str(claims, "email"),
+            name=_claim_str(claims, "name"),
+        )
+    except PermissionError as error:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(error)) from error
+    except httpx.HTTPError as error:
+        logger.error("billing_tenant_resolve_failed", error=str(error))
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Could not resolve tenant",
+        ) from error
 
-    tenant = await get_or_create_tenant_for_auth_user(
-        auth0_sub=auth0_sub,
-        email=_claim_str(claims, "email"),
-        name=_claim_str(claims, "name"),
-        session=session,
-    )
+    tenant = await session.get(Tenant, ref.id)
+    if tenant is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="tenant not found")
+    return tenant
+
+
+@router.get("/me", response_model=TenantBillingStatusResponse)
+async def get_my_billing(
+    claims: dict = Depends(require_auth0_claims),
+    session: AsyncSession = Depends(get_session),
+) -> TenantBillingStatusResponse:
+    tenant = await _tenant_for_billing_user(claims, session)
     return get_tenant_billing_status(tenant=tenant)
 
 
-@router.post("/tenants/me/billing/portal", response_model=BillingPortalResponse)
-async def create_my_tenant_billing_portal(
+@router.post("/me/portal", response_model=BillingPortalResponse)
+async def create_my_billing_portal(
     claims: dict = Depends(require_auth0_claims),
     session: AsyncSession = Depends(get_session),
 ) -> BillingPortalResponse:
@@ -59,19 +80,7 @@ async def create_my_tenant_billing_portal(
             detail="Paddle billing is not configured on the server",
         )
 
-    auth0_sub = _claim_str(claims, "sub")
-    if not auth0_sub:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Access token is missing sub claim",
-        )
-
-    tenant = await get_or_create_tenant_for_auth_user(
-        auth0_sub=auth0_sub,
-        email=_claim_str(claims, "email"),
-        name=_claim_str(claims, "name"),
-        session=session,
-    )
+    tenant = await _tenant_for_billing_user(claims, session)
 
     try:
         return await create_tenant_billing_portal_url(tenant=tenant)
@@ -87,7 +96,7 @@ async def create_my_tenant_billing_portal(
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=error.detail) from error
 
 
-@router.post("/billing/webhooks")
+@router.post("/webhooks")
 async def paddle_billing_webhook(
     request: Request,
     session: AsyncSession = Depends(get_session),

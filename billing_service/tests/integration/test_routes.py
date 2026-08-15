@@ -1,4 +1,4 @@
-"""Integration tests for tenant billing routes."""
+"""Integration tests for billing routes."""
 
 from __future__ import annotations
 
@@ -59,7 +59,7 @@ def billing_api_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
 def test_get_my_tenant_billing_requires_auth() -> None:
     app = FastAPI()
     app.include_router(billing_router)
-    response = TestClient(app).get("/tenants/me/billing")
+    response = TestClient(app).get("/billing/me")
     assert response.status_code == 401
 
 
@@ -67,7 +67,6 @@ def test_get_my_tenant_billing_requires_auth() -> None:
 def test_get_my_tenant_billing_returns_not_setup(
     billing_api_client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from billing.schemas import TenantBillingStatusResponse
     from tenant.models import Tenant
 
     tenant = Tenant(
@@ -77,21 +76,12 @@ def test_get_my_tenant_billing_returns_not_setup(
         auth0_sub="auth0|123",
     )
 
-    async def fake_get_or_create(**kwargs: object) -> Tenant:
+    async def fake_tenant_for_user(_claims: object, _session: object) -> Tenant:
         return tenant
 
-    def fake_status(**kwargs: object) -> TenantBillingStatusResponse:
-        return TenantBillingStatusResponse(
-            billing_setup=False,
-            paddle_customer_id=None,
-            paddle_subscription_id=None,
-            subscription_status=None,
-        )
+    monkeypatch.setattr("billing.routes._tenant_for_billing_user", fake_tenant_for_user)
 
-    monkeypatch.setattr("billing.routes.get_or_create_tenant_for_auth_user", fake_get_or_create)
-    monkeypatch.setattr("billing.routes.get_tenant_billing_status", fake_status)
-
-    response = billing_api_client.get("/tenants/me/billing")
+    response = billing_api_client.get("/billing/me")
     assert response.status_code == 200
     assert response.json() == {
         "billing_setup": False,
@@ -117,16 +107,16 @@ def test_create_my_tenant_billing_portal_returns_url(
         paddle_subscription_id="sub_123",
     )
 
-    async def fake_get_or_create(**kwargs: object) -> Tenant:
+    async def fake_tenant_for_user(_claims: object, _session: object) -> Tenant:
         return tenant
 
     async def fake_portal(**kwargs: object) -> BillingPortalResponse:
         return BillingPortalResponse(url="https://sandbox-customer-portal.paddle.com/example")
 
-    monkeypatch.setattr("billing.routes.get_or_create_tenant_for_auth_user", fake_get_or_create)
+    monkeypatch.setattr("billing.routes._tenant_for_billing_user", fake_tenant_for_user)
     monkeypatch.setattr("billing.routes.create_tenant_billing_portal_url", fake_portal)
 
-    response = billing_api_client.post("/tenants/me/billing/portal")
+    response = billing_api_client.post("/billing/me/portal")
     assert response.status_code == 200
     assert response.json() == {"url": "https://sandbox-customer-portal.paddle.com/example"}
 

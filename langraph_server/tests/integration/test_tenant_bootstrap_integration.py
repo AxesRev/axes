@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 from slack_app.auth0 import require_auth0_claims
 
 from aegra_api.core.orm import get_session
+from tenant.internal import router as tenant_internal_router
 from tenant.routes import router as tenant_router
 
 
@@ -105,3 +106,64 @@ def test_get_my_app_integrations_returns_slack_integration(
             "config": {"team_id": "T01234567"},
         }
     ]
+
+
+@pytest.fixture
+def tenant_internal_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
+    monkeypatch.setattr("tenant.internal.tenant_settings.INTERNAL_API_SECRET", "test-internal-secret")
+
+    app = FastAPI()
+    app.include_router(tenant_internal_router)
+
+    async def override_session() -> AsyncMock:
+        session = AsyncMock()
+        yield session
+
+    app.dependency_overrides[get_session] = override_session
+    return TestClient(app)
+
+
+@pytest.mark.integration
+def test_resolve_tenant_requires_internal_secret(tenant_internal_client: TestClient) -> None:
+    response = tenant_internal_client.post(
+        "/internal/tenants/resolve",
+        json={"auth0_sub": "auth0|123", "email": "owner@example.com", "name": "Owner"},
+    )
+    assert response.status_code == 401
+
+
+@pytest.mark.integration
+def test_resolve_tenant_rejects_wrong_secret(tenant_internal_client: TestClient) -> None:
+    response = tenant_internal_client.post(
+        "/internal/tenants/resolve",
+        json={"auth0_sub": "auth0|123"},
+        headers={"X-Internal-Secret": "wrong"},
+    )
+    assert response.status_code == 401
+
+
+@pytest.mark.integration
+def test_resolve_tenant_returns_tenant(
+    tenant_internal_client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from tenant.models import Tenant
+
+    tenant = Tenant(id="tenant-new", name="Owner", email="owner@example.com", auth0_sub="auth0|123")
+
+    async def fake_get_or_create(**kwargs: object) -> Tenant:
+        return tenant
+
+    monkeypatch.setattr("tenant.internal.get_or_create_tenant_for_auth_user", fake_get_or_create)
+
+    response = tenant_internal_client.post(
+        "/internal/tenants/resolve",
+        json={"auth0_sub": "auth0|123", "email": "owner@example.com", "name": "Owner"},
+        headers={"X-Internal-Secret": "test-internal-secret"},
+    )
+    assert response.status_code == 200
+    assert response.json() == {
+        "id": "tenant-new",
+        "name": "Owner",
+        "email": "owner@example.com",
+    }
