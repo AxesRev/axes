@@ -39,7 +39,6 @@ COPY --from=builder /usr/local/lib/python${PY_VERSION}/site-packages/ /usr/local
 COPY --from=builder /usr/local/bin/ /usr/local/bin/
 
 COPY langraph_server/src/ ./
-COPY billing_service/src/ ./
 COPY slack_app ./slack_app
 COPY app_integrations ./app_integrations
 COPY tenant ./tenant

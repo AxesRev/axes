@@ -28,6 +28,7 @@ resource "kubernetes_secret_v1" "this" {
     SLACK_CLIENT_ID      = var.slack_client_id
     SLACK_CLIENT_SECRET  = var.slack_client_secret
     SLACK_BOT_TOKEN      = var.slack_bot_token
+    INTERNAL_API_SECRET  = var.internal_api_secret
   }
 
   type = "Opaque"
@@ -103,6 +104,7 @@ resource "kubernetes_deployment_v1" "this" {
               "SLACK_CLIENT_ID",
               "SLACK_CLIENT_SECRET",
               "SLACK_BOT_TOKEN",
+              "INTERNAL_API_SECRET",
             ])
             content {
               name = env.value

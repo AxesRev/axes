@@ -37,6 +37,10 @@ jobs:
             context: .
             dockerfile: slack_app/Dockerfile
             repository: axes/slack-app
+          - name: billing
+            context: .
+            dockerfile: billing_service/Dockerfile
+            repository: axes/billing
 
     steps:
       - uses: actions/checkout@v4

@@ -98,4 +98,5 @@ inputs = {
   slack_client_id      = get_env("SLACK_CLIENT_ID", "")
   slack_client_secret  = get_env("SLACK_CLIENT_SECRET", "")
   slack_bot_token      = get_env("SLACK_BOT_TOKEN", "")
+  internal_api_secret  = get_env("INTERNAL_API_SECRET", "")
 }

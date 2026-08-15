@@ -18,3 +18,18 @@ def test_import_billing_routes() -> None:
 
     assert router.prefix == "/billing"
     assert router.tags == ["billing"]
+
+
+@pytest.mark.unit
+def test_import_billing_app() -> None:
+    from billing.app import app, handler  # noqa: PLC0415
+
+    assert app.title == "Axes billing"
+    assert handler is not None
+
+
+@pytest.mark.unit
+def test_import_charge_usage_handler() -> None:
+    from billing.charge_usage import handler  # noqa: PLC0415
+
+    assert callable(handler)

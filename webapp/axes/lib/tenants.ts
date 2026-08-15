@@ -61,6 +61,10 @@ function apiBaseUrl(): string {
   return (process.env.AEGRA_API_URL ?? "http://127.0.0.1:8000").replace(/\/$/, "");
 }
 
+function billingApiBaseUrl(): string {
+  return (process.env.BILLING_API_URL ?? apiBaseUrl()).replace(/\/$/, "");
+}
+
 function publicApiBaseUrl(): string {
   return (process.env.AEGRA_PUBLIC_URL ?? apiBaseUrl()).replace(/\/$/, "");
 }
@@ -183,7 +187,7 @@ export function salesforceOrgId(integration: AppIntegrationRecord | null): strin
 }
 
 export async function fetchBillingStatusForAccessToken(accessToken: string): Promise<TenantBillingStatus> {
-  const response = await fetch(`${apiBaseUrl()}/billing/me`, {
+  const response = await fetch(`${billingApiBaseUrl()}/billing/me`, {
     method: "GET",
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -204,7 +208,7 @@ export async function fetchBillingStatusForAccessToken(accessToken: string): Pro
 }
 
 export async function fetchBillingPortalUrlForAccessToken(accessToken: string): Promise<string> {
-  const response = await fetch(`${apiBaseUrl()}/billing/me/portal`, {
+  const response = await fetch(`${billingApiBaseUrl()}/billing/me/portal`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${accessToken}`,

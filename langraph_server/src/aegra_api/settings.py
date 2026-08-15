@@ -7,7 +7,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from aegra_api import __version__
 
-_ENV_FILE: str = str(Path(__file__).resolve().parents[4] / ".env")
+_parents = Path(__file__).resolve().parents
+_ENV_FILE: str = str(_parents[4] / ".env") if len(_parents) > 4 else ""
 
 
 def parse_lower(v: str) -> str:
@@ -27,7 +28,7 @@ UpperStr = Annotated[str, BeforeValidator(parse_upper)]
 
 class EnvBase(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=_ENV_FILE,
+        env_file=_ENV_FILE or None,
         env_file_encoding="utf-8",
         extra="ignore",
     )

@@ -93,6 +93,12 @@ variable "slack_bot_token" {
   default   = ""
 }
 
+variable "internal_api_secret" {
+  description = "Shared secret for POST /internal/tenants/resolve."
+  type        = string
+  sensitive   = true
+}
+
 variable "tags" {
   type    = map(string)
   default = {}

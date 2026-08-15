@@ -38,7 +38,7 @@ async def _async_main() -> int:
 
     period_start, period_end = current_month_period()
     try:
-        await db_manager.initialize()
+        await db_manager.initialize_metadata()
         async with get_metadata_session_maker()() as session:
             result = await charge_monthly_usage_for_all_tenants(
                 session=session,
@@ -73,6 +73,14 @@ async def _async_main() -> int:
 
 def main() -> int:
     return asyncio.run(_async_main())
+
+
+def handler(_event: object, _context: object) -> dict[str, bool]:
+    """AWS Lambda entrypoint for the monthly usage charge."""
+    code = main()
+    if code != 0:
+        raise RuntimeError("monthly usage billing failed")
+    return {"ok": True}
 
 
 if __name__ == "__main__":

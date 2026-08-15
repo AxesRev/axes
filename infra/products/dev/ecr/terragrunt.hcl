@@ -11,5 +11,6 @@ inputs = {
     "axes/neo4j-mcp",
     "axes/langraph-server",
     "axes/slack-app",
+    "axes/billing",
   ]
 }
