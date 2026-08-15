@@ -34,5 +34,5 @@ inputs = {
   max_allocated_storage = 50
   multi_az              = false
   deletion_protection   = false
-  skip_final_snapshot   = true
+  skip_final_snapshot   = false
 }

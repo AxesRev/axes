@@ -3,6 +3,12 @@ resource "random_password" "master" {
   special = false
 }
 
+resource "random_id" "final_snapshot" {
+  count = var.skip_final_snapshot ? 0 : 1
+
+  byte_length = 4
+}
+
 resource "aws_db_subnet_group" "this" {
   name       = "${var.identifier}-subnets"
   subnet_ids = var.subnet_ids
@@ -88,8 +94,8 @@ resource "aws_db_instance" "this" {
 
   backup_retention_period = var.backup_retention_period
   deletion_protection     = var.deletion_protection
-  skip_final_snapshot     = var.skip_final_snapshot
-  final_snapshot_identifier = var.skip_final_snapshot ? null : "${var.identifier}-final"
+  skip_final_snapshot       = var.skip_final_snapshot
+  final_snapshot_identifier = var.skip_final_snapshot ? null : "${var.identifier}-final-${random_id.final_snapshot[0].hex}"
 
   db_name = var.db_name
 

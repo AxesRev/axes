@@ -86,9 +86,9 @@ variable "deletion_protection" {
 }
 
 variable "skip_final_snapshot" {
-  description = "Skip final snapshot on destroy."
+  description = "Skip final snapshot on destroy. Set false to keep a manual snapshot you can restore later."
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "tags" {
