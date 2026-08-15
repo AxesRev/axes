@@ -25,5 +25,6 @@ COPY --from=builder /var/lang/lib/python${PY_VERSION}/site-packages/ /var/lang/l
 COPY --from=builder /var/lang/bin/ /var/lang/bin/
 
 COPY billing_service/src/billing ${LAMBDA_TASK_ROOT}/billing
+COPY common ${LAMBDA_TASK_ROOT}/common
 
 CMD ["billing.app.handler"]

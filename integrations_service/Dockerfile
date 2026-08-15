@@ -25,5 +25,6 @@ COPY --from=builder /var/lang/lib/python${PY_VERSION}/site-packages/ /var/lang/l
 COPY --from=builder /var/lang/bin/ /var/lang/bin/
 
 COPY integrations_service/src/integrations ${LAMBDA_TASK_ROOT}/integrations
+COPY common ${LAMBDA_TASK_ROOT}/common
 
 CMD ["integrations.app.handler"]

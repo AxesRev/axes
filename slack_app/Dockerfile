@@ -39,6 +39,7 @@ COPY --from=builder /usr/local/lib/python${PY_VERSION}/site-packages/ /usr/local
 COPY --from=builder /usr/local/bin/ /usr/local/bin/
 
 COPY slack_app ./slack_app
+COPY common ./common
 
 EXPOSE 8000
 

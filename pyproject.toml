@@ -60,7 +60,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["aegra_api", "billing", "tenants", "integrations", "app_integrations", "slack_app", "tenant"]
+known-first-party = ["aegra_api", "billing", "tenants", "integrations", "common", "app_integrations", "slack_app", "tenant"]
 
 # Note: pytest config is in each package's pyproject.toml
 # Run tests from: langraph_server/

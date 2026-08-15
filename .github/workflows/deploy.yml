@@ -51,14 +51,16 @@ jobs:
               - 'neo4j_mcp/**'
             slack_app:
               - 'slack_app/**'
-              - 'app_integrations/**'
-              - 'tenant/**'
+              - 'common/**'
             billing:
               - 'billing_service/**'
+              - 'common/**'
             tenant:
               - 'tenant_service/**'
+              - 'common/**'
             integrations:
               - 'integrations_service/**'
+              - 'common/**'
 
       - name: Set change flags
         id: flags

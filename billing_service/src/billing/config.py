@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from pathlib import Path
-from urllib.parse import quote_plus
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from common.db import build_database_url
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 _ENV_FILE = str(_REPO_ROOT / ".env")
@@ -39,15 +40,14 @@ class BillingSettings(BaseSettings):
 
     @property
     def database_url(self) -> str:
-        if self.DATABASE_URL:
-            url = self.DATABASE_URL
-            if url.startswith("postgresql://") and "+asyncpg" not in url:
-                url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
-            return url
-        ssl = f"?ssl={self.POSTGRES_SSLMODE}" if self.POSTGRES_SSLMODE else ""
-        return (
-            f"postgresql+asyncpg://{quote_plus(self.POSTGRES_USER)}:{quote_plus(self.POSTGRES_PASSWORD)}"
-            f"@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}{ssl}"
+        return build_database_url(
+            database_url=self.DATABASE_URL,
+            postgres_user=self.POSTGRES_USER,
+            postgres_password=self.POSTGRES_PASSWORD,
+            postgres_host=self.POSTGRES_HOST,
+            postgres_port=self.POSTGRES_PORT,
+            postgres_db=self.POSTGRES_DB,
+            postgres_sslmode=self.POSTGRES_SSLMODE,
         )
 
 

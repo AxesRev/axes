@@ -40,11 +40,11 @@ ignore = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["integrations"]
+known-first-party = ["integrations", "common"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
-pythonpath = ["src"]
+pythonpath = ["src", ".."]
 testpaths = ["tests"]
 markers = [
     "unit: unit tests",
