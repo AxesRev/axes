@@ -81,7 +81,7 @@ def test_health() -> None:
 
 @pytest.mark.integration
 def test_get_my_tenant_billing_returns_not_setup(billing_session: AsyncMock, monkeypatch: pytest.MonkeyPatch) -> None:
-    from tenant.models import Tenant
+    from billing.models import Tenant
 
     tenant = Tenant(
         id="tenant-new",
@@ -114,8 +114,8 @@ def test_get_my_tenant_billing_returns_not_setup(billing_session: AsyncMock, mon
 def test_create_my_tenant_billing_portal_returns_url(
     billing_session: AsyncMock, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    from billing.models import Tenant
     from billing.schemas import BillingPortalResponse
-    from tenant.models import Tenant
 
     tenant = Tenant(
         id="tenant-new",

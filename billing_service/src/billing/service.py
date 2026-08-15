@@ -7,14 +7,13 @@ from datetime import UTC, datetime
 from typing import Any
 
 import structlog
-from aegra_api.core.orm import Run
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from billing.config import billing_settings
+from billing.models import Run, Tenant, UserIdentity
 from billing.paddle_client import PaddleApiError, charge_subscription_usage, create_customer_portal_url
 from billing.schemas import BillingChargeUsageResponse, BillingPortalResponse, TenantBillingStatusResponse
-from tenant.models import Tenant, UserIdentity
 
 logger = structlog.getLogger(__name__)
 

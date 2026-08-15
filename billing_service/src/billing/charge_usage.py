@@ -12,11 +12,10 @@ import json
 import sys
 
 import structlog
-from aegra_api.core.database import db_manager
-from aegra_api.core.orm import get_metadata_session_maker
 from sqlalchemy.exc import SQLAlchemyError
 
 from billing.config import billing_settings
+from billing.db import close_engine, session_scope
 from billing.service import charge_monthly_usage_for_all_tenants, current_month_period
 
 logger = structlog.getLogger(__name__)
@@ -38,8 +37,7 @@ async def _async_main() -> int:
 
     period_start, period_end = current_month_period()
     try:
-        await db_manager.initialize_metadata()
-        async with get_metadata_session_maker()() as session:
+        async with session_scope() as session:
             result = await charge_monthly_usage_for_all_tenants(
                 session=session,
                 period_start=period_start,
@@ -49,8 +47,7 @@ async def _async_main() -> int:
         print(f"error: {error}", file=sys.stderr)
         return 1
     finally:
-        if db_manager.engine is not None:
-            await db_manager.close()
+        await close_engine()
 
     print(
         json.dumps(

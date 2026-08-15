@@ -140,6 +140,8 @@ name = "aegra-billing-service"
 version = "0.1.0"
 source = { editable = "billing_service" }
 dependencies = [
+    { name = "asyncpg" },
+    { name = "greenlet" },
     { name = "httpx" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
@@ -156,6 +158,8 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "asyncpg", specifier = ">=0.30.0" },
+    { name = "greenlet", specifier = ">=3.1.0" },
     { name = "httpx", specifier = ">=0.27.0" },
     { name = "pydantic", specifier = ">=2.11.7" },
     { name = "pydantic-settings", specifier = ">=2.12.0" },

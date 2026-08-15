@@ -53,8 +53,6 @@ jobs:
               - 'tenant/**'
             billing:
               - 'billing_service/**'
-              - 'tenant/**'
-              - 'langraph_server/src/aegra_api/**'
 
       - name: Set change flags
         id: flags

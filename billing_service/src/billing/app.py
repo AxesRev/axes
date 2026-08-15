@@ -8,10 +8,8 @@ import hmac
 import json
 from typing import Any
 
-from aegra_api.core.database import db_manager
-from aegra_api.core.orm import get_metadata_session_maker
-
 from billing.config import billing_settings
+from billing.db import session_scope
 from billing.errors import HttpError
 from billing.routes import create_my_billing_portal, get_my_billing, paddle_billing_webhook
 
@@ -75,8 +73,7 @@ def _tenant_id(event: dict[str, Any]) -> str:
 
 
 async def _with_session():
-    await db_manager.initialize_metadata()
-    return get_metadata_session_maker()()
+    return session_scope()
 
 
 async def _handle(event: dict[str, Any]) -> dict[str, object]:

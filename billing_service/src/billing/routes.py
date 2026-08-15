@@ -9,10 +9,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from billing.config import billing_settings
 from billing.errors import HttpError
+from billing.models import Tenant
 from billing.paddle_client import PaddleApiError
 from billing.service import create_tenant_billing_portal_url, get_tenant_billing_status, handle_paddle_webhook_event
 from billing.webhooks import WebhookVerificationError, verify_paddle_webhook_signature
-from tenant.models import Tenant
 
 logger = structlog.getLogger(__name__)
 
