@@ -61,6 +61,10 @@ function apiBaseUrl(): string {
   return (process.env.AEGRA_API_URL ?? "http://127.0.0.1:8000").replace(/\/$/, "");
 }
 
+function tenantApiBaseUrl(): string {
+  return (process.env.TENANT_API_URL ?? apiBaseUrl()).replace(/\/$/, "");
+}
+
 function billingApiBaseUrl(): string {
   return (process.env.BILLING_API_URL ?? apiBaseUrl()).replace(/\/$/, "");
 }
@@ -86,7 +90,7 @@ export function buildSalesforceConnectUrl(tenantId: string): string {
 }
 
 export async function resolveTenantForAccessToken(accessToken: string): Promise<TenantRecord> {
-  const response = await fetch(`${apiBaseUrl()}/tenants/me`, {
+  const response = await fetch(`${tenantApiBaseUrl()}/tenants/me`, {
     method: "GET",
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -117,7 +121,7 @@ export async function resolveTenantForSession(session: SessionData): Promise<Ten
 export async function fetchAppIntegrationsForAccessToken(
   accessToken: string,
 ): Promise<AppIntegrationRecord[]> {
-  const response = await fetch(`${apiBaseUrl()}/tenants/me/integrations`, {
+  const response = await fetch(`${tenantApiBaseUrl()}/tenants/me/integrations`, {
     method: "GET",
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -244,7 +248,7 @@ export async function fetchBillingPortalUrlForTenant(tenantId: string): Promise<
 }
 
 export async function fetchAgentContextForAccessToken(accessToken: string): Promise<AgentContextRecord> {
-  const response = await fetch(`${apiBaseUrl()}/tenants/me/agent-context`, {
+  const response = await fetch(`${tenantApiBaseUrl()}/tenants/me/agent-context`, {
     method: "GET",
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -268,7 +272,7 @@ export async function updateAgentContextForAccessToken(
   accessToken: string,
   content: string,
 ): Promise<AgentContextRecord> {
-  const response = await fetch(`${apiBaseUrl()}/tenants/me/agent-context`, {
+  const response = await fetch(`${tenantApiBaseUrl()}/tenants/me/agent-context`, {
     method: "PUT",
     headers: {
       Authorization: `Bearer ${accessToken}`,

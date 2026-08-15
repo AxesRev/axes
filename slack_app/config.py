@@ -28,8 +28,6 @@ class SlackSettings(BaseSettings):
     SLACK_APP_CONFIG_TOKEN: str = ""
     SERVER_URL: str = "http://localhost:8000"
     LANGGRAPH_API_URL: str = "http://localhost:8000"
-    AUTH0_DOMAIN: str = ""
-    AUTH0_CLIENT_ID: str = ""
 
     @property
     def slack_oauth_redirect_uri(self) -> str:

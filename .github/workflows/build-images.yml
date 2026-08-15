@@ -41,6 +41,10 @@ jobs:
             context: .
             dockerfile: billing_service/Dockerfile
             repository: axes/billing
+          - name: tenant
+            context: .
+            dockerfile: tenant_service/Dockerfile
+            repository: axes/tenant
 
     steps:
       - uses: actions/checkout@v4

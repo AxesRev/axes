@@ -1,1 +1,1 @@
-"""Tenant domain: organisations, integrations, and Auth0-provisioned API."""
+"""Tenant domain models used by Slack, GitHub, Salesforce, and Alembic."""

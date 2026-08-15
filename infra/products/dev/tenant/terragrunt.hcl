@@ -1,0 +1,63 @@
+include "root" {
+  path = find_in_parent_folders("root.hcl")
+}
+
+terraform {
+  source = "../../../modules/tenant"
+}
+
+dependency "vpc" {
+  config_path = "../vpc"
+
+  mock_outputs = {
+    private_subnets              = ["subnet-a", "subnet-b"]
+    db_clients_security_group_id = "sg-mock"
+  }
+  mock_outputs_allowed_terraform_commands = ["validate", "plan", "destroy"]
+}
+
+dependency "ecr" {
+  config_path = "../ecr"
+
+  mock_outputs = {
+    repository_urls = {
+      "axes/tenant" = "042993547532.dkr.ecr.eu-west-1.amazonaws.com/axes/tenant"
+    }
+  }
+  mock_outputs_allowed_terraform_commands = ["validate", "plan", "destroy"]
+}
+
+dependency "rds" {
+  config_path = "../rds"
+
+  mock_outputs = {
+    address         = "localhost"
+    port            = 5432
+    db_name         = "axes"
+    master_username = "postgres"
+    master_password = "mock-password"
+  }
+  mock_outputs_allowed_terraform_commands = ["validate", "plan", "destroy"]
+}
+
+locals {
+  env = read_terragrunt_config(find_in_parent_folders("env.hcl"))
+}
+
+inputs = {
+  name = "${local.env.locals.environment}-tenant"
+
+  image = "${dependency.ecr.outputs.repository_urls["axes/tenant"]}:${get_env("TENANT_IMAGE_TAG", get_env("IMAGE_TAG", "latest"))}"
+
+  private_subnet_ids           = dependency.vpc.outputs.private_subnets
+  db_clients_security_group_id = dependency.vpc.outputs.db_clients_security_group_id
+
+  postgres_host     = dependency.rds.outputs.address
+  postgres_port     = dependency.rds.outputs.port
+  postgres_db       = dependency.rds.outputs.db_name
+  postgres_user     = dependency.rds.outputs.master_username
+  postgres_password = dependency.rds.outputs.master_password
+
+  auth0_domain    = get_env("AUTH0_DOMAIN", "")
+  auth0_client_id = get_env("AUTH0_CLIENT_ID", "")
+}

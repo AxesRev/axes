@@ -12,5 +12,6 @@ inputs = {
     "axes/langraph-server",
     "axes/slack-app",
     "axes/billing",
+    "axes/tenant",
   ]
 }

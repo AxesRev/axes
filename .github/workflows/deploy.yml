@@ -32,6 +32,7 @@ jobs:
       neo4j_mcp: ${{ steps.flags.outputs.neo4j_mcp }}
       slack_app: ${{ steps.flags.outputs.slack_app }}
       billing: ${{ steps.flags.outputs.billing }}
+      tenant: ${{ steps.flags.outputs.tenant }}
     steps:
       - uses: actions/checkout@v4
 
@@ -53,6 +54,8 @@ jobs:
               - 'tenant/**'
             billing:
               - 'billing_service/**'
+            tenant:
+              - 'tenant_service/**'
 
       - name: Set change flags
         id: flags
@@ -63,12 +66,14 @@ jobs:
             echo "neo4j_mcp=true" >> "$GITHUB_OUTPUT"
             echo "slack_app=true" >> "$GITHUB_OUTPUT"
             echo "billing=true" >> "$GITHUB_OUTPUT"
+            echo "tenant=true" >> "$GITHUB_OUTPUT"
           else
             echo "infra=${{ steps.filter.outputs.infra }}" >> "$GITHUB_OUTPUT"
             echo "langraph_server=${{ steps.filter.outputs.langraph_server }}" >> "$GITHUB_OUTPUT"
             echo "neo4j_mcp=${{ steps.filter.outputs.neo4j_mcp }}" >> "$GITHUB_OUTPUT"
             echo "slack_app=${{ steps.filter.outputs.slack_app }}" >> "$GITHUB_OUTPUT"
             echo "billing=${{ steps.filter.outputs.billing }}" >> "$GITHUB_OUTPUT"
+            echo "tenant=${{ steps.filter.outputs.tenant }}" >> "$GITHUB_OUTPUT"
           fi
 
   apply-infra:
@@ -104,6 +109,7 @@ jobs:
           --filter '!./langraph-server'
           --filter '!./slack-app'
           --filter '!./billing'
+          --filter '!./tenant'
           -- apply
 
   image-langraph-server:
@@ -370,8 +376,74 @@ jobs:
           fi
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
+  image-tenant:
+    needs: [detect-changes, apply-infra]
+    if: |
+      always()
+      && !cancelled()
+      && (needs.apply-infra.result == 'success' || needs.apply-infra.result == 'skipped')
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::042993547532:role/github-actions-deploy
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: actions/checkout@v4
+        if: needs.detect-changes.outputs.tenant == 'true'
+
+      - name: Login to Amazon ECR
+        id: ecr
+        if: needs.detect-changes.outputs.tenant == 'true'
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up QEMU
+        if: needs.detect-changes.outputs.tenant == 'true'
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        if: needs.detect-changes.outputs.tenant == 'true'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push
+        if: needs.detect-changes.outputs.tenant == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: tenant_service/Dockerfile
+          platforms: linux/arm64
+          push: true
+          tags: ${{ steps.ecr.outputs.registry }}/axes/tenant:${{ env.IMAGE_TAG }}
+          cache-from: type=gha,scope=tenant-arm64
+          cache-to: type=gha,mode=max,scope=tenant-arm64
+
+      - name: Resolve image tag
+        id: tag
+        env:
+          REPOSITORY: axes/tenant
+          BUILD: ${{ needs.detect-changes.outputs.tenant }}
+        run: |
+          if [ "$BUILD" = "true" ]; then
+            echo "tag=${{ env.IMAGE_TAG }}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          TAGS=$(aws ecr describe-images \
+            --repository-name "$REPOSITORY" \
+            --query 'sort_by(imageDetails,& imagePushedAt)[-1].imageTags' \
+            --output text)
+          TAG=$(echo "$TAGS" | tr '\t' '\n' | grep -v '^latest$' | head -n1)
+          TAG=${TAG:-$(echo "$TAGS" | tr '\t' '\n' | head -n1)}
+          if [ -z "$TAG" ] || [ "$TAG" = "None" ]; then
+            echo "No images found in ECR repository $REPOSITORY" >&2
+            exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
   apply-apps:
-    needs: [apply-infra, image-langraph-server, image-neo4j-mcp, image-slack-app, image-billing]
+    needs: [apply-infra, image-langraph-server, image-neo4j-mcp, image-slack-app, image-billing, image-tenant]
     if: |
       always()
       && !cancelled()
@@ -380,6 +452,7 @@ jobs:
       && needs.image-neo4j-mcp.result == 'success'
       && needs.image-slack-app.result == 'success'
       && needs.image-billing.result == 'success'
+      && needs.image-tenant.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -409,11 +482,14 @@ jobs:
           NEO4J_MCP_IMAGE_TAG: ${{ needs.image-neo4j-mcp.outputs.tag }}
           SLACK_APP_IMAGE_TAG: ${{ needs.image-slack-app.outputs.tag }}
           BILLING_IMAGE_TAG: ${{ needs.image-billing.outputs.tag }}
+          TENANT_IMAGE_TAG: ${{ needs.image-tenant.outputs.tag }}
           SLACK_SIGNING_SECRET: ${{ secrets.SLACK_SIGNING_SECRET }}
           SLACK_CLIENT_ID: ${{ secrets.SLACK_CLIENT_ID }}
           SLACK_CLIENT_SECRET: ${{ secrets.SLACK_CLIENT_SECRET }}
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
           INTERNAL_API_SECRET: ${{ secrets.INTERNAL_API_SECRET }}
+          AUTH0_DOMAIN: ${{ secrets.AUTH0_DOMAIN }}
+          AUTH0_CLIENT_ID: ${{ secrets.AUTH0_CLIENT_ID }}
           PADDLE_API_KEY: ${{ secrets.PADDLE_API_KEY }}
           PADDLE_WEBHOOK_SECRET: ${{ secrets.PADDLE_WEBHOOK_SECRET }}
           PADDLE_USAGE_PRICE_ID: ${{ secrets.PADDLE_USAGE_PRICE_ID }}
@@ -423,4 +499,5 @@ jobs:
           --filter './langraph-server'
           --filter './slack-app'
           --filter './billing'
+          --filter './tenant'
           -- apply

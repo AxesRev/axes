@@ -13,7 +13,7 @@ COPY langraph_server/pyproject.toml langraph_server/README.md langraph_server/
 COPY graph_service/pyproject.toml graph_service/pyproject.toml
 COPY neo4j_mcp/pyproject.toml neo4j_mcp/pyproject.toml
 
-RUN uv export --frozen --package aegra-billing-service --no-emit-project --no-dev --format=requirements-txt > requirements.txt && \
+RUN uv export --frozen --package aegra-tenant-service --no-emit-project --no-dev --format=requirements-txt > requirements.txt && \
     uv pip install --system --compile-bytecode -r requirements.txt && \
     rm requirements.txt
 
@@ -23,6 +23,6 @@ ARG PY_VERSION
 COPY --from=builder /var/lang/lib/python${PY_VERSION}/site-packages/ /var/lang/lib/python${PY_VERSION}/site-packages/
 COPY --from=builder /var/lang/bin/ /var/lang/bin/
 
-COPY billing_service/src/billing ${LAMBDA_TASK_ROOT}/billing
+COPY tenant_service/src/tenants ${LAMBDA_TASK_ROOT}/tenants
 
-CMD ["billing.app.handler"]
+CMD ["tenants.app.handler"]
