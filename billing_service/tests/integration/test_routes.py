@@ -1,4 +1,4 @@
-"""Integration tests for billing routes."""
+"""Integration tests for billing Lambda HTTP handler."""
 
 from __future__ import annotations
 
@@ -6,15 +6,13 @@ import hashlib
 import hmac
 import json
 import time
-from unittest.mock import AsyncMock, MagicMock
+from contextlib import asynccontextmanager
+from typing import Any
+from unittest.mock import AsyncMock
 
 import pytest
-from aegra_api.core.orm import get_session
-from fastapi import FastAPI
-from fastapi.testclient import TestClient
-from slack_app.auth0 import require_auth0_claims
 
-from billing.routes import router as billing_router
+from billing.app import handler
 
 
 def _webhook_signature(*, body: bytes, secret: str) -> str:
@@ -24,49 +22,65 @@ def _webhook_signature(*, body: bytes, secret: str) -> str:
     return f"ts={timestamp};h1={signature}"
 
 
+def _event(
+    *,
+    method: str,
+    path: str,
+    headers: dict[str, str] | None = None,
+    body: str | bytes | None = None,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "rawPath": path,
+        "requestContext": {"http": {"method": method}},
+        "headers": headers or {},
+        "isBase64Encoded": False,
+    }
+    if body is not None:
+        payload["body"] = body.decode() if isinstance(body, bytes) else body
+    return payload
+
+
+def _invoke(**kwargs: Any) -> tuple[int, dict[str, object]]:
+    response = handler(_event(**kwargs), None)
+    return int(response["statusCode"]), json.loads(str(response["body"]))
+
+
 @pytest.fixture
-def billing_api_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
-    monkeypatch.setattr("slack_app.config.slack_settings.AUTH0_DOMAIN", "dev-example.us.auth0.com")
-    monkeypatch.setattr("slack_app.config.slack_settings.AUTH0_CLIENT_ID", "test-client-id")
-    monkeypatch.setattr("billing.config.billing_settings.PADDLE_API_KEY", "test_sdbx_key")
+def billing_session(monkeypatch: pytest.MonkeyPatch) -> AsyncMock:
+    session = AsyncMock()
 
-    app = FastAPI()
-    app.include_router(billing_router)
-
-    async def override_session() -> AsyncMock:
-        session = AsyncMock()
-        execute_result = MagicMock()
-        execute_result.scalar_one_or_none.return_value = None
-        session.execute = AsyncMock(return_value=execute_result)
-        session.commit = AsyncMock()
-        session.refresh = AsyncMock(side_effect=lambda tenant: setattr(tenant, "id", "tenant-new"))
-        session.add = MagicMock()
+    @asynccontextmanager
+    async def fake_session() -> Any:
         yield session
 
-    async def override_claims() -> dict[str, str]:
-        return {
-            "sub": "auth0|123",
-            "email": "owner@example.com",
-            "name": "Owner",
-        }
+    async def fake_with_session() -> Any:
+        return fake_session()
 
-    app.dependency_overrides[get_session] = override_session
-    app.dependency_overrides[require_auth0_claims] = override_claims
-    return TestClient(app)
+    monkeypatch.setattr("billing.app._with_session", fake_with_session)
+    monkeypatch.setattr(
+        "billing.app.claims_from_authorization",
+        lambda _authorization: {"sub": "auth0|123", "email": "owner@example.com", "name": "Owner"},
+    )
+    monkeypatch.setattr("billing.config.billing_settings.PADDLE_API_KEY", "test_sdbx_key")
+    return session
 
 
 @pytest.mark.integration
 def test_get_my_tenant_billing_requires_auth() -> None:
-    app = FastAPI()
-    app.include_router(billing_router)
-    response = TestClient(app).get("/billing/me")
-    assert response.status_code == 401
+    status_code, payload = _invoke(method="GET", path="/billing/me")
+    assert status_code == 401
+    assert payload["detail"] == "Missing bearer token"
 
 
 @pytest.mark.integration
-def test_get_my_tenant_billing_returns_not_setup(
-    billing_api_client: TestClient, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_health() -> None:
+    status_code, payload = _invoke(method="GET", path="/health")
+    assert status_code == 200
+    assert payload == {"status": "healthy", "service": "billing"}
+
+
+@pytest.mark.integration
+def test_get_my_tenant_billing_returns_not_setup(billing_session: AsyncMock, monkeypatch: pytest.MonkeyPatch) -> None:
     from tenant.models import Tenant
 
     tenant = Tenant(
@@ -81,9 +95,13 @@ def test_get_my_tenant_billing_returns_not_setup(
 
     monkeypatch.setattr("billing.routes._tenant_for_billing_user", fake_tenant_for_user)
 
-    response = billing_api_client.get("/billing/me")
-    assert response.status_code == 200
-    assert response.json() == {
+    status_code, payload = _invoke(
+        method="GET",
+        path="/billing/me",
+        headers={"authorization": "Bearer test"},
+    )
+    assert status_code == 200
+    assert payload == {
         "billing_setup": False,
         "paddle_customer_id": None,
         "paddle_subscription_id": None,
@@ -93,7 +111,7 @@ def test_get_my_tenant_billing_returns_not_setup(
 
 @pytest.mark.integration
 def test_create_my_tenant_billing_portal_returns_url(
-    billing_api_client: TestClient, monkeypatch: pytest.MonkeyPatch
+    billing_session: AsyncMock, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from billing.schemas import BillingPortalResponse
     from tenant.models import Tenant
@@ -116,14 +134,18 @@ def test_create_my_tenant_billing_portal_returns_url(
     monkeypatch.setattr("billing.routes._tenant_for_billing_user", fake_tenant_for_user)
     monkeypatch.setattr("billing.routes.create_tenant_billing_portal_url", fake_portal)
 
-    response = billing_api_client.post("/billing/me/portal")
-    assert response.status_code == 200
-    assert response.json() == {"url": "https://sandbox-customer-portal.paddle.com/example"}
+    status_code, payload = _invoke(
+        method="POST",
+        path="/billing/me/portal",
+        headers={"authorization": "Bearer test"},
+    )
+    assert status_code == 200
+    assert payload == {"url": "https://sandbox-customer-portal.paddle.com/example"}
 
 
 @pytest.mark.integration
 def test_paddle_billing_webhook_accepts_valid_event(
-    billing_api_client: TestClient, monkeypatch: pytest.MonkeyPatch
+    billing_session: AsyncMock, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     secret = "whsec_integration_test"
     monkeypatch.setattr("billing.config.billing_settings.PADDLE_WEBHOOK_SECRET", secret)
@@ -146,30 +168,30 @@ def test_paddle_billing_webhook_accepts_valid_event(
             },
         },
     ).encode()
-    response = billing_api_client.post(
-        "/billing/webhooks",
-        content=body,
-        headers={
-            "Content-Type": "application/json",
-            "Paddle-Signature": _webhook_signature(body=body, secret=secret),
-        },
+    status_code, payload = _invoke(
+        method="POST",
+        path="/billing/webhooks",
+        headers={"Paddle-Signature": _webhook_signature(body=body, secret=secret)},
+        body=body,
     )
 
-    assert response.status_code == 200
-    assert response.json() == {"ok": True}
+    assert status_code == 200
+    assert payload == {"ok": True}
     handled.assert_awaited_once()
 
 
 @pytest.mark.integration
 def test_paddle_billing_webhook_rejects_invalid_signature(
-    billing_api_client: TestClient, monkeypatch: pytest.MonkeyPatch
+    billing_session: AsyncMock, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr("billing.config.billing_settings.PADDLE_WEBHOOK_SECRET", "whsec_integration_test")
 
-    response = billing_api_client.post(
-        "/billing/webhooks",
-        json={"event_type": "subscription.created", "data": {}},
+    status_code, payload = _invoke(
+        method="POST",
+        path="/billing/webhooks",
         headers={"Paddle-Signature": "ts=1;h1=invalid"},
+        body=json.dumps({"event_type": "subscription.created", "data": {}}),
     )
 
-    assert response.status_code == 401
+    assert status_code == 401
+    assert "detail" in payload

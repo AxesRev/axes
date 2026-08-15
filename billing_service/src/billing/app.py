@@ -1,37 +1,94 @@
-"""Billing FastAPI app. Served by uvicorn locally and Mangum on Lambda."""
+"""API Gateway HTTP API (payload 2.0) Lambda handler for billing."""
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+import asyncio
+import base64
+import json
+from typing import Any
 
 from aegra_api.core.database import db_manager
-from fastapi import FastAPI
-from mangum import Mangum
+from aegra_api.core.orm import get_metadata_session_maker
 
-from billing.routes import router as billing_router
+from billing.auth import claims_from_authorization
+from billing.errors import HttpError
+from billing.routes import create_my_billing_portal, get_my_billing, paddle_billing_webhook
 
 
-@asynccontextmanager
-async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+def _json_response(status_code: int, payload: dict[str, object]) -> dict[str, object]:
+    return {
+        "statusCode": status_code,
+        "headers": {"content-type": "application/json"},
+        "body": json.dumps(payload),
+    }
+
+
+def _header(event: dict[str, Any], name: str) -> str | None:
+    headers = event.get("headers") or {}
+    target = name.lower()
+    for key, value in headers.items():
+        if key.lower() == target and isinstance(value, str):
+            return value
+    return None
+
+
+def _method_and_path(event: dict[str, Any]) -> tuple[str, str]:
+    context = event.get("requestContext") or {}
+    http = context.get("http") or {}
+    method = str(http.get("method") or event.get("httpMethod") or "GET").upper()
+    path = str(event.get("rawPath") or event.get("path") or "/")
+    if len(path) > 1:
+        path = path.rstrip("/")
+    return method, path
+
+
+def _body_bytes(event: dict[str, Any]) -> bytes:
+    body = event.get("body")
+    if body is None:
+        return b""
+    if event.get("isBase64Encoded"):
+        return base64.b64decode(body)
+    if isinstance(body, bytes):
+        return body
+    return str(body).encode()
+
+
+async def _with_session():
     await db_manager.initialize_metadata()
+    return get_metadata_session_maker()()
+
+
+async def _handle(event: dict[str, Any]) -> dict[str, object]:
+    method, path = _method_and_path(event)
+    if method == "GET" and path == "/health":
+        return _json_response(200, {"status": "healthy", "service": "billing"})
+
     try:
-        yield
-    finally:
-        await db_manager.close()
+        if method == "GET" and path == "/billing/me":
+            claims = claims_from_authorization(_header(event, "authorization"))
+            async with await _with_session() as session:
+                payload = await get_my_billing(claims=claims, session=session)
+            return _json_response(200, payload)
+
+        if method == "POST" and path == "/billing/me/portal":
+            claims = claims_from_authorization(_header(event, "authorization"))
+            async with await _with_session() as session:
+                payload = await create_my_billing_portal(claims=claims, session=session)
+            return _json_response(200, payload)
+
+        if method == "POST" and path == "/billing/webhooks":
+            async with await _with_session() as session:
+                payload = await paddle_billing_webhook(
+                    raw_body=_body_bytes(event),
+                    signature_header=_header(event, "paddle-signature"),
+                    session=session,
+                )
+            return _json_response(200, payload)
+    except HttpError as error:
+        return _json_response(error.status_code, {"detail": error.detail})
+
+    return _json_response(404, {"detail": "Not found"})
 
 
-app = FastAPI(
-    title="Axes billing",
-    description="Paddle billing status, customer portal, and webhooks",
-    lifespan=lifespan,
-)
-app.include_router(billing_router)
-
-
-@app.get("/health")
-async def health() -> dict[str, str]:
-    return {"status": "healthy", "service": "billing"}
-
-
-handler = Mangum(app, lifespan="auto")
+def handler(event: dict[str, Any], _context: object) -> dict[str, object]:
+    return asyncio.run(_handle(event))

@@ -11,7 +11,7 @@ COPY uv.lock ./
 
 RUN uv export --frozen --no-emit-project --format=requirements-txt > requirements.txt && \
     uv pip install --system --compile-bytecode -r requirements.txt && \
-    uv pip install --system --compile-bytecode mangum langgraph-sdk && \
+    uv pip install --system --compile-bytecode langgraph-sdk && \
     rm requirements.txt
 
 FROM public.ecr.aws/lambda/python:${PY_VERSION}
