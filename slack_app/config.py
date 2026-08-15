@@ -27,11 +27,16 @@ class SlackSettings(BaseSettings):
     SLACK_APP_ID: str = ""
     SLACK_APP_CONFIG_TOKEN: str = ""
     SERVER_URL: str = "http://localhost:8000"
+    INTEGRATIONS_PUBLIC_URL: str = ""
     LANGGRAPH_API_URL: str = "http://localhost:8000"
 
     @property
+    def integrations_public_url(self) -> str:
+        return (self.INTEGRATIONS_PUBLIC_URL or self.SERVER_URL).rstrip("/")
+
+    @property
     def slack_oauth_redirect_uri(self) -> str:
-        return f"{self.SERVER_URL.rstrip('/')}/slack/oauth/callback"
+        return f"{self.integrations_public_url}/app_integrations/slack/callback"
 
 
 slack_settings = SlackSettings()

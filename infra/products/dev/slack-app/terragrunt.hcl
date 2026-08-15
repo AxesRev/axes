@@ -38,6 +38,15 @@ dependency "ecr" {
   mock_outputs_allowed_terraform_commands = ["validate", "plan", "destroy"]
 }
 
+dependency "integrations" {
+  config_path = "../integrations"
+
+  mock_outputs = {
+    invoke_url = "https://example.execute-api.eu-west-1.amazonaws.com"
+  }
+  mock_outputs_allowed_terraform_commands = ["validate", "plan", "destroy"]
+}
+
 dependency "rds" {
   config_path = "../rds"
 
@@ -99,4 +108,5 @@ inputs = {
   slack_client_secret  = get_env("SLACK_CLIENT_SECRET", "")
   slack_bot_token      = get_env("SLACK_BOT_TOKEN", "")
   internal_api_secret  = get_env("INTERNAL_API_SECRET", "")
+  integrations_public_url = dependency.integrations.outputs.invoke_url
 }

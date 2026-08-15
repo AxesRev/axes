@@ -13,5 +13,6 @@ inputs = {
     "axes/slack-app",
     "axes/billing",
     "axes/tenant",
+    "axes/integrations",
   ]
 }

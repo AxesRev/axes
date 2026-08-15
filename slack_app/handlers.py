@@ -9,7 +9,6 @@ from langgraph_sdk import get_client
 
 from aegra_api.core.orm import get_session
 from app_integrations.github.identity_linking import handle_access_request
-from app_integrations.github.settings import github_settings
 from app_integrations.slack.service import get_or_create_slack_user_identity_for_team
 from slack_app.client import fetch_user_email, post_message
 from slack_app.config import slack_settings
@@ -86,7 +85,7 @@ async def handle_message_event(event: dict[str, Any], *, team_id: str | None = N
             identity,
             {"text": text, "channel": channel},
             session,
-            server_url=github_settings.SERVER_URL,
+            server_url=slack_settings.integrations_public_url,
         )
         break
 

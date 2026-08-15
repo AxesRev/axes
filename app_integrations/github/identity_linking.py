@@ -73,7 +73,7 @@ async def get_github_identity(
     token = await _create_oauth_state_token(slack_user_id, session)
     await session.commit()
 
-    connect_url = f"{server_url.rstrip('/')}/auth/github/start?token={token}"
+    connect_url = f"{server_url.rstrip('/')}/app_integrations/github/start?token={token}"
     logger.info("identity_not_linked", slack_user_id=slack_user_id, connect_url=connect_url)
     return IdentityNotLinked(status="NOT_LINKED", connect_url=connect_url)
 

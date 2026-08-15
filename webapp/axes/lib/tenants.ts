@@ -73,20 +73,24 @@ function publicApiBaseUrl(): string {
   return (process.env.AEGRA_PUBLIC_URL ?? apiBaseUrl()).replace(/\/$/, "");
 }
 
+function integrationsApiBaseUrl(): string {
+  return (process.env.INTEGRATIONS_API_URL ?? publicApiBaseUrl()).replace(/\/$/, "");
+}
+
 export function buildSlackInstallUrl(tenantId: string): string {
-  return `${publicApiBaseUrl()}/slack/oauth/install?tenant_id=${encodeURIComponent(tenantId)}`;
+  return `${integrationsApiBaseUrl()}/app_integrations/slack/install?tenant_id=${encodeURIComponent(tenantId)}`;
 }
 
 export function buildGithubInstallUrl(tenantId: string): string {
-  return `${publicApiBaseUrl()}/auth/github/install?tenant_id=${encodeURIComponent(tenantId)}`;
+  return `${integrationsApiBaseUrl()}/app_integrations/github/install?tenant_id=${encodeURIComponent(tenantId)}`;
 }
 
 export function buildSalesforceInstallUrl(tenantId: string): string {
-  return `${publicApiBaseUrl()}/auth/salesforce/install?tenant_id=${encodeURIComponent(tenantId)}`;
+  return `${integrationsApiBaseUrl()}/app_integrations/salesforce/install?tenant_id=${encodeURIComponent(tenantId)}`;
 }
 
 export function buildSalesforceConnectUrl(tenantId: string): string {
-  return `${publicApiBaseUrl()}/auth/salesforce/connect?tenant_id=${encodeURIComponent(tenantId)}`;
+  return `${integrationsApiBaseUrl()}/app_integrations/salesforce/connect?tenant_id=${encodeURIComponent(tenantId)}`;
 }
 
 export async function resolveTenantForAccessToken(accessToken: string): Promise<TenantRecord> {

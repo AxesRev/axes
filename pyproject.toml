@@ -8,6 +8,7 @@ requires-python = ">=3.12"
 dependencies = [
     "aegra-billing-service",
     "aegra-tenant-service",
+    "aegra-integrations-service",
     "langchain-mcp-adapters>=0.2.1",
     "httpx>=0.27.0",
     "pygithub>=2.9.1",
@@ -22,9 +23,10 @@ package = false
 [tool.uv.sources]
 aegra-billing-service = { workspace = true }
 aegra-tenant-service = { workspace = true }
+aegra-integrations-service = { workspace = true }
 
 [tool.uv.workspace]
-members = ["langraph_server", "graph_service", "billing_service", "tenant_service", "neo4j_mcp"]
+members = ["langraph_server", "graph_service", "billing_service", "tenant_service", "integrations_service", "neo4j_mcp"]
 
 [dependency-groups]
 dev = [
@@ -58,7 +60,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["aegra_api", "billing", "tenants", "app_integrations", "slack_app", "tenant"]
+known-first-party = ["aegra_api", "billing", "tenants", "integrations", "app_integrations", "slack_app", "tenant"]
 
 # Note: pytest config is in each package's pyproject.toml
 # Run tests from: langraph_server/

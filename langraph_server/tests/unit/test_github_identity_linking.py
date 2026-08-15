@@ -81,7 +81,7 @@ async def test_get_github_identity_returns_connect_url_when_not_linked() -> None
     result = await get_github_identity(identity, session, server_url="http://localhost:8000")
 
     assert result.status == "NOT_LINKED"
-    assert "/auth/github/start?token=" in result.connect_url
+    assert "/app_integrations/github/start?token=" in result.connect_url
     session.add.assert_called_once()
     added = session.add.call_args[0][0]
     assert isinstance(added, OAuthState)

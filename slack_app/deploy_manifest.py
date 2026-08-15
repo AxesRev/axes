@@ -17,12 +17,13 @@ SLACK_API_BASE = "https://slack.com/api"
 
 
 def _apply_server_url(manifest: dict[str, Any]) -> dict[str, Any]:
-    """Replace manifest placeholder URLs with SERVER_URL from settings."""
+    """Replace manifest placeholder URLs with Slack events host and integrations OAuth host."""
     server_url = slack_settings.SERVER_URL.rstrip("/")
+    oauth_url = slack_settings.integrations_public_url
     updated = deepcopy(manifest)
 
     oauth_config = updated.setdefault("oauth_config", {})
-    oauth_config["redirect_urls"] = [f"{server_url}/slack/oauth/callback"]
+    oauth_config["redirect_urls"] = [f"{oauth_url}/app_integrations/slack/callback"]
 
     slash_commands = updated.get("features", {}).get("slash_commands", [])
     for command in slash_commands:

@@ -88,6 +88,11 @@ resource "kubernetes_deployment_v1" "this" {
           }
 
           env {
+            name  = "INTEGRATIONS_PUBLIC_URL"
+            value = var.integrations_public_url
+          }
+
+          env {
             name  = "LANGGRAPH_API_URL"
             value = var.langraph_api_url
           }

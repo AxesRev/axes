@@ -99,6 +99,11 @@ variable "internal_api_secret" {
   sensitive   = true
 }
 
+variable "integrations_public_url" {
+  description = "Public HTTPS URL of the integrations Lambda (Slack OAuth callback and GitHub connect links)."
+  type        = string
+}
+
 variable "tags" {
   type    = map(string)
   default = {}

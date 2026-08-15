@@ -22,16 +22,6 @@ async def slack_commands(req: Request) -> Response:
     return await _handler.handle(req)
 
 
-@router.get("/slack/oauth/install")
-async def slack_install(req: Request) -> Response:
-    return await _handler.handle(req)
-
-
-@router.get("/slack/oauth/callback")
-async def slack_oauth_callback(req: Request) -> Response:
-    return await _handler.handle(req)
-
-
 @router.get("/slack/health")
 async def slack_health() -> dict[str, str]:
     return {"status": "healthy", "service": "slack_app"}
