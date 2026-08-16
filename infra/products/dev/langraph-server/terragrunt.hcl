@@ -50,4 +50,5 @@ inputs = {
   image = "${dependency.ecr.outputs.repository_urls["axes/langraph-server"]}:${get_env("LANGRAPH_SERVER_IMAGE_TAG", get_env("IMAGE_TAG", "latest"))}"
 
   ssm_generated_parameter = "/axes/${local.env.locals.environment}/generated"
+  ssm_secrets_parameter   = "/axes/${local.env.locals.environment}/secrets"
 }

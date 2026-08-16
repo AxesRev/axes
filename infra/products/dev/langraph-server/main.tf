@@ -1,11 +1,17 @@
 locals {
   migrate_job_name = "langraph-server-migrate-${substr(sha1(var.image), 0, 10)}"
   generated        = module.generated.values
+  secrets          = module.secrets.values
 }
 
 module "generated" {
   source         = "../../../modules/ssm-secrets"
   parameter_name = var.ssm_generated_parameter
+}
+
+module "secrets" {
+  source         = "../../../modules/ssm-secrets"
+  parameter_name = var.ssm_secrets_parameter
 }
 
 resource "kubernetes_namespace_v1" "this" {
@@ -29,6 +35,21 @@ resource "kubernetes_secret_v1" "postgres" {
     POSTGRES_DB       = local.generated["POSTGRES_DB"]
     POSTGRES_USER     = local.generated["POSTGRES_USER"]
     POSTGRES_PASSWORD = local.generated["POSTGRES_PASSWORD"]
+  })
+
+  type = "Opaque"
+}
+
+resource "kubernetes_secret_v1" "salesforce" {
+  metadata {
+    name      = "langraph-server-salesforce"
+    namespace = kubernetes_namespace_v1.this.metadata[0].name
+  }
+
+  data = sensitive({
+    SALESFORCE_CLIENT_ID   = local.secrets["SALESFORCE_CLIENT_ID"]
+    SALESFORCE_PRIVATE_KEY = local.secrets["SALESFORCE_PRIVATE_KEY"]
+    SALESFORCE_LOGIN_URL   = local.secrets["SALESFORCE_LOGIN_URL"]
   })
 
   type = "Opaque"
@@ -222,6 +243,36 @@ resource "kubernetes_deployment_v1" "this" {
               secret_key_ref {
                 name = kubernetes_secret_v1.postgres.metadata[0].name
                 key  = "POSTGRES_PASSWORD"
+              }
+            }
+          }
+
+          env {
+            name = "SALESFORCE_CLIENT_ID"
+            value_from {
+              secret_key_ref {
+                name = kubernetes_secret_v1.salesforce.metadata[0].name
+                key  = "SALESFORCE_CLIENT_ID"
+              }
+            }
+          }
+
+          env {
+            name = "SALESFORCE_PRIVATE_KEY"
+            value_from {
+              secret_key_ref {
+                name = kubernetes_secret_v1.salesforce.metadata[0].name
+                key  = "SALESFORCE_PRIVATE_KEY"
+              }
+            }
+          }
+
+          env {
+            name = "SALESFORCE_LOGIN_URL"
+            value_from {
+              secret_key_ref {
+                name = kubernetes_secret_v1.salesforce.metadata[0].name
+                key  = "SALESFORCE_LOGIN_URL"
               }
             }
           }
