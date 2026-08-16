@@ -27,19 +27,6 @@ dependency "ecr" {
   mock_outputs_allowed_terraform_commands = ["validate", "plan", "destroy"]
 }
 
-dependency "rds" {
-  config_path = "../rds"
-
-  mock_outputs = {
-    address         = "localhost"
-    port            = 5432
-    db_name         = "axes"
-    master_username = "postgres"
-    master_password = "mock-password"
-  }
-  mock_outputs_allowed_terraform_commands = ["validate", "plan", "destroy"]
-}
-
 locals {
   env = read_terragrunt_config(find_in_parent_folders("env.hcl"))
 }
@@ -52,11 +39,6 @@ inputs = {
   private_subnet_ids           = dependency.vpc.outputs.private_subnets
   db_clients_security_group_id = dependency.vpc.outputs.db_clients_security_group_id
 
-  postgres_host     = dependency.rds.outputs.address
-  postgres_port     = dependency.rds.outputs.port
-  postgres_db       = dependency.rds.outputs.db_name
-  postgres_user     = dependency.rds.outputs.master_username
-  postgres_password = dependency.rds.outputs.master_password
-
-  ssm_secrets_parameter = "/axes/${local.env.locals.environment}/secrets"
+  ssm_secrets_parameter   = "/axes/${local.env.locals.environment}/secrets"
+  ssm_generated_parameter = "/axes/${local.env.locals.environment}/generated"
 }

@@ -26,13 +26,14 @@ resource "aws_iam_role_policy_attachment" "vpc" {
 }
 
 locals {
-  secrets = module.secrets.values
+  secrets    = module.secrets.values
+  generated  = module.generated.values
   environment = {
-    POSTGRES_HOST                   = var.postgres_host
-    POSTGRES_PORT                   = tostring(var.postgres_port)
-    POSTGRES_DB                     = var.postgres_db
-    POSTGRES_USER                   = var.postgres_user
-    POSTGRES_PASSWORD               = var.postgres_password
+    POSTGRES_HOST                   = local.generated["POSTGRES_HOST"]
+    POSTGRES_PORT                   = local.generated["POSTGRES_PORT"]
+    POSTGRES_DB                     = local.generated["POSTGRES_DB"]
+    POSTGRES_USER                   = local.generated["POSTGRES_USER"]
+    POSTGRES_PASSWORD               = local.generated["POSTGRES_PASSWORD"]
     WEBAPP_URL                      = local.secrets["WEBAPP_URL"]
     SLACK_CLIENT_ID                 = local.secrets["SLACK_CLIENT_ID"]
     SLACK_CLIENT_SECRET             = local.secrets["SLACK_CLIENT_SECRET"]
@@ -52,6 +53,11 @@ locals {
 module "secrets" {
   source         = "../ssm-secrets"
   parameter_name = var.ssm_secrets_parameter
+}
+
+module "generated" {
+  source         = "../ssm-secrets"
+  parameter_name = var.ssm_generated_parameter
 }
 
 resource "aws_cloudwatch_log_group" "api" {

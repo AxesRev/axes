@@ -17,29 +17,13 @@ variable "db_clients_security_group_id" {
   type        = string
 }
 
-variable "postgres_host" {
-  type = string
-}
-
-variable "postgres_port" {
-  type = number
-}
-
-variable "postgres_db" {
-  type = string
-}
-
-variable "postgres_user" {
-  type = string
-}
-
-variable "postgres_password" {
-  type      = string
-  sensitive = true
-}
-
 variable "ssm_secrets_parameter" {
   description = "Existing SSM SecureString JSON. Not managed by Terraform."
+  type        = string
+}
+
+variable "ssm_generated_parameter" {
+  description = "Terraform-owned SSM SecureString JSON."
   type        = string
 }
 

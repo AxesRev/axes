@@ -1,5 +1,11 @@
 locals {
   migrate_job_name = "langraph-server-migrate-${substr(sha1(var.image), 0, 10)}"
+  generated        = module.generated.values
+}
+
+module "generated" {
+  source         = "../../../modules/ssm-secrets"
+  parameter_name = var.ssm_generated_parameter
 }
 
 resource "kubernetes_namespace_v1" "this" {
@@ -18,11 +24,11 @@ resource "kubernetes_secret_v1" "postgres" {
   }
 
   data = {
-    POSTGRES_HOST     = var.postgres_host
-    POSTGRES_PORT     = tostring(var.postgres_port)
-    POSTGRES_DB       = var.postgres_db
-    POSTGRES_USER     = var.postgres_user
-    POSTGRES_PASSWORD = var.postgres_password
+    POSTGRES_HOST     = local.generated["POSTGRES_HOST"]
+    POSTGRES_PORT     = local.generated["POSTGRES_PORT"]
+    POSTGRES_DB       = local.generated["POSTGRES_DB"]
+    POSTGRES_USER     = local.generated["POSTGRES_USER"]
+    POSTGRES_PASSWORD = local.generated["POSTGRES_PASSWORD"]
   }
 
   type = "Opaque"
