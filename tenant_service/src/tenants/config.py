@@ -28,7 +28,7 @@ class TenantSettings(BaseSettings):
     POSTGRES_HOST: str = "localhost"
     POSTGRES_PORT: str = "5433"
     POSTGRES_DB: str = "aegra"
-    POSTGRES_SSLMODE: str | None = None
+    POSTGRES_SSLMODE: str | None = "require"
     SQLALCHEMY_POOL_SIZE: int = 1
     SQLALCHEMY_MAX_OVERFLOW: int = 0
     DB_ECHO_LOG: bool = False

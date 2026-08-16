@@ -10,6 +10,7 @@ from langchain_mcp_adapters.client import MultiServerMCPClient
 from langgraph.prebuilt import ToolNode
 from langgraph.runtime import Runtime
 
+from aegra_api.settings import settings
 from examples.react_agent.context import Context
 from examples.react_agent.state import State
 
@@ -75,7 +76,7 @@ async def execute_tools(
 def _mcp_servers() -> dict[str, dict[str, Any]]:
     servers: dict[str, dict[str, Any]] = {}
 
-    neo4j_host = os.environ.get("NEO4J_MCP_HOST", "").strip()
+    neo4j_host = os.environ.get("NEO4J_MCP_HOST", settings.app.NEO4J_MCP_HOST).strip()
     if neo4j_host:
         servers["neo4j"] = {"transport": "http", "url": f"{neo4j_host.rstrip('/')}/mcp/"}
 

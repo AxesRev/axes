@@ -8,13 +8,8 @@ variable "image" {
   type        = string
 }
 
-variable "neo4j_bolt_uri" {
-  description = "Bolt URI for the Neo4j service."
-  type        = string
-}
-
 variable "auth_secret_name" {
-  description = "Kubernetes secret name with NEO4J_USER and NEO4J_PASSWORD."
+  description = "Kubernetes secret name with NEO4J_PASSWORD."
   type        = string
 }
 

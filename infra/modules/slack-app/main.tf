@@ -29,7 +29,6 @@ resource "kubernetes_secret_v1" "this" {
     POSTGRES_DB          = var.postgres_db
     POSTGRES_USER        = var.postgres_user
     POSTGRES_PASSWORD    = var.postgres_password
-    POSTGRES_SSLMODE     = "require"
     SLACK_SIGNING_SECRET = local.secrets["SLACK_SIGNING_SECRET"]
     SLACK_CLIENT_ID      = local.secrets["SLACK_CLIENT_ID"]
     SLACK_CLIENT_SECRET  = local.secrets["SLACK_CLIENT_SECRET"]
@@ -79,16 +78,6 @@ resource "kubernetes_deployment_v1" "this" {
           }
 
           env {
-            name  = "HOST"
-            value = "0.0.0.0"
-          }
-
-          env {
-            name  = "PORT"
-            value = "8000"
-          }
-
-          env {
             name  = "SERVER_URL"
             value = aws_apigatewayv2_api.this.api_endpoint
           }
@@ -98,11 +87,6 @@ resource "kubernetes_deployment_v1" "this" {
             value = var.integrations_public_url
           }
 
-          env {
-            name  = "LANGGRAPH_API_URL"
-            value = var.langraph_api_url
-          }
-
           dynamic "env" {
             for_each = toset([
               "POSTGRES_HOST",
@@ -110,7 +94,6 @@ resource "kubernetes_deployment_v1" "this" {
               "POSTGRES_DB",
               "POSTGRES_USER",
               "POSTGRES_PASSWORD",
-              "POSTGRES_SSLMODE",
               "SLACK_SIGNING_SECRET",
               "SLACK_CLIENT_ID",
               "SLACK_CLIENT_SECRET",

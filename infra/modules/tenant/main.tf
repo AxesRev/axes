@@ -33,9 +33,6 @@ locals {
     POSTGRES_DB             = var.postgres_db
     POSTGRES_USER           = var.postgres_user
     POSTGRES_PASSWORD       = var.postgres_password
-    POSTGRES_SSLMODE        = "require"
-    SQLALCHEMY_POOL_SIZE    = "1"
-    SQLALCHEMY_MAX_OVERFLOW = "0"
     AUTH0_DOMAIN            = local.secrets["AUTH0_DOMAIN"]
     AUTH0_CLIENT_ID         = local.secrets["AUTH0_CLIENT_ID"]
   }

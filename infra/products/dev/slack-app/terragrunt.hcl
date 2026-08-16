@@ -95,8 +95,6 @@ inputs = {
 
   image = "${dependency.ecr.outputs.repository_urls["axes/slack-app"]}:${get_env("SLACK_APP_IMAGE_TAG", get_env("IMAGE_TAG", "latest"))}"
 
-  langraph_api_url = "http://langraph-server.langraph-server.svc.cluster.local:8000"
-
   postgres_host     = dependency.rds.outputs.address
   postgres_port     = dependency.rds.outputs.port
   postgres_db       = dependency.rds.outputs.db_name

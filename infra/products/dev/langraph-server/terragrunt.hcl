@@ -35,10 +35,6 @@ dependency "rds" {
   mock_outputs_allowed_terraform_commands = ["validate", "plan", "destroy"]
 }
 
-locals {
-  env = read_terragrunt_config(find_in_parent_folders("env.hcl"))
-}
-
 generate "k8s_provider" {
   path      = "k8s_provider.tf"
   if_exists = "overwrite_terragrunt"
@@ -67,7 +63,4 @@ inputs = {
   postgres_db       = dependency.rds.outputs.db_name
   postgres_user     = dependency.rds.outputs.master_username
   postgres_password = dependency.rds.outputs.master_password
-
-  neo4j_mcp_host = local.env.locals.neo4j_mcp_host
-  auth_type      = "noop"
 }

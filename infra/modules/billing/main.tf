@@ -33,9 +33,6 @@ locals {
     POSTGRES_DB             = var.postgres_db
     POSTGRES_USER           = var.postgres_user
     POSTGRES_PASSWORD       = var.postgres_password
-    POSTGRES_SSLMODE        = "require"
-    SQLALCHEMY_POOL_SIZE    = "1"
-    SQLALCHEMY_MAX_OVERFLOW = "0"
     INTERNAL_API_SECRET     = local.secrets["INTERNAL_API_SECRET"]
     PADDLE_API_KEY          = local.secrets["PADDLE_API_KEY"]
     PADDLE_WEBHOOK_SECRET   = local.secrets["PADDLE_WEBHOOK_SECRET"]

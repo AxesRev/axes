@@ -44,9 +44,10 @@ class AppSettings(EnvBase):
     HOST: str = "0.0.0.0"  # nosec B104
     PORT: int = 8000
     SERVER_URL: str = "http://localhost:8000"
+    NEO4J_MCP_HOST: str = "http://neo4j-mcp.neo4j.svc.cluster.local:8811"
 
     # App logic
-    AEGRA_CONFIG: str = "aegra.json"  # Default config file path
+    AEGRA_CONFIG: str = "aegra.json"
     AUTH_TYPE: LowerStr = "noop"
     ENV_MODE: UpperStr = "LOCAL"
     DEBUG: bool = False
@@ -71,7 +72,7 @@ class DatabaseSettings(EnvBase):
     POSTGRES_HOST: str = "localhost"
     POSTGRES_PORT: str = "5433"
     POSTGRES_DB: str = "aegra"
-    POSTGRES_SSLMODE: str | None = None
+    POSTGRES_SSLMODE: str | None = "require"
     DB_ECHO_LOG: bool = False
 
     @staticmethod

@@ -271,12 +271,14 @@ version = "0.1.0"
 source = { editable = "neo4j_mcp" }
 dependencies = [
     { name = "mcp-neo4j-cypher" },
+    { name = "pydantic-settings" },
     { name = "python-dotenv" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "mcp-neo4j-cypher", specifier = ">=0.6.0" },
+    { name = "pydantic-settings", specifier = ">=2.12.0" },
     { name = "python-dotenv", specifier = ">=1.0.0" },
 ]
 

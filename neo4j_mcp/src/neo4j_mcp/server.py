@@ -1,57 +1,20 @@
 """Run Neo4j ``mcp-neo4j-cypher`` over HTTP for LangChain remote MCP clients.
 
-Loads a ``.env`` file from the current working directory or a parent (``python-dotenv`` lookup),
-then reads configuration only from environment variables understood by ``mcp-neo4j-cypher``.
-
-This entry forces ``NEO4J_TRANSPORT=http`` and sets defaults for a network-facing MCP listener unless
-already set in the environment.
-
-The LangGraph agent uses ``NEO4J_MCP_HOST`` only (HTTP base); Bolt credentials stay on this process.
+``Neo4jMcpSettings`` reads env (and ``.env``); missing keys use field defaults.
+Those values are passed into ``mcp-neo4j-cypher`` as Python kwargs.
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
-import os
-from argparse import Namespace
 
 from dotenv import load_dotenv
 from mcp_neo4j_cypher import server as neo4j_mcp_server
 from mcp_neo4j_cypher.server import create_mcp_server as _create_mcp_server
-from mcp_neo4j_cypher.utils import process_config
 from starlette.responses import JSONResponse
 
-# ``process_config`` expects an argparse-like namespace; configuration comes from env only.
-_PROCESS_CONFIG_ARGS = Namespace(
-    db_url=None,
-    username=None,
-    password=None,
-    database=None,
-    transport=None,
-    namespace=None,
-    server_host=None,
-    server_port=None,
-    server_path=None,
-    allow_origins=None,
-    allowed_hosts=None,
-    read_timeout=None,
-    read_only=False,
-    token_limit=None,
-    schema_sample_size=None,
-)
-
-
-def _force_http_listener_defaults() -> None:
-    """Apply defaults suitable for a long-lived remote MCP server."""
-    os.environ["NEO4J_TRANSPORT"] = "http"
-    os.environ.setdefault("NEO4J_MCP_SERVER_HOST", "0.0.0.0")
-    os.environ.setdefault("NEO4J_MCP_SERVER_PORT", "8811")
-    os.environ.setdefault("NEO4J_MCP_SERVER_PATH", "/mcp/")
-    os.environ.setdefault("NEO4J_READ_ONLY", "true")
-    os.environ.setdefault("NEO4J_SCHEMA_SAMPLE_SIZE", "1000")
-    if os.getenv("NEO4J_USERNAME") is None and os.getenv("NEO4J_USER"):
-        os.environ["NEO4J_USERNAME"] = os.environ["NEO4J_USER"]
+from neo4j_mcp.settings import Neo4jMcpSettings
 
 
 def _create_mcp_server_with_health(*args, **kwargs):
@@ -65,14 +28,26 @@ def _create_mcp_server_with_health(*args, **kwargs):
 
 
 def main() -> None:
-    """Load ``.env`` from cwd (or parents), apply HTTP defaults, run MCP from environment only."""
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s %(message)s")
     load_dotenv(override=False)
-    _force_http_listener_defaults()
+    settings = Neo4jMcpSettings()
 
     neo4j_mcp_server.create_mcp_server = _create_mcp_server_with_health
-    config = process_config(_PROCESS_CONFIG_ARGS)
-    asyncio.run(neo4j_mcp_server.main(**config))
+    asyncio.run(
+        neo4j_mcp_server.main(
+            db_url=settings.NEO4J_URI,
+            username=settings.username,
+            password=settings.NEO4J_PASSWORD,
+            database=settings.NEO4J_DATABASE,
+            transport=settings.NEO4J_TRANSPORT,
+            host=settings.NEO4J_MCP_SERVER_HOST,
+            port=settings.NEO4J_MCP_SERVER_PORT,
+            path=settings.NEO4J_MCP_SERVER_PATH,
+            allowed_hosts=settings.allowed_hosts,
+            read_only=settings.NEO4J_READ_ONLY,
+            schema_sample_size=settings.NEO4J_SCHEMA_SAMPLE_SIZE,
+        )
+    )
 
 
 if __name__ == "__main__":

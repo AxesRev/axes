@@ -31,7 +31,6 @@ dependency "neo4j" {
 
   mock_outputs = {
     namespace        = "neo4j"
-    bolt_uri         = "bolt://neo4j.neo4j.svc.cluster.local:7687"
     auth_secret_name = "neo4j-auth"
   }
   mock_outputs_allowed_terraform_commands = ["validate", "plan", "destroy"]
@@ -58,8 +57,7 @@ EOF
 }
 
 inputs = {
-  namespace         = dependency.neo4j.outputs.namespace
-  neo4j_bolt_uri   = dependency.neo4j.outputs.bolt_uri
+  namespace        = dependency.neo4j.outputs.namespace
   auth_secret_name = dependency.neo4j.outputs.auth_secret_name
 
   image = "${dependency.ecr.outputs.repository_urls["axes/neo4j-mcp"]}:${get_env("NEO4J_MCP_IMAGE_TAG", get_env("IMAGE_TAG", "latest"))}"

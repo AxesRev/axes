@@ -33,14 +33,3 @@ variable "postgres_password" {
   type      = string
   sensitive = true
 }
-
-variable "neo4j_mcp_host" {
-  description = "In-cluster Neo4j MCP HTTP base URL."
-  type        = string
-  default     = ""
-}
-
-variable "auth_type" {
-  type    = string
-  default = "noop"
-}

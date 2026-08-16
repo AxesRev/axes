@@ -23,7 +23,6 @@ resource "kubernetes_secret_v1" "postgres" {
     POSTGRES_DB       = var.postgres_db
     POSTGRES_USER     = var.postgres_user
     POSTGRES_PASSWORD = var.postgres_password
-    POSTGRES_SSLMODE  = "require"
   }
 
   type = "Opaque"
@@ -115,16 +114,6 @@ resource "kubernetes_job_v1" "migrate" {
             }
           }
 
-          env {
-            name = "POSTGRES_SSLMODE"
-            value_from {
-              secret_key_ref {
-                name = kubernetes_secret_v1.postgres.metadata[0].name
-                key  = "POSTGRES_SSLMODE"
-              }
-            }
-          }
-
           resources {
             requests = {
               cpu    = "100m"
@@ -182,26 +171,6 @@ resource "kubernetes_deployment_v1" "this" {
           }
 
           env {
-            name  = "HOST"
-            value = "0.0.0.0"
-          }
-
-          env {
-            name  = "PORT"
-            value = "8000"
-          }
-
-          env {
-            name  = "AUTH_TYPE"
-            value = var.auth_type
-          }
-
-          env {
-            name  = "AEGRA_CONFIG"
-            value = "aegra.json"
-          }
-
-          env {
             name = "POSTGRES_HOST"
             value_from {
               secret_key_ref {
@@ -248,24 +217,6 @@ resource "kubernetes_deployment_v1" "this" {
                 name = kubernetes_secret_v1.postgres.metadata[0].name
                 key  = "POSTGRES_PASSWORD"
               }
-            }
-          }
-
-          env {
-            name = "POSTGRES_SSLMODE"
-            value_from {
-              secret_key_ref {
-                name = kubernetes_secret_v1.postgres.metadata[0].name
-                key  = "POSTGRES_SSLMODE"
-              }
-            }
-          }
-
-          dynamic "env" {
-            for_each = var.neo4j_mcp_host != "" ? [1] : []
-            content {
-              name  = "NEO4J_MCP_HOST"
-              value = var.neo4j_mcp_host
             }
           }
 

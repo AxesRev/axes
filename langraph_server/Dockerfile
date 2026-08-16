@@ -54,4 +54,4 @@ EXPOSE 8000
 
 USER app
 
-CMD ["uvicorn", "aegra_api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["python", "-m", "aegra_api.main"]

@@ -46,11 +46,6 @@ variable "replicas" {
   default = 1
 }
 
-variable "langraph_api_url" {
-  description = "In-cluster langraph-server URL."
-  type        = string
-}
-
 variable "postgres_host" {
   type = string
 }

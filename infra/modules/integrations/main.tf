@@ -33,9 +33,6 @@ locals {
     POSTGRES_DB                     = var.postgres_db
     POSTGRES_USER                   = var.postgres_user
     POSTGRES_PASSWORD               = var.postgres_password
-    POSTGRES_SSLMODE                = "require"
-    SQLALCHEMY_POOL_SIZE            = "1"
-    SQLALCHEMY_MAX_OVERFLOW         = "0"
     WEBAPP_URL                      = local.secrets["WEBAPP_URL"]
     SLACK_CLIENT_ID                 = local.secrets["SLACK_CLIENT_ID"]
     SLACK_CLIENT_SECRET             = local.secrets["SLACK_CLIENT_SECRET"]
