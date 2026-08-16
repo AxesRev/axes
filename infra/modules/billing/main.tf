@@ -28,17 +28,17 @@ resource "aws_iam_role_policy_attachment" "vpc" {
 locals {
   secrets    = module.secrets.values
   generated  = module.generated.values
-  environment = {
+  environment = sensitive({
     POSTGRES_HOST           = local.generated["POSTGRES_HOST"]
     POSTGRES_PORT           = local.generated["POSTGRES_PORT"]
     POSTGRES_DB             = local.generated["POSTGRES_DB"]
     POSTGRES_USER           = local.generated["POSTGRES_USER"]
     POSTGRES_PASSWORD       = local.generated["POSTGRES_PASSWORD"]
-    INTERNAL_API_SECRET     = local.secrets["INTERNAL_API_SECRET"]
+    INTERNAL_API_SECRET     = local.generated["INTERNAL_API_SECRET"]
     PADDLE_API_KEY          = local.secrets["PADDLE_API_KEY"]
     PADDLE_WEBHOOK_SECRET   = local.secrets["PADDLE_WEBHOOK_SECRET"]
     PADDLE_USAGE_PRICE_ID   = local.secrets["PADDLE_USAGE_PRICE_ID"]
-  }
+  })
 }
 
 module "secrets" {

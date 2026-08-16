@@ -28,6 +28,11 @@ variable "ssm_secrets_parameter" {
   type        = string
 }
 
+variable "ssm_generated_parameter" {
+  description = "Terraform-owned SSM SecureString JSON."
+  type        = string
+}
+
 variable "tags" {
   type    = map(string)
   default = {}

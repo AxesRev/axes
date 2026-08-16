@@ -25,11 +25,11 @@ resource "kubernetes_secret_v1" "auth" {
     namespace = kubernetes_namespace_v1.this.metadata[0].name
   }
 
-  data = {
+  data = sensitive({
     NEO4J_AUTH     = local.auth
     NEO4J_USER     = "neo4j"
     NEO4J_PASSWORD = local.password
-  }
+  })
 
   type = "Opaque"
 }

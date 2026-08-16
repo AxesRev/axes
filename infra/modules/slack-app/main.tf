@@ -29,7 +29,7 @@ resource "kubernetes_secret_v1" "this" {
     namespace = kubernetes_namespace_v1.this.metadata[0].name
   }
 
-  data = {
+  data = sensitive({
     POSTGRES_HOST        = local.generated["POSTGRES_HOST"]
     POSTGRES_PORT        = local.generated["POSTGRES_PORT"]
     POSTGRES_DB          = local.generated["POSTGRES_DB"]
@@ -39,8 +39,8 @@ resource "kubernetes_secret_v1" "this" {
     SLACK_CLIENT_ID      = local.secrets["SLACK_CLIENT_ID"]
     SLACK_CLIENT_SECRET  = local.secrets["SLACK_CLIENT_SECRET"]
     SLACK_BOT_TOKEN      = local.secrets["SLACK_BOT_TOKEN"]
-    INTERNAL_API_SECRET  = local.secrets["INTERNAL_API_SECRET"]
-  }
+    INTERNAL_API_SECRET  = local.generated["INTERNAL_API_SECRET"]
+  })
 
   type = "Opaque"
 }

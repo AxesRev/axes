@@ -3,14 +3,21 @@ module "secrets" {
   parameter_name = var.ssm_secrets_parameter
 }
 
+module "generated" {
+  source         = "../ssm-secrets"
+  parameter_name = var.ssm_generated_parameter
+}
+
 locals {
-  secrets = module.secrets.values
+  secrets   = module.secrets.values
+  generated = module.generated.values
 
   from_deps = {
     APP_BASE_URL         = var.production_url
     TENANT_API_URL       = var.tenant_api_url
     BILLING_API_URL      = var.billing_api_url
     INTEGRATIONS_API_URL = var.integrations_api_url
+    INTERNAL_API_SECRET  = local.generated["INTERNAL_API_SECRET"]
   }
 
   optional_secret_keys = [
@@ -18,7 +25,6 @@ locals {
     "AUTH0_CLIENT_ID",
     "AUTH0_CLIENT_SECRET",
     "AUTH0_SECRET",
-    "INTERNAL_API_SECRET",
     "NEXT_PUBLIC_PADDLE_CLIENT_TOKEN",
     "NEXT_PUBLIC_PADDLE_BASE_PRICE_ID",
   ]
@@ -28,7 +34,7 @@ locals {
     if lookup(local.secrets, key, "") != ""
   }
 
-  environment = merge(local.from_deps, local.from_secrets)
+  environment = sensitive(merge(local.from_deps, local.from_secrets))
 }
 
 provider "vercel" {

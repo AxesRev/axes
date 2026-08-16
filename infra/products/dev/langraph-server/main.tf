@@ -23,13 +23,13 @@ resource "kubernetes_secret_v1" "postgres" {
     namespace = kubernetes_namespace_v1.this.metadata[0].name
   }
 
-  data = {
+  data = sensitive({
     POSTGRES_HOST     = local.generated["POSTGRES_HOST"]
     POSTGRES_PORT     = local.generated["POSTGRES_PORT"]
     POSTGRES_DB       = local.generated["POSTGRES_DB"]
     POSTGRES_USER     = local.generated["POSTGRES_USER"]
     POSTGRES_PASSWORD = local.generated["POSTGRES_PASSWORD"]
-  }
+  })
 
   type = "Opaque"
 }

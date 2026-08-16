@@ -28,7 +28,7 @@ resource "aws_iam_role_policy_attachment" "vpc" {
 locals {
   secrets   = module.secrets.values
   generated = module.generated.values
-  environment = {
+  environment = sensitive({
     POSTGRES_HOST                   = local.generated["POSTGRES_HOST"]
     POSTGRES_PORT                   = local.generated["POSTGRES_PORT"]
     POSTGRES_DB                     = local.generated["POSTGRES_DB"]
@@ -47,7 +47,7 @@ locals {
     SALESFORCE_CLIENT_ID            = local.secrets["SALESFORCE_CLIENT_ID"]
     SALESFORCE_PRIVATE_KEY          = local.secrets["SALESFORCE_PRIVATE_KEY"]
     SALESFORCE_LOGIN_URL            = local.secrets["SALESFORCE_LOGIN_URL"]
-  }
+  })
 }
 
 module "secrets" {

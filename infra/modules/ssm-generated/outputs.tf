@@ -8,6 +8,6 @@ output "arn" {
 
 output "values" {
   description = "Same map written to SSM."
-  value       = var.values
+  value       = local.values
   sensitive   = true
 }

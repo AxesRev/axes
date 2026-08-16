@@ -4,5 +4,5 @@ data "aws_ssm_parameter" "this" {
 }
 
 locals {
-  values = jsondecode(data.aws_ssm_parameter.this.value)
+  values = sensitive(jsondecode(data.aws_ssm_parameter.this.value))
 }
