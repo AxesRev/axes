@@ -26,15 +26,15 @@ resource "aws_iam_role_policy_attachment" "vpc" {
 }
 
 locals {
-  secrets    = module.secrets.values
-  generated  = module.generated.values
+  secrets   = module.secrets.values
+  generated = module.generated.values
   environment = {
     POSTGRES_HOST                   = local.generated["POSTGRES_HOST"]
     POSTGRES_PORT                   = local.generated["POSTGRES_PORT"]
     POSTGRES_DB                     = local.generated["POSTGRES_DB"]
     POSTGRES_USER                   = local.generated["POSTGRES_USER"]
     POSTGRES_PASSWORD               = local.generated["POSTGRES_PASSWORD"]
-    WEBAPP_URL                      = local.secrets["WEBAPP_URL"]
+    WEBAPP_URL                      = var.webapp_url
     SLACK_CLIENT_ID                 = local.secrets["SLACK_CLIENT_ID"]
     SLACK_CLIENT_SECRET             = local.secrets["SLACK_CLIENT_SECRET"]
     GITHUB_APP_SLUG                 = local.secrets["GITHUB_APP_SLUG"]

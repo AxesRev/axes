@@ -27,6 +27,11 @@ variable "ssm_generated_parameter" {
   type        = string
 }
 
+variable "webapp_url" {
+  description = "Public dashboard origin from the webapp stack output."
+  type        = string
+}
+
 variable "tags" {
   type    = map(string)
   default = {}
