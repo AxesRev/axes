@@ -8,7 +8,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from integrations.models import AppIntegration, Tenant, UserIdentity
+from common.models import AppIntegration, OAuthState, Tenant, UserIdentity
 
 logger = logging.getLogger(__name__)
 
@@ -142,8 +142,6 @@ async def link_github_identity(
     oauth_token: str,
     session: AsyncSession,
 ) -> UserIdentity:
-    from integrations.models import OAuthState
-
     result = await session.execute(select(UserIdentity).where(UserIdentity.slack_user_id == slack_user_id))
     identity = result.scalar_one_or_none()
     if identity is None:

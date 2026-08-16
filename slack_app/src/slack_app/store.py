@@ -10,7 +10,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from slack_app.models import AppIntegration, OAuthState, UserIdentity
+from common.models import AppIntegration, OAuthState, UserIdentity
 
 logger = logging.getLogger(__name__)
 

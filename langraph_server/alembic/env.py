@@ -4,15 +4,25 @@ import asyncio
 import sys
 import threading
 from logging.config import fileConfig
+from pathlib import Path
 
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
-from aegra_api.core import tenant_orm as _tenant_orm  # noqa: F401
 from aegra_api.core.orm import Base
 from aegra_api.settings import settings
 from alembic import context
+
+_here = Path(__file__).resolve()
+for _candidate in (Path.cwd(), _here.parents[1], _here.parents[2]):
+    if (_candidate / "common" / "models.py").is_file():
+        _common_root = str(_candidate)
+        if _common_root not in sys.path:
+            sys.path.insert(0, _common_root)
+        break
+
+from common.models import Base as SharedBase  # noqa: E402
 
 # This is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -35,7 +45,7 @@ if config.config_file_name is not None and threading.current_thread() is threadi
 
 # add your model's MetaData object here
 # for 'autogenerate' support
-target_metadata = Base.metadata
+target_metadata = [Base.metadata, SharedBase.metadata]
 
 # other values from the config, defined by the needs of env.py,
 # can be acquired:

@@ -11,6 +11,7 @@ import jwt as pyjwt
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from common.models import OAuthState, Tenant
 from integrations.config import settings
 from integrations.errors import HttpError
 from integrations.github_oauth import (
@@ -19,7 +20,6 @@ from integrations.github_oauth import (
     verify_github_oauth_state,
 )
 from integrations.http import html_response, public_base_url, query_params, redirect
-from integrations.models import OAuthState, Tenant
 from integrations.store import link_github_identity, upsert_github_app_integration
 
 logger = logging.getLogger(__name__)

@@ -1,4 +1,8 @@
-"""Tenant-scoped tables. Registered on ``aegra_api.core.orm.Base`` for Alembic."""
+"""Shared mappings for tenant-scoped Postgres tables.
+
+Schema is owned by Alembic in langraph_server. Services import these models
+and do not declare their own copies.
+"""
 
 from __future__ import annotations
 
@@ -8,9 +12,11 @@ from typing import Any
 
 from sqlalchemy import TIMESTAMP, ForeignKey, Index, Text, text
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
-from aegra_api.core.orm import Base
+
+class Base(DeclarativeBase):
+    pass
 
 
 class Tenant(Base):

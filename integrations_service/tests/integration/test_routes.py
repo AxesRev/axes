@@ -11,8 +11,8 @@ from urllib.parse import parse_qs, urlparse
 
 import pytest
 
+from common.models import OAuthState, Tenant
 from integrations.app import handler
-from integrations.models import OAuthState, Tenant
 
 _GITHUB_SECRET = "integration-test-secret"
 _SF_SECRET = "integration-test-secret"

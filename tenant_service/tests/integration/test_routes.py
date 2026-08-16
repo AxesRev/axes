@@ -10,9 +10,9 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from common.models import AppIntegration, Tenant, TenantAgentContext
 from tenants.app import handler
 from tenants.errors import HttpError
-from tenants.models import AppIntegration, Tenant, TenantAgentContext
 
 CLAIMS = {"sub": "auth0|123", "email": "owner@example.com", "name": "Owner"}
 

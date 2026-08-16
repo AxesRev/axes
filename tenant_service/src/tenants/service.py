@@ -5,7 +5,7 @@ from __future__ import annotations
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from tenants.models import Tenant
+from common.models import Tenant
 
 
 def _default_tenant_name(*, email: str | None, name: str | None, auth0_sub: str) -> str:

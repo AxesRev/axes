@@ -15,7 +15,7 @@ from simple_salesforce.exceptions import SalesforceError
 from sqlalchemy import select
 
 from aegra_api.core.orm import get_metadata_session_maker
-from aegra_api.core.tenant_orm import AppIntegration
+from common.models import AppIntegration
 from examples.react_agent.context import Context
 from examples.react_agent.salesforce_client import make_salesforce_client
 

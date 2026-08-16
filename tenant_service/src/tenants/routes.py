@@ -7,8 +7,8 @@ from datetime import UTC, datetime
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from common.models import AppIntegration, TenantAgentContext
 from tenants.errors import HttpError
-from tenants.models import AppIntegration, TenantAgentContext
 from tenants.service import tenant_from_claims
 
 AGENT_CONTEXT_MAX_LENGTH = 100_000

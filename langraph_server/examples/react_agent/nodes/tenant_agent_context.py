@@ -10,7 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from aegra_api.core.orm import get_session
-from aegra_api.core.tenant_orm import TenantAgentContext
+from common.models import TenantAgentContext
 from examples.react_agent.context import Context
 from examples.react_agent.state import State
 

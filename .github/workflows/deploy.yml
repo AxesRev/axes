@@ -47,6 +47,7 @@ jobs:
               - 'infra/**'
             langraph_server:
               - 'langraph_server/**'
+              - 'common/**'
             neo4j_mcp:
               - 'neo4j_mcp/**'
             slack_app:

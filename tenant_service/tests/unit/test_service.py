@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from tenants.models import Tenant
+from common.models import Tenant
 from tenants.service import get_or_create_tenant_for_auth_user
 
 
