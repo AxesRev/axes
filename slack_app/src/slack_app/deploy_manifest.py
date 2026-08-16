@@ -37,7 +37,7 @@ def _apply_server_url(manifest: dict[str, Any]) -> dict[str, Any]:
 
 async def deploy_manifest() -> None:
     app_id = slack_settings.SLACK_APP_ID.strip()
-    config_token = slack_settings.SLACK_APP_CONFIG_TOKEN.strip()
+    config_token = (slack_settings.SLACK_APP_CONFIG_TOKEN or "").strip()
     if not app_id:
         raise ValueError("SLACK_APP_ID is required")
     if not config_token:

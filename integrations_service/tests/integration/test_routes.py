@@ -72,7 +72,7 @@ def test_health() -> None:
 @pytest.mark.integration
 def test_github_install_redirects_to_github(session: AsyncMock, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("integrations.config.settings.GITHUB_APP_SLUG", "axes-test-app")
-    monkeypatch.setattr("integrations.config.settings.GITHUB_INSTALL_STATE_SECRET", _GITHUB_SECRET)
+    monkeypatch.setattr("integrations.config.settings.INSTALL_SECRET", _GITHUB_SECRET)
 
     tenant = Tenant(id="tenant-1", name="Acme")
     tenant_result = MagicMock()
@@ -88,7 +88,7 @@ def test_github_install_redirects_to_github(session: AsyncMock, monkeypatch: pyt
 @pytest.mark.integration
 def test_github_install_returns_404_for_unknown_tenant(session: AsyncMock, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("integrations.config.settings.GITHUB_APP_SLUG", "axes-test-app")
-    monkeypatch.setattr("integrations.config.settings.GITHUB_INSTALL_STATE_SECRET", _GITHUB_SECRET)
+    monkeypatch.setattr("integrations.config.settings.INSTALL_SECRET", _GITHUB_SECRET)
 
     empty = MagicMock()
     empty.scalar_one_or_none.return_value = None
@@ -102,7 +102,7 @@ def test_github_install_returns_404_for_unknown_tenant(session: AsyncMock, monke
 @pytest.mark.integration
 def test_github_callback_persists_installation(session: AsyncMock, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("integrations.config.settings.GITHUB_APP_SLUG", "axes-test-app")
-    monkeypatch.setattr("integrations.config.settings.GITHUB_INSTALL_STATE_SECRET", _GITHUB_SECRET)
+    monkeypatch.setattr("integrations.config.settings.INSTALL_SECRET", _GITHUB_SECRET)
 
     tenant = Tenant(id="tenant-1", name="Acme")
     tenant_result = MagicMock()
@@ -176,7 +176,7 @@ def test_github_oauth_start_rejects_unknown_token(session: AsyncMock, monkeypatc
 @pytest.mark.integration
 def test_salesforce_install_redirects_to_package_url(session: AsyncMock, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("integrations.config.settings.SALESFORCE_PACKAGE_VERSION_ID", "04tg50000008CgjAAE")
-    monkeypatch.setattr("integrations.config.settings.SALESFORCE_INSTALL_STATE_SECRET", _SF_SECRET)
+    monkeypatch.setattr("integrations.config.settings.INSTALL_SECRET", _SF_SECRET)
 
     tenant = Tenant(id="tenant-1", name="Acme")
     tenant_result = MagicMock()
@@ -193,7 +193,7 @@ def test_salesforce_install_redirects_to_package_url(session: AsyncMock, monkeyp
 
 @pytest.mark.integration
 def test_salesforce_connect_redirects_to_complete_form(session: AsyncMock, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("integrations.config.settings.SALESFORCE_INSTALL_STATE_SECRET", _SF_SECRET)
+    monkeypatch.setattr("integrations.config.settings.INSTALL_SECRET", _SF_SECRET)
 
     tenant = Tenant(id="tenant-1", name="Acme")
     tenant_result = MagicMock()
@@ -209,7 +209,7 @@ def test_salesforce_connect_redirects_to_complete_form(session: AsyncMock, monke
 @pytest.mark.integration
 def test_salesforce_install_returns_404_for_unknown_tenant(session: AsyncMock, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("integrations.config.settings.SALESFORCE_PACKAGE_VERSION_ID", "04tg50000008CgjAAE")
-    monkeypatch.setattr("integrations.config.settings.SALESFORCE_INSTALL_STATE_SECRET", _SF_SECRET)
+    monkeypatch.setattr("integrations.config.settings.INSTALL_SECRET", _SF_SECRET)
 
     empty = MagicMock()
     empty.scalar_one_or_none.return_value = None
@@ -221,7 +221,7 @@ def test_salesforce_install_returns_404_for_unknown_tenant(session: AsyncMock, m
 
 @pytest.mark.integration
 def test_salesforce_complete_form_renders(session: AsyncMock, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("integrations.config.settings.SALESFORCE_INSTALL_STATE_SECRET", _SF_SECRET)
+    monkeypatch.setattr("integrations.config.settings.INSTALL_SECRET", _SF_SECRET)
 
     tenant = Tenant(id="tenant-1", name="Acme")
     tenant_result = MagicMock()

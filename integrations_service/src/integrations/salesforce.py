@@ -86,10 +86,7 @@ def complete_url(event: dict[str, Any]) -> str:
 
 
 def _require_install_state_secret() -> str:
-    secret = settings.install_state_secret
-    if not secret:
-        raise HttpError(503, "SALESFORCE_INSTALL_STATE_SECRET or GITHUB_INSTALL_STATE_SECRET is required")
-    return secret
+    return settings.INSTALL_SECRET
 
 
 def _create_state(tenant_id: str, secret: str) -> str:

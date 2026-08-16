@@ -21,15 +21,15 @@ class BillingSettings(BaseSettings):
         extra="ignore",
     )
 
-    PADDLE_API_KEY: str = ""
-    PADDLE_WEBHOOK_SECRET: str = ""
+    PADDLE_API_KEY: str
+    PADDLE_WEBHOOK_SECRET: str
     PADDLE_USAGE_PRICE_ID: str = ""
     BILLING_TOKENS_PER_UNIT: int = 1000
-    INTERNAL_API_SECRET: str = ""
+    INTERNAL_API_SECRET: str
 
     DATABASE_URL: str | None = None
     POSTGRES_USER: str = "postgres"
-    POSTGRES_PASSWORD: str = "postgres"
+    POSTGRES_PASSWORD: str
     POSTGRES_HOST: str = "localhost"
     POSTGRES_PORT: str = "5433"
     POSTGRES_DB: str = "aegra"

@@ -41,11 +41,11 @@ class RunnerSettings(BaseSettings):
     # Neo4j
     NEO4J_URI: str = "bolt://localhost:7687"
     NEO4J_USER: str = "neo4j"
-    NEO4J_PASSWORD: str = "neo4j"
+    NEO4J_PASSWORD: str
 
     # Postgres
     POSTGRES_USER: str = "postgres"
-    POSTGRES_PASSWORD: str = "postgres"
+    POSTGRES_PASSWORD: str
     POSTGRES_HOST: str = "localhost"
     POSTGRES_PORT: int = 5433
     POSTGRES_DB: str = "aegra"

@@ -195,7 +195,7 @@ export function salesforceOrgId(integration: AppIntegrationRecord | null): strin
 }
 
 function internalApiSecret(): string {
-  const secret = process.env.INTERNAL_API_SECRET ?? "";
+  const secret = process.env.INTERNAL_API_SECRET;
   if (!secret) {
     throw new Error("INTERNAL_API_SECRET is not configured");
   }

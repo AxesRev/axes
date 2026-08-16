@@ -12,7 +12,7 @@ class TestDatabaseURLSupport:
         """Individual defaults are used when DATABASE_URL is not set."""
         monkeypatch.delenv("DATABASE_URL", raising=False)
         monkeypatch.delenv("POSTGRES_USER", raising=False)
-        monkeypatch.delenv("POSTGRES_PASSWORD", raising=False)
+        monkeypatch.setenv("POSTGRES_PASSWORD", "secret")
         monkeypatch.delenv("POSTGRES_HOST", raising=False)
         monkeypatch.delenv("POSTGRES_PORT", raising=False)
         monkeypatch.delenv("POSTGRES_DB", raising=False)
@@ -25,12 +25,13 @@ class TestDatabaseURLSupport:
         assert db.POSTGRES_PORT == "5433"
         assert db.POSTGRES_DB == "aegra"
         assert db.POSTGRES_SSLMODE == "require"
-        assert "postgres:postgres@localhost:5433/aegra" in db.database_url
+        assert "postgres:secret@localhost:5433/aegra" in db.database_url
         assert db.database_url.endswith("?ssl=require")
         assert db.database_url_sync.endswith("?sslmode=require")
 
     def test_database_url_used_directly_in_computed_urls(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """DATABASE_URL is used directly with correct driver prefix."""
+        monkeypatch.setenv("POSTGRES_PASSWORD", "unused")
         monkeypatch.setenv("DATABASE_URL", "postgresql://rdsuser:rdspass@rds.aws.com:5432/prod")
 
         db = DatabaseSettings(_env_file=None)
@@ -40,6 +41,7 @@ class TestDatabaseURLSupport:
 
     def test_query_params_preserved(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """SSL and other query params from DATABASE_URL are preserved."""
+        monkeypatch.setenv("POSTGRES_PASSWORD", "unused")
         monkeypatch.setenv(
             "DATABASE_URL",
             "postgresql://user:pass@host:5432/db?sslmode=require&connect_timeout=10",
@@ -55,6 +57,7 @@ class TestDatabaseURLSupport:
 
     def test_driver_prefix_normalized(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Driver prefix is always normalized regardless of input."""
+        monkeypatch.setenv("POSTGRES_PASSWORD", "unused")
         monkeypatch.setenv("DATABASE_URL", "postgresql+psycopg://user:pass@host:5432/db")
 
         db = DatabaseSettings(_env_file=None)
@@ -65,6 +68,7 @@ class TestDatabaseURLSupport:
 
     def test_legacy_postgres_scheme_normalized(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Legacy postgres:// scheme (Heroku/Render) is normalized."""
+        monkeypatch.setenv("POSTGRES_PASSWORD", "unused")
         monkeypatch.setenv("DATABASE_URL", "postgres://user:pass@host:5432/db")
 
         db = DatabaseSettings(_env_file=None)
@@ -89,6 +93,7 @@ class TestDatabaseURLSupport:
 
     def test_malformed_database_url_does_not_crash(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Malformed DATABASE_URL doesn't crash — regex just won't match."""
+        monkeypatch.setenv("POSTGRES_PASSWORD", "unused")
         monkeypatch.setenv("DATABASE_URL", "not-a-url")
 
         db = DatabaseSettings(_env_file=None)
@@ -98,6 +103,7 @@ class TestDatabaseURLSupport:
 
     def test_blank_postgres_sslmode_omits_query(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("DATABASE_URL", raising=False)
+        monkeypatch.setenv("POSTGRES_PASSWORD", "secret")
         monkeypatch.setenv("POSTGRES_SSLMODE", "")
 
         db = DatabaseSettings(_env_file=None)

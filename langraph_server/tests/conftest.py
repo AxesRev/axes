@@ -4,6 +4,13 @@ This file contains shared fixtures and configuration that are available
 to all tests across the test suite.
 """
 
+# ruff: noqa: E402
+import os
+
+os.environ.setdefault("POSTGRES_PASSWORD", "test-postgres-password")
+
+os.environ.setdefault("POSTGRES_PASSWORD", "test-postgres-password")
+
 import asyncio
 import sys
 from unittest.mock import AsyncMock

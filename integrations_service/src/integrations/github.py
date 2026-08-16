@@ -87,12 +87,10 @@ def _state_kind(state: str) -> Literal["jwt", "oauth_hmac"]:
 
 
 def _decode_tenant_install_state(state: str) -> str:
-    if not settings.GITHUB_INSTALL_STATE_SECRET:
-        raise HttpError(500, "GITHUB_INSTALL_STATE_SECRET is not configured.")
     try:
         claims = pyjwt.decode(
             state,
-            settings.GITHUB_INSTALL_STATE_SECRET,
+            settings.INSTALL_SECRET,
             algorithms=["HS256"],
             options={"require": ["tenant_id", "exp"]},
         )
@@ -162,15 +160,13 @@ async def _github_app_install_start(tenant_id: str, session: AsyncSession) -> di
         raise HttpError(404, f"tenant not found: {tenant_id}")
     if not settings.GITHUB_APP_SLUG:
         raise HttpError(500, "GITHUB_APP_SLUG is not configured on this server.")
-    if not settings.GITHUB_INSTALL_STATE_SECRET:
-        raise HttpError(500, "GITHUB_INSTALL_STATE_SECRET is not configured.")
 
     state = pyjwt.encode(
         {
             "tenant_id": tenant_id,
             "exp": datetime.now(UTC) + timedelta(seconds=_INSTALL_STATE_TTL_SECONDS),
         },
-        settings.GITHUB_INSTALL_STATE_SECRET,
+        settings.INSTALL_SECRET,
         algorithm="HS256",
         headers={"typ": "JWT"},
     )

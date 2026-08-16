@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Self
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from common.db import build_database_url
@@ -36,7 +38,7 @@ class IntegrationSettings(BaseSettings):
 
     DATABASE_URL: str | None = None
     POSTGRES_USER: str = "postgres"
-    POSTGRES_PASSWORD: str = "postgres"
+    POSTGRES_PASSWORD: str
     POSTGRES_HOST: str = "localhost"
     POSTGRES_PORT: str = "5433"
     POSTGRES_DB: str = "aegra"
@@ -49,20 +51,27 @@ class IntegrationSettings(BaseSettings):
     WEBAPP_URL: str = "http://localhost:3000"
 
     SLACK_CLIENT_ID: str = ""
-    SLACK_CLIENT_SECRET: str = ""
+    SLACK_CLIENT_SECRET: str
 
     GITHUB_APP_SLUG: str = ""
-    GITHUB_INSTALL_STATE_SECRET: str = ""
+    INSTALL_SECRET: str
     GITHUB_CLIENT_ID: str = ""
-    GITHUB_CLIENT_SECRET: str = ""
-    GITHUB_OAUTH_STATE_SECRET: str = ""
+    GITHUB_CLIENT_SECRET: str
+    GITHUB_OAUTH_STATE_SECRET: str
 
     SALESFORCE_PACKAGE_VERSION_ID: str = DEFAULT_SALESFORCE_PACKAGE_VERSION_ID
-    SALESFORCE_INSTALL_STATE_SECRET: str = ""
     SALESFORCE_CLIENT_ID: str = ""
-    SALESFORCE_PRIVATE_KEY: str = ""
-    SALESFORCE_PRIVATE_KEY_PATH: str = ""
+    SALESFORCE_PRIVATE_KEY: str | None = None
+    SALESFORCE_PRIVATE_KEY_PATH: str | None = None
     SALESFORCE_LOGIN_URL: str = DEFAULT_SALESFORCE_LOGIN_URL
+
+    @model_validator(mode="after")
+    def _require_salesforce_private_key(self) -> Self:
+        pem = (self.SALESFORCE_PRIVATE_KEY or "").strip()
+        path = (self.SALESFORCE_PRIVATE_KEY_PATH or "").strip()
+        if not pem and not path:
+            raise ValueError("SALESFORCE_PRIVATE_KEY or SALESFORCE_PRIVATE_KEY_PATH is required")
+        return self
 
     @property
     def database_url(self) -> str:
@@ -77,15 +86,8 @@ class IntegrationSettings(BaseSettings):
         )
 
     @property
-    def install_state_secret(self) -> str:
-        explicit = self.SALESFORCE_INSTALL_STATE_SECRET.strip()
-        if explicit:
-            return explicit
-        return self.GITHUB_INSTALL_STATE_SECRET.strip()
-
-    @property
     def salesforce_private_key(self) -> str:
-        pem = self.SALESFORCE_PRIVATE_KEY.strip()
+        pem = (self.SALESFORCE_PRIVATE_KEY or "").strip()
         if pem:
             return pem.replace("\\n", "\n")
         if not self.SALESFORCE_PRIVATE_KEY_PATH:

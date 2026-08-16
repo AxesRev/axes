@@ -26,19 +26,24 @@ resource "aws_iam_role_policy_attachment" "vpc" {
 }
 
 locals {
-  secrets    = module.secrets.values
-  generated  = module.generated.values
-  environment = sensitive({
-    POSTGRES_HOST           = local.generated["POSTGRES_HOST"]
-    POSTGRES_PORT           = local.generated["POSTGRES_PORT"]
-    POSTGRES_DB             = local.generated["POSTGRES_DB"]
-    POSTGRES_USER           = local.generated["POSTGRES_USER"]
-    POSTGRES_PASSWORD       = local.generated["POSTGRES_PASSWORD"]
-    INTERNAL_API_SECRET     = local.generated["INTERNAL_API_SECRET"]
-    PADDLE_API_KEY          = local.secrets["PADDLE_API_KEY"]
-    PADDLE_WEBHOOK_SECRET   = local.secrets["PADDLE_WEBHOOK_SECRET"]
-    PADDLE_USAGE_PRICE_ID   = local.secrets["PADDLE_USAGE_PRICE_ID"]
-  })
+  secrets   = module.secrets.values
+  generated = module.generated.values
+  environment = sensitive(merge(
+    {
+      POSTGRES_HOST         = local.generated["POSTGRES_HOST"]
+      POSTGRES_PORT         = local.generated["POSTGRES_PORT"]
+      POSTGRES_DB           = local.generated["POSTGRES_DB"]
+      POSTGRES_USER         = local.generated["POSTGRES_USER"]
+      POSTGRES_PASSWORD     = local.generated["POSTGRES_PASSWORD"]
+      INTERNAL_API_SECRET   = local.generated["INTERNAL_API_SECRET"]
+      PADDLE_API_KEY        = local.secrets["PADDLE_API_KEY"]
+      PADDLE_WEBHOOK_SECRET = local.secrets["PADDLE_WEBHOOK_SECRET"]
+    },
+    {
+      for key in ["PADDLE_USAGE_PRICE_ID"] : key => lookup(local.secrets, key, "")
+      if lookup(local.secrets, key, "") != ""
+    },
+  ))
 }
 
 module "secrets" {

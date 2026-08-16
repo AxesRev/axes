@@ -13,7 +13,7 @@ from slack_app.handlers import handle_message_event
 logger = logging.getLogger(__name__)
 
 bolt_app = AsyncApp(
-    signing_secret=slack_settings.SLACK_SIGNING_SECRET or "dev",
+    signing_secret=slack_settings.SLACK_SIGNING_SECRET,
     token=slack_settings.SLACK_BOT_TOKEN,
 )
 

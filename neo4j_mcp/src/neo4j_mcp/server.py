@@ -1,6 +1,6 @@
 """Run Neo4j ``mcp-neo4j-cypher`` over HTTP for LangChain remote MCP clients.
 
-``Neo4jMcpSettings`` reads env (and ``.env``); missing keys use field defaults.
+``Neo4jMcpSettings`` reads env (and ``.env``).
 Those values are passed into ``mcp-neo4j-cypher`` as Python kwargs.
 """
 

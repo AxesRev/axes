@@ -22,12 +22,12 @@ class SlackSettings(BaseSettings):
         extra="ignore",
     )
 
-    SLACK_BOT_TOKEN: str = ""
-    SLACK_SIGNING_SECRET: str = ""
+    SLACK_BOT_TOKEN: str
+    SLACK_SIGNING_SECRET: str
     SLACK_CLIENT_ID: str = ""
-    SLACK_CLIENT_SECRET: str = ""
+    SLACK_CLIENT_SECRET: str
     SLACK_APP_ID: str = ""
-    SLACK_APP_CONFIG_TOKEN: str = ""
+    SLACK_APP_CONFIG_TOKEN: str | None = None
     HOST: str = "0.0.0.0"
     PORT: int = 8000
     SERVER_URL: str = "http://localhost:8000"
@@ -36,7 +36,7 @@ class SlackSettings(BaseSettings):
 
     DATABASE_URL: str | None = None
     POSTGRES_USER: str = "postgres"
-    POSTGRES_PASSWORD: str = "postgres"
+    POSTGRES_PASSWORD: str
     POSTGRES_HOST: str = "localhost"
     POSTGRES_PORT: str = "5433"
     POSTGRES_DB: str = "aegra"

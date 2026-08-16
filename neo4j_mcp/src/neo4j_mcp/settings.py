@@ -19,7 +19,7 @@ class Neo4jMcpSettings(BaseSettings):
     NEO4J_URI: str = "bolt://neo4j.neo4j.svc.cluster.local:7687"
     NEO4J_USER: str = "neo4j"
     NEO4J_USERNAME: str | None = None
-    NEO4J_PASSWORD: str = ""
+    NEO4J_PASSWORD: str
     NEO4J_DATABASE: str = "neo4j"
     NEO4J_TRANSPORT: str = "http"
     NEO4J_MCP_SERVER_HOST: str = "0.0.0.0"
