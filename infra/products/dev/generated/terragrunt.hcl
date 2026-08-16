@@ -29,8 +29,7 @@ dependency "neo4j" {
 }
 
 locals {
-  env      = read_terragrunt_config(find_in_parent_folders("env.hcl"))
-  neo4j_pw = dependency.neo4j.outputs.password
+  env = read_terragrunt_config(find_in_parent_folders("env.hcl"))
 }
 
 inputs = {
@@ -43,7 +42,7 @@ inputs = {
     POSTGRES_USER     = dependency.rds.outputs.master_username
     POSTGRES_PASSWORD = dependency.rds.outputs.master_password
 
-    NEO4J_PASSWORD = local.neo4j_pw
-    NEO4J_AUTH     = "neo4j/${local.neo4j_pw}"
+    NEO4J_PASSWORD = dependency.neo4j.outputs.password
+    NEO4J_AUTH     = "neo4j/${dependency.neo4j.outputs.password}"
   }
 }
