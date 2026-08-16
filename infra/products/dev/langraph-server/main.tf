@@ -55,6 +55,19 @@ resource "kubernetes_secret_v1" "salesforce" {
   type = "Opaque"
 }
 
+resource "kubernetes_secret_v1" "openai" {
+  metadata {
+    name      = "langraph-server-openai"
+    namespace = kubernetes_namespace_v1.this.metadata[0].name
+  }
+
+  data = sensitive({
+    OPENAI_API_KEY = local.secrets["OPENAI_API_KEY"]
+  })
+
+  type = "Opaque"
+}
+
 resource "kubernetes_job_v1" "migrate" {
   metadata {
     name      = local.migrate_job_name
@@ -141,6 +154,16 @@ resource "kubernetes_job_v1" "migrate" {
             }
           }
 
+          env {
+            name = "OPENAI_API_KEY"
+            value_from {
+              secret_key_ref {
+                name = kubernetes_secret_v1.openai.metadata[0].name
+                key  = "OPENAI_API_KEY"
+              }
+            }
+          }
+
           resources {
             requests = {
               cpu    = "100m"
@@ -156,7 +179,10 @@ resource "kubernetes_job_v1" "migrate" {
     }
   }
 
-  depends_on = [kubernetes_secret_v1.postgres]
+  depends_on = [
+    kubernetes_secret_v1.postgres,
+    kubernetes_secret_v1.openai,
+  ]
 }
 
 resource "kubernetes_deployment_v1" "this" {
@@ -273,6 +299,16 @@ resource "kubernetes_deployment_v1" "this" {
               secret_key_ref {
                 name = kubernetes_secret_v1.salesforce.metadata[0].name
                 key  = "SALESFORCE_LOGIN_URL"
+              }
+            }
+          }
+
+          env {
+            name = "OPENAI_API_KEY"
+            value_from {
+              secret_key_ref {
+                name = kubernetes_secret_v1.openai.metadata[0].name
+                key  = "OPENAI_API_KEY"
               }
             }
           }

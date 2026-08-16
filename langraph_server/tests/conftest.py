@@ -15,6 +15,7 @@ os.environ.setdefault("POSTGRES_DB", "aegra")
 os.environ.setdefault("SALESFORCE_CLIENT_ID", "test-salesforce-client-id")
 os.environ.setdefault("SALESFORCE_PRIVATE_KEY", "test-salesforce-private-key")
 os.environ.setdefault("SALESFORCE_LOGIN_URL", "https://login.salesforce.com")
+os.environ.setdefault("OPENAI_API_KEY", "test-openai-api-key")
 
 import asyncio
 import sys
