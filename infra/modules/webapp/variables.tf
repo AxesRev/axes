@@ -8,12 +8,6 @@ variable "team_id" {
   type        = string
 }
 
-variable "root_directory" {
-  description = "Path to the Next.js app inside the git repo."
-  type        = string
-  default     = "webapp/axes"
-}
-
 variable "ssm_secrets_parameter" {
   description = "Existing SSM SecureString JSON. Must contain VERCEL_API_TOKEN."
   type        = string

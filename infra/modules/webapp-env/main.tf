@@ -67,10 +67,5 @@ resource "vercel_deployment" "this" {
   path_prefix = data.vercel_project_directory.this.path
   production  = true
 
-  project_settings = {
-    framework      = "nextjs"
-    root_directory = ""
-  }
-
   depends_on = [vercel_project_environment_variables.this]
 }

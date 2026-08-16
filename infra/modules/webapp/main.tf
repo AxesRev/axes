@@ -13,9 +13,8 @@ provider "vercel" {
 }
 
 resource "vercel_project" "this" {
-  name           = var.name
-  framework      = "nextjs"
-  root_directory = var.root_directory
-  node_version   = "22.x"
-  team_id        = var.team_id
+  name         = var.name
+  framework    = "nextjs"
+  node_version = "22.x"
+  team_id      = var.team_id
 }
