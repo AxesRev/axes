@@ -1,4 +1,4 @@
-"""Tests for ``python -m app_integrations.github`` (DB ingest entrypoint)."""
+"""Tests for ``python -m aegra_api.doc_ingest.github`` (DB ingest entrypoint)."""
 
 from __future__ import annotations
 
@@ -7,15 +7,15 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from app_integrations.github.__main__ import main
+from aegra_api.doc_ingest.github import main
 
 
 def test_main_runs_ingest_and_closes_db(monkeypatch: pytest.MonkeyPatch) -> None:
     init = AsyncMock(return_value=None)
     close = AsyncMock(return_value=None)
-    monkeypatch.setattr("app_integrations.github.__main__.db_manager.initialize", init)
-    monkeypatch.setattr("app_integrations.github.__main__.db_manager.close", close)
-    monkeypatch.setattr("app_integrations.github.__main__.db_manager.engine", object(), raising=False)
+    monkeypatch.setattr("aegra_api.doc_ingest.github.db_manager.initialize", init)
+    monkeypatch.setattr("aegra_api.doc_ingest.github.db_manager.close", close)
+    monkeypatch.setattr("aegra_api.doc_ingest.github.db_manager.engine", object(), raising=False)
 
     captured: dict[str, object] = {}
 
@@ -30,7 +30,7 @@ def test_main_runs_ingest_and_closes_db(monkeypatch: pytest.MonkeyPatch) -> None
             return fake_session()
 
     monkeypatch.setattr(
-        "app_integrations.github.__main__.get_metadata_session_maker",
+        "aegra_api.doc_ingest.github.get_metadata_session_maker",
         lambda: _Maker(),
     )
 
@@ -39,7 +39,7 @@ def test_main_runs_ingest_and_closes_db(monkeypatch: pytest.MonkeyPatch) -> None
         return (1, 4, ["GitHub Docs", "GitHub Docs", "GitHub Docs", "GitHub Docs"])
 
     monkeypatch.setattr(
-        "app_integrations.github.__main__.ingest_github_documentation_from_zip",
+        "aegra_api.doc_ingest.github.ingest_github_documentation_from_zip",
         fake_ingest,
     )
 
@@ -53,10 +53,10 @@ def test_main_nonzero_on_init_failure(monkeypatch: pytest.MonkeyPatch) -> None:
     async def boom() -> None:
         raise RuntimeError("db down")
 
-    monkeypatch.setattr("app_integrations.github.__main__.db_manager.initialize", boom)
+    monkeypatch.setattr("aegra_api.doc_ingest.github.db_manager.initialize", boom)
     close = AsyncMock(return_value=None)
-    monkeypatch.setattr("app_integrations.github.__main__.db_manager.close", close)
-    monkeypatch.setattr("app_integrations.github.__main__.db_manager.engine", None, raising=False)
+    monkeypatch.setattr("aegra_api.doc_ingest.github.db_manager.close", close)
+    monkeypatch.setattr("aegra_api.doc_ingest.github.db_manager.engine", None, raising=False)
 
     assert main() == 1
     close.assert_not_called()

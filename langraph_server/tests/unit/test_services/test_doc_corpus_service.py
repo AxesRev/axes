@@ -10,6 +10,12 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from openai import APIConnectionError, RateLimitError
 
+from aegra_api.doc_ingest import github_zip as github_zip_embedder_module
+from aegra_api.doc_ingest.github_zip import (
+    ingest_github_documentation_from_zip,
+    iter_github_docs_zip_markdown_members,
+    split_github_docs_zip_markdown_into_chunks,
+)
 from aegra_api.models.doc_corpus import DocCorpusSearchHit
 from aegra_api.services import doc_corpus_service as doc_corpus_service_module
 from aegra_api.services.doc_corpus_service import (
@@ -20,12 +26,6 @@ from aegra_api.services.doc_corpus_service import (
     split_text_into_chunks,
 )
 from aegra_api.settings import settings
-from app_integrations.github.doc_generation import zip_embedder as github_zip_embedder_module
-from app_integrations.github.doc_generation.zip_embedder import (
-    ingest_github_documentation_from_zip,
-    iter_github_docs_zip_markdown_members,
-    split_github_docs_zip_markdown_into_chunks,
-)
 
 
 def test_split_text_into_chunks_returns_empty_for_blank() -> None:

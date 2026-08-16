@@ -1,6 +1,6 @@
 """Search ingested documentation using OpenAI embeddings and pgvector.
 
-App-specific ingest CLIs live under ``app_integrations`` (e.g. GitHub zip, Salesforce PDF).
+App-specific ingest CLIs: ``python -m aegra_api.doc_ingest.github`` and ``python -m aegra_api.doc_ingest.salesforce``.
 There is no public HTTP API for corpus ingest or search helpers.
 """
 

@@ -1,4 +1,4 @@
-"""Ingest Salesforce docs into the documentation corpus: ``python -m app_integrations.salesforce <pdf>``."""
+"""Ingest Salesforce docs: ``python -m aegra_api.doc_ingest.salesforce <pdf>``."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from aegra_api.core.database import db_manager
 from aegra_api.core.orm import get_metadata_session_maker
-from app_integrations.salesforce.doc_generation import ingest_salesforce_documentation_from_pdf
+from aegra_api.doc_ingest.salesforce_pdf import ingest_salesforce_documentation_from_pdf
 
 
 async def _async_main(pdf_path: Path) -> int:
@@ -34,7 +34,7 @@ async def _async_main(pdf_path: Path) -> int:
 def main(argv: list[str] | None = None) -> int:
     args = argv if argv is not None else sys.argv[1:]
     if len(args) != 1:
-        print("usage: python -m app_integrations.salesforce <pdf-path>", file=sys.stderr)
+        print("usage: python -m aegra_api.doc_ingest.salesforce <pdf-path>", file=sys.stderr)
         return 1
 
     return asyncio.run(_async_main(Path(args[0])))

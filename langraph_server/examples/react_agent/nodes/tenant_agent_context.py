@@ -6,13 +6,20 @@ import logging
 from typing import Any
 
 from langgraph.runtime import Runtime
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from aegra_api.core.orm import get_session
+from aegra_api.core.tenant_orm import TenantAgentContext
 from examples.react_agent.context import Context
 from examples.react_agent.state import State
-from tenant.agent_context_service import get_agent_context_for_tenant
 
 logger = logging.getLogger(__name__)
+
+
+async def get_agent_context_for_tenant(*, tenant_id: str, session: AsyncSession) -> TenantAgentContext | None:
+    result = await session.execute(select(TenantAgentContext).where(TenantAgentContext.tenant_id == tenant_id))
+    return result.scalar_one_or_none()
 
 
 async def load_tenant_agent_context(state: State, runtime: Runtime[Context]) -> dict[str, Any]:

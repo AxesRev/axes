@@ -61,25 +61,22 @@ async def test_resolve_salesforce_integration_username_reads_tenant_config() -> 
     integration = MagicMock()
     integration.config = {"integration_username": "axes.integration@example.com"}
 
+    execute_result = MagicMock()
+    execute_result.scalar_one_or_none.return_value = integration
     session = AsyncMock()
+    session.execute = AsyncMock(return_value=execute_result)
     session_context = AsyncMock()
     session_context.__aenter__.return_value = session
     session_context.__aexit__.return_value = None
 
-    with (
-        patch(
-            "examples.react_agent.nodes.salesforce_rest_tools.get_metadata_session_maker",
-            return_value=lambda: session_context,
-        ),
-        patch(
-            "examples.react_agent.nodes.salesforce_rest_tools.find_salesforce_app_integration_for_tenant",
-            new=AsyncMock(return_value=integration),
-        ) as mock_find,
+    with patch(
+        "examples.react_agent.nodes.salesforce_rest_tools.get_metadata_session_maker",
+        return_value=lambda: session_context,
     ):
         username = await resolve_salesforce_integration_username(tenant_id="tenant-1")
 
     assert username == "axes.integration@example.com"
-    mock_find.assert_awaited_once()
+    session.execute.assert_awaited_once()
 
 
 @pytest.mark.asyncio

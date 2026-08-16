@@ -8,10 +8,8 @@ from unittest.mock import AsyncMock, MagicMock
 import pymupdf
 import pytest
 
-from aegra_api.settings import settings
-from app_integrations.salesforce.constants import SALESFORCE_APP_NAME
-from app_integrations.salesforce.doc_generation import pdf_embedder as salesforce_pdf_embedder_module
-from app_integrations.salesforce.doc_generation.pdf_embedder import (
+from aegra_api.doc_ingest import salesforce_pdf as salesforce_pdf_embedder_module
+from aegra_api.doc_ingest.salesforce_pdf import (
     PdfLine,
     SalesforcePdfChunk,
     SalesforcePdfPageText,
@@ -27,6 +25,7 @@ from app_integrations.salesforce.doc_generation.pdf_embedder import (
     split_salesforce_pdf_into_chunks,
     split_salesforce_pdf_pages_into_chunks,
 )
+from aegra_api.settings import settings
 
 
 def _write_sample_pdf(path: Path) -> None:
@@ -299,7 +298,7 @@ async def test_ingest_salesforce_documentation_from_pdf_persists_chunks(
     assert len(row_titles) == chunks_written
 
     added = session.add.call_args_list[0][0][0]
-    assert added.application == SALESFORCE_APP_NAME
+    assert added.application == "salesforce"
     assert added.collection_key == "default"
     assert added.metadata_dict["salesforce_pdf"]["source_format"] == "pdf"
     session.commit.assert_awaited_once()

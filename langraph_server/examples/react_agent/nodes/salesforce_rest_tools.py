@@ -12,11 +12,12 @@ from langgraph.runtime import Runtime
 from pydantic import BaseModel, Field
 from simple_salesforce import Salesforce
 from simple_salesforce.exceptions import SalesforceError
+from sqlalchemy import select
 
 from aegra_api.core.orm import get_metadata_session_maker
-from app_integrations.salesforce.client import make_salesforce_client
-from app_integrations.salesforce.service import find_salesforce_app_integration_for_tenant
+from aegra_api.core.tenant_orm import AppIntegration
 from examples.react_agent.context import Context
+from examples.react_agent.salesforce_client import make_salesforce_client
 
 logger = logging.getLogger(__name__)
 
@@ -68,17 +69,20 @@ def _format_success_payload(payload: Any) -> str:
 
 
 async def resolve_salesforce_integration_username(*, tenant_id: str) -> str:
-    """Load the tenant's Salesforce integration username from app_integrations."""
+    """Load the tenant's Salesforce integration username from Postgres."""
     normalized_tenant_id = tenant_id.strip()
     if not normalized_tenant_id:
         msg = "tenant_id is required for Salesforce grant tools"
         raise ValueError(msg)
 
     async with get_metadata_session_maker()() as session:
-        integration = await find_salesforce_app_integration_for_tenant(
-            tenant_id=normalized_tenant_id,
-            session=session,
+        result = await session.execute(
+            select(AppIntegration).where(
+                AppIntegration.tenant_id == normalized_tenant_id,
+                AppIntegration.app_name == "salesforce",
+            )
         )
+        integration = result.scalar_one_or_none()
 
     if integration is None:
         msg = f"No Salesforce integration configured for tenant {normalized_tenant_id}"

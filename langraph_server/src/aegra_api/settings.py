@@ -124,7 +124,7 @@ class DocCorpusSettings(EnvBase):
     """Settings for ingesting external documentation into pgvector."""
 
     OPENAI_API_KEY: str | None = None
-    # Local GitHub Docs archive for ``python -m app_integrations.github`` (markdown files inside the zip).
+    # Local GitHub Docs archive for ``python -m aegra_api.doc_ingest.github``.
     GITHUB_DOCS_ZIP_PATH: str | None = None
     DOCS_EMBED_MODEL: str = "text-embedding-3-small"
     DOCS_EMBED_DIMENSIONS: int = 1536

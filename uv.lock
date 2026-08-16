@@ -58,6 +58,7 @@ name = "aegra-api"
 version = "0.8.0"
 source = { editable = "langraph_server" }
 dependencies = [
+    { name = "aiohttp" },
     { name = "alembic" },
     { name = "asgi-correlation-id" },
     { name = "asyncpg" },
@@ -66,6 +67,9 @@ dependencies = [
     { name = "fastapi" },
     { name = "greenlet" },
     { name = "httpx" },
+    { name = "langchain" },
+    { name = "langchain-community" },
+    { name = "langchain-mcp-adapters" },
     { name = "langgraph" },
     { name = "langgraph-checkpoint-postgres" },
     { name = "openai" },
@@ -73,9 +77,11 @@ dependencies = [
     { name = "psycopg", extra = ["binary"] },
     { name = "pydantic" },
     { name = "pydantic-settings" },
+    { name = "pygithub" },
     { name = "pyjwt" },
     { name = "pymupdf" },
     { name = "python-frontmatter" },
+    { name = "simple-salesforce" },
     { name = "sqlalchemy" },
     { name = "structlog" },
     { name = "tqdm" },
@@ -85,7 +91,6 @@ dependencies = [
 [package.dev-dependencies]
 dev = [
     { name = "bandit" },
-    { name = "langchain" },
     { name = "langchain-openai" },
     { name = "pre-commit" },
     { name = "pytest" },
@@ -98,6 +103,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "aiohttp", specifier = ">=3.10.0" },
     { name = "alembic", specifier = ">=1.16.4" },
     { name = "asgi-correlation-id", specifier = ">=4.3.4" },
     { name = "asyncpg", specifier = ">=0.30.0" },
@@ -106,6 +112,9 @@ requires-dist = [
     { name = "fastapi", specifier = ">=0.110.1" },
     { name = "greenlet", specifier = ">=3.1.0" },
     { name = "httpx", specifier = ">=0.27.0" },
+    { name = "langchain", specifier = ">=1.0.0" },
+    { name = "langchain-community", specifier = ">=0.4.1" },
+    { name = "langchain-mcp-adapters", specifier = ">=0.2.1" },
     { name = "langgraph", specifier = ">=1.0.3" },
     { name = "langgraph-checkpoint-postgres", specifier = ">=2.0.23" },
     { name = "openai", specifier = ">=1.68.0" },
@@ -113,9 +122,11 @@ requires-dist = [
     { name = "psycopg", extras = ["binary"], specifier = ">=3.2.9" },
     { name = "pydantic", specifier = ">=2.11.7" },
     { name = "pydantic-settings", specifier = ">=2.12.0" },
+    { name = "pygithub", specifier = ">=2.9.1" },
     { name = "pyjwt", specifier = ">=2.11.0" },
     { name = "pymupdf", specifier = ">=1.28.0" },
     { name = "python-frontmatter", specifier = ">=1.1.0" },
+    { name = "simple-salesforce", specifier = ">=1.12.6" },
     { name = "sqlalchemy", specifier = ">=2.0.0" },
     { name = "structlog", specifier = ">=25.4.0" },
     { name = "tqdm", specifier = ">=4.67.3" },
@@ -125,7 +136,6 @@ requires-dist = [
 [package.metadata.requires-dev]
 dev = [
     { name = "bandit", specifier = ">=1.8.0" },
-    { name = "langchain", specifier = ">=1.0.0" },
     { name = "langchain-openai", specifier = ">=1.0.3" },
     { name = "pre-commit", specifier = ">=4.0.1" },
     { name = "pytest", specifier = ">=9.0.2" },
@@ -362,11 +372,6 @@ dependencies = [
     { name = "aegra-slack-app" },
     { name = "aegra-tenant-service" },
     { name = "httpx" },
-    { name = "langchain-community" },
-    { name = "langchain-mcp-adapters" },
-    { name = "pygithub" },
-    { name = "simple-salesforce" },
-    { name = "tiktoken" },
 ]
 
 [package.dev-dependencies]
@@ -381,11 +386,6 @@ requires-dist = [
     { name = "aegra-slack-app", editable = "slack_app" },
     { name = "aegra-tenant-service", editable = "tenant_service" },
     { name = "httpx", specifier = ">=0.27.0" },
-    { name = "langchain-community", specifier = ">=0.4.1" },
-    { name = "langchain-mcp-adapters", specifier = ">=0.2.1" },
-    { name = "pygithub", specifier = ">=2.9.1" },
-    { name = "simple-salesforce", specifier = ">=1.12.6" },
-    { name = "tiktoken", specifier = ">=0.12.0" },
 ]
 
 [package.metadata.requires-dev]

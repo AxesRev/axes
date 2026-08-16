@@ -1,8 +1,4 @@
-"""SQLAlchemy ORM models for tenants and tenant-scoped data.
-
-Registers with the shared Base from aegra_api.core.orm so that Alembic can
-discover them when env.py imports this module.
-"""
+"""Tenant-scoped tables. Registered on ``aegra_api.core.orm.Base`` for Alembic."""
 
 from __future__ import annotations
 
@@ -27,8 +23,6 @@ class Tenant(Base):
 
 
 class AppIntegration(Base):
-    """Tenant-scoped integration configuration."""
-
     __tablename__ = "app_integrations"
 
     id: Mapped[str] = mapped_column(
@@ -48,8 +42,6 @@ class AppIntegration(Base):
 
 
 class UserIdentity(Base):
-    """Slack user belonging to a tenant."""
-
     __tablename__ = "user_identities"
 
     id: Mapped[str] = mapped_column(
@@ -76,8 +68,6 @@ class UserIdentity(Base):
 
 
 class TenantAgentContext(Base):
-    """Editable free-form text for a tenant, used to configure the AI agent."""
-
     __tablename__ = "tenant_agent_context"
 
     tenant_id: Mapped[str] = mapped_column(
@@ -91,3 +81,13 @@ class TenantAgentContext(Base):
         nullable=False,
         server_default=text("now()"),
     )
+
+
+class OAuthState(Base):
+    __tablename__ = "oauth_states"
+
+    token: Mapped[str] = mapped_column(Text, primary_key=True)
+    slack_user_id: Mapped[str] = mapped_column(Text, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
+
+    __table_args__ = (Index("idx_oauth_states_slack_user_id", "slack_user_id"),)

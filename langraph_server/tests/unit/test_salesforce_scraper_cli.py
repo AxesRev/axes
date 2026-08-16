@@ -1,4 +1,4 @@
-"""Tests for ``python -m app_integrations.salesforce`` (DB ingest entrypoint)."""
+"""Tests for ``python -m aegra_api.doc_ingest.salesforce`` (DB ingest entrypoint)."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from app_integrations.salesforce.__main__ import main
+from aegra_api.doc_ingest.salesforce import main
 
 
 def test_main_runs_ingest_and_closes_db(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -17,9 +17,9 @@ def test_main_runs_ingest_and_closes_db(monkeypatch: pytest.MonkeyPatch, tmp_pat
 
     init = AsyncMock(return_value=None)
     close = AsyncMock(return_value=None)
-    monkeypatch.setattr("app_integrations.salesforce.__main__.db_manager.initialize", init)
-    monkeypatch.setattr("app_integrations.salesforce.__main__.db_manager.close", close)
-    monkeypatch.setattr("app_integrations.salesforce.__main__.db_manager.engine", object(), raising=False)
+    monkeypatch.setattr("aegra_api.doc_ingest.salesforce.db_manager.initialize", init)
+    monkeypatch.setattr("aegra_api.doc_ingest.salesforce.db_manager.close", close)
+    monkeypatch.setattr("aegra_api.doc_ingest.salesforce.db_manager.engine", object(), raising=False)
 
     captured: dict[str, object] = {}
 
@@ -34,7 +34,7 @@ def test_main_runs_ingest_and_closes_db(monkeypatch: pytest.MonkeyPatch, tmp_pat
             return fake_session()
 
     monkeypatch.setattr(
-        "app_integrations.salesforce.__main__.get_metadata_session_maker",
+        "aegra_api.doc_ingest.salesforce.get_metadata_session_maker",
         lambda: _Maker(),
     )
 
@@ -44,7 +44,7 @@ def test_main_runs_ingest_and_closes_db(monkeypatch: pytest.MonkeyPatch, tmp_pat
         return (1, 2, ["Introduction to REST API", "Introduction to REST API"])
 
     monkeypatch.setattr(
-        "app_integrations.salesforce.__main__.ingest_salesforce_documentation_from_pdf",
+        "aegra_api.doc_ingest.salesforce.ingest_salesforce_documentation_from_pdf",
         fake_ingest,
     )
 
@@ -66,10 +66,10 @@ def test_main_nonzero_on_init_failure(monkeypatch: pytest.MonkeyPatch, tmp_path:
     async def boom() -> None:
         raise RuntimeError("db down")
 
-    monkeypatch.setattr("app_integrations.salesforce.__main__.db_manager.initialize", boom)
+    monkeypatch.setattr("aegra_api.doc_ingest.salesforce.db_manager.initialize", boom)
     close = AsyncMock(return_value=None)
-    monkeypatch.setattr("app_integrations.salesforce.__main__.db_manager.close", close)
-    monkeypatch.setattr("app_integrations.salesforce.__main__.db_manager.engine", None, raising=False)
+    monkeypatch.setattr("aegra_api.doc_ingest.salesforce.db_manager.close", close)
+    monkeypatch.setattr("aegra_api.doc_ingest.salesforce.db_manager.engine", None, raising=False)
 
     assert main([str(pdf_path)]) == 1
     close.assert_not_called()

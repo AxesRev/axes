@@ -4,15 +4,42 @@ from __future__ import annotations
 
 import logging
 import time
+from pathlib import Path
 
 from github import Auth, GithubIntegration
-
-from app_integrations.github.settings import github_settings
+from pydantic import computed_field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = logging.getLogger(__name__)
 
+_ENV_FILE = str(Path(__file__).resolve().parents[3] / ".env")
+
 _token_cache: dict[str, tuple[str, int]] = {}
 _REFRESH_BUFFER_SECONDS = 300
+
+
+class GitHubAppSettings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=_ENV_FILE,
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
+    GITHUB_APP_ID: int = 0
+    GITHUB_APP_PRIVATE_KEY_PATH: str = ""
+
+    @computed_field
+    @property
+    def github_app_private_key(self) -> str | None:
+        if not self.GITHUB_APP_PRIVATE_KEY_PATH:
+            return None
+        path = Path(self.GITHUB_APP_PRIVATE_KEY_PATH)
+        if not path.is_absolute():
+            path = Path(_ENV_FILE).parent / path
+        return path.read_text(encoding="utf-8") if path.exists() else None
+
+
+github_settings = GitHubAppSettings()
 
 
 def _github_integration() -> GithubIntegration:
@@ -27,7 +54,7 @@ def _github_integration() -> GithubIntegration:
 
 def get_installation_access_token(installation_id: str, *, api_version: str = "2022-11-28") -> str:
     """Return a cached or freshly minted installation access token."""
-    del api_version  # PyGithub mints tokens; API version is set on REST calls separately.
+    del api_version
 
     normalized_id = installation_id.strip()
     if not normalized_id:

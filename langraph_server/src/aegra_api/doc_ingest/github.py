@@ -1,4 +1,4 @@
-"""Ingest GitHub Docs into the documentation corpus: ``python -m app_integrations.github``."""
+"""Ingest GitHub Docs into the documentation corpus: ``python -m aegra_api.doc_ingest.github``."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from aegra_api.core.database import db_manager
 from aegra_api.core.orm import get_metadata_session_maker
-from app_integrations.github.doc_generation import ingest_github_documentation_from_zip
+from aegra_api.doc_ingest.github_zip import ingest_github_documentation_from_zip
 
 
 async def _async_main() -> int:

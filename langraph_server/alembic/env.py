@@ -9,12 +9,7 @@ from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
-try:
-    import app_integrations.github.models  # noqa: F401, E402
-    import tenant.models  # noqa: F401, E402
-except ImportError:
-    pass
-
+from aegra_api.core import tenant_orm as _tenant_orm  # noqa: F401
 from aegra_api.core.orm import Base
 from aegra_api.settings import settings
 from alembic import context

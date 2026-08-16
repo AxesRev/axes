@@ -17,9 +17,10 @@ from tqdm import tqdm
 from aegra_api.core.orm import DocEmbeddingChunk
 from aegra_api.services.doc_corpus_service import embed_texts_openai, split_text_into_chunks
 from aegra_api.settings import settings
-from app_integrations.salesforce.constants import SALESFORCE_APP_NAME
 
 logger = structlog.get_logger(__name__)
+
+_DOC_INGEST_APPLICATION = "salesforce"
 
 _DOC_INGEST_COLLECTION_KEY = "default"
 _CHUNK_MAX_CHARS = 2000
@@ -684,7 +685,7 @@ async def ingest_salesforce_documentation_from_pdf(
 
     await session.execute(
         delete(DocEmbeddingChunk).where(
-            DocEmbeddingChunk.application == SALESFORCE_APP_NAME,
+            DocEmbeddingChunk.application == _DOC_INGEST_APPLICATION,
             DocEmbeddingChunk.collection_key == _DOC_INGEST_COLLECTION_KEY,
         )
     )
@@ -710,7 +711,7 @@ async def ingest_salesforce_documentation_from_pdf(
         row_titles.append(chunk.chunk_title)
         session.add(
             DocEmbeddingChunk(
-                application=SALESFORCE_APP_NAME,
+                application=_DOC_INGEST_APPLICATION,
                 collection_key=_DOC_INGEST_COLLECTION_KEY,
                 page_title=_sanitize_text_for_postgres(chunk.chunk_title),
                 content=_sanitize_text_for_postgres(chunk.content),

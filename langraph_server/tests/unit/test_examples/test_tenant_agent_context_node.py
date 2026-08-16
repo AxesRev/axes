@@ -4,10 +4,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from langgraph.runtime import Runtime
 
+from aegra_api.core.tenant_orm import TenantAgentContext
 from examples.react_agent.context import Context
 from examples.react_agent.nodes.tenant_agent_context import load_tenant_agent_context
 from examples.react_agent.state import State
-from tenant.models import TenantAgentContext
 
 
 async def test_load_tenant_agent_context_stores_db_content() -> None:
