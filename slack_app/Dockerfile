@@ -22,16 +22,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /build
 
-COPY pyproject.toml uv.lock ./
-COPY billing_service/pyproject.toml billing_service/pyproject.toml
-COPY tenant_service/pyproject.toml tenant_service/pyproject.toml
-COPY integrations_service/pyproject.toml integrations_service/pyproject.toml
-COPY slack_app/pyproject.toml slack_app/pyproject.toml
-COPY langraph_server/pyproject.toml langraph_server/README.md langraph_server/
-COPY graph_service/pyproject.toml graph_service/pyproject.toml
-COPY neo4j_mcp/pyproject.toml neo4j_mcp/pyproject.toml
+COPY slack_app/pyproject.toml ./pyproject.toml
+COPY uv.lock ./
 
-RUN uv export --frozen --package aegra-slack-app --no-emit-project --no-dev --format=requirements-txt > requirements.txt && \
+RUN uv export --frozen --no-emit-project --no-dev --format=requirements-txt > requirements.txt && \
     uv pip install --system --compile-bytecode -r requirements.txt && \
     rm requirements.txt
 
