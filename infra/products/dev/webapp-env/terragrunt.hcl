@@ -3,7 +3,7 @@ include "root" {
 }
 
 terraform {
-  source = "../../../modules/webapp-env"
+  source = "../../../modules//webapp-env"
 }
 
 dependency "webapp" {

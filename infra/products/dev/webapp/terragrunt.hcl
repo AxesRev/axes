@@ -3,7 +3,7 @@ include "root" {
 }
 
 terraform {
-  source = "../../../modules/webapp"
+  source = "../../../modules//webapp"
 }
 
 locals {

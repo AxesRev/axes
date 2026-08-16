@@ -3,7 +3,7 @@ include "root" {
 }
 
 terraform {
-  source = "../../../modules/slack-app"
+  source = "../../../modules//slack-app"
 }
 
 dependency "vpc" {
