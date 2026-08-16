@@ -58,20 +58,5 @@ inputs = {
   postgres_user     = dependency.rds.outputs.master_username
   postgres_password = dependency.rds.outputs.master_password
 
-  webapp_url = get_env("WEBAPP_URL", "http://localhost:3000")
-
-  slack_client_id     = get_env("SLACK_CLIENT_ID", "")
-  slack_client_secret = get_env("SLACK_CLIENT_SECRET", "")
-
-  github_app_slug             = get_env("GITHUB_APP_SLUG", "")
-  github_install_state_secret = get_env("GITHUB_INSTALL_STATE_SECRET", "")
-  github_client_id            = get_env("GITHUB_CLIENT_ID", "")
-  github_client_secret        = get_env("GITHUB_CLIENT_SECRET", "")
-  github_oauth_state_secret   = get_env("GITHUB_OAUTH_STATE_SECRET", "")
-
-  salesforce_package_version_id   = get_env("SALESFORCE_PACKAGE_VERSION_ID", "04tg50000008CgjAAE")
-  salesforce_install_state_secret = get_env("SALESFORCE_INSTALL_STATE_SECRET", "")
-  salesforce_client_id            = get_env("SALESFORCE_CLIENT_ID", "")
-  salesforce_private_key          = get_env("SALESFORCE_PRIVATE_KEY", "")
-  salesforce_login_url            = get_env("SALESFORCE_LOGIN_URL", "https://login.salesforce.com")
+  ssm_secrets_parameter = "/axes/${local.env.locals.environment}/secrets"
 }

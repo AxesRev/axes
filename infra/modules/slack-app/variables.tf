@@ -72,31 +72,9 @@ variable "postgres_password" {
   sensitive = true
 }
 
-variable "slack_signing_secret" {
-  type      = string
-  sensitive = true
-}
-
-variable "slack_client_id" {
-  type      = string
-  sensitive = true
-}
-
-variable "slack_client_secret" {
-  type      = string
-  sensitive = true
-}
-
-variable "slack_bot_token" {
-  type      = string
-  sensitive = true
-  default   = ""
-}
-
-variable "internal_api_secret" {
-  description = "Shared secret for POST /internal/tenants/resolve."
+variable "ssm_secrets_parameter" {
+  description = "Existing SSM SecureString JSON. Not managed by Terraform."
   type        = string
-  sensitive   = true
 }
 
 variable "integrations_public_url" {

@@ -58,6 +58,5 @@ inputs = {
   postgres_user     = dependency.rds.outputs.master_username
   postgres_password = dependency.rds.outputs.master_password
 
-  auth0_domain    = get_env("AUTH0_DOMAIN", "")
-  auth0_client_id = get_env("AUTH0_CLIENT_ID", "")
+  ssm_secrets_parameter = "/axes/${local.env.locals.environment}/secrets"
 }

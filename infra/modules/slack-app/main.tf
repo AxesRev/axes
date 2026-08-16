@@ -1,5 +1,11 @@
 locals {
-  app = "slack-app"
+  app     = "slack-app"
+  secrets = module.secrets.values
+}
+
+module "secrets" {
+  source          = "../ssm-secrets"
+  parameter_name  = var.ssm_secrets_parameter
 }
 
 resource "kubernetes_namespace_v1" "this" {
@@ -24,11 +30,11 @@ resource "kubernetes_secret_v1" "this" {
     POSTGRES_USER        = var.postgres_user
     POSTGRES_PASSWORD    = var.postgres_password
     POSTGRES_SSLMODE     = "require"
-    SLACK_SIGNING_SECRET = var.slack_signing_secret
-    SLACK_CLIENT_ID      = var.slack_client_id
-    SLACK_CLIENT_SECRET  = var.slack_client_secret
-    SLACK_BOT_TOKEN      = var.slack_bot_token
-    INTERNAL_API_SECRET  = var.internal_api_secret
+    SLACK_SIGNING_SECRET = local.secrets["SLACK_SIGNING_SECRET"]
+    SLACK_CLIENT_ID      = local.secrets["SLACK_CLIENT_ID"]
+    SLACK_CLIENT_SECRET  = local.secrets["SLACK_CLIENT_SECRET"]
+    SLACK_BOT_TOKEN      = local.secrets["SLACK_BOT_TOKEN"]
+    INTERNAL_API_SECRET  = local.secrets["INTERNAL_API_SECRET"]
   }
 
   type = "Opaque"

@@ -26,6 +26,7 @@ resource "aws_iam_role_policy_attachment" "vpc" {
 }
 
 locals {
+  secrets = module.secrets.values
   environment = {
     POSTGRES_HOST                   = var.postgres_host
     POSTGRES_PORT                   = tostring(var.postgres_port)
@@ -35,20 +36,25 @@ locals {
     POSTGRES_SSLMODE                = "require"
     SQLALCHEMY_POOL_SIZE            = "1"
     SQLALCHEMY_MAX_OVERFLOW         = "0"
-    WEBAPP_URL                      = var.webapp_url
-    SLACK_CLIENT_ID                 = var.slack_client_id
-    SLACK_CLIENT_SECRET             = var.slack_client_secret
-    GITHUB_APP_SLUG                 = var.github_app_slug
-    GITHUB_INSTALL_STATE_SECRET     = var.github_install_state_secret
-    GITHUB_CLIENT_ID                = var.github_client_id
-    GITHUB_CLIENT_SECRET            = var.github_client_secret
-    GITHUB_OAUTH_STATE_SECRET       = var.github_oauth_state_secret
-    SALESFORCE_PACKAGE_VERSION_ID   = var.salesforce_package_version_id
-    SALESFORCE_INSTALL_STATE_SECRET = var.salesforce_install_state_secret
-    SALESFORCE_CLIENT_ID            = var.salesforce_client_id
-    SALESFORCE_PRIVATE_KEY          = var.salesforce_private_key
-    SALESFORCE_LOGIN_URL            = var.salesforce_login_url
+    WEBAPP_URL                      = local.secrets["WEBAPP_URL"]
+    SLACK_CLIENT_ID                 = local.secrets["SLACK_CLIENT_ID"]
+    SLACK_CLIENT_SECRET             = local.secrets["SLACK_CLIENT_SECRET"]
+    GITHUB_APP_SLUG                 = local.secrets["GITHUB_APP_SLUG"]
+    GITHUB_INSTALL_STATE_SECRET     = local.secrets["GITHUB_INSTALL_STATE_SECRET"]
+    GITHUB_CLIENT_ID                = local.secrets["GITHUB_CLIENT_ID"]
+    GITHUB_CLIENT_SECRET            = local.secrets["GITHUB_CLIENT_SECRET"]
+    GITHUB_OAUTH_STATE_SECRET       = local.secrets["GITHUB_OAUTH_STATE_SECRET"]
+    SALESFORCE_PACKAGE_VERSION_ID   = local.secrets["SALESFORCE_PACKAGE_VERSION_ID"]
+    SALESFORCE_INSTALL_STATE_SECRET = local.secrets["SALESFORCE_INSTALL_STATE_SECRET"]
+    SALESFORCE_CLIENT_ID            = local.secrets["SALESFORCE_CLIENT_ID"]
+    SALESFORCE_PRIVATE_KEY          = local.secrets["SALESFORCE_PRIVATE_KEY"]
+    SALESFORCE_LOGIN_URL            = local.secrets["SALESFORCE_LOGIN_URL"]
   }
+}
+
+module "secrets" {
+  source         = "../ssm-secrets"
+  parameter_name = var.ssm_secrets_parameter
 }
 
 resource "aws_cloudwatch_log_group" "api" {

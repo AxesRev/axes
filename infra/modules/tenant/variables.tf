@@ -38,12 +38,9 @@ variable "postgres_password" {
   sensitive = true
 }
 
-variable "auth0_domain" {
-  type = string
-}
-
-variable "auth0_client_id" {
-  type = string
+variable "ssm_secrets_parameter" {
+  description = "Existing SSM SecureString JSON. Not managed by Terraform."
+  type        = string
 }
 
 variable "tags" {

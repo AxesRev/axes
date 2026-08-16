@@ -38,23 +38,9 @@ variable "postgres_password" {
   sensitive = true
 }
 
-variable "internal_api_secret" {
-  type      = string
-  sensitive = true
-}
-
-variable "paddle_api_key" {
-  type      = string
-  sensitive = true
-}
-
-variable "paddle_webhook_secret" {
-  type      = string
-  sensitive = true
-}
-
-variable "paddle_usage_price_id" {
-  type = string
+variable "ssm_secrets_parameter" {
+  description = "Existing SSM SecureString JSON. Not managed by Terraform."
+  type        = string
 }
 
 variable "charge_schedule_expression" {

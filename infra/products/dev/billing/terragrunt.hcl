@@ -58,8 +58,5 @@ inputs = {
   postgres_user     = dependency.rds.outputs.master_username
   postgres_password = dependency.rds.outputs.master_password
 
-  internal_api_secret   = get_env("INTERNAL_API_SECRET", "")
-  paddle_api_key        = get_env("PADDLE_API_KEY", "")
-  paddle_webhook_secret = get_env("PADDLE_WEBHOOK_SECRET", "")
-  paddle_usage_price_id = get_env("PADDLE_USAGE_PRICE_ID", "")
+  ssm_secrets_parameter = "/axes/${local.env.locals.environment}/secrets"
 }

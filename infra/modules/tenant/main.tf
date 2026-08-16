@@ -26,6 +26,7 @@ resource "aws_iam_role_policy_attachment" "vpc" {
 }
 
 locals {
+  secrets = module.secrets.values
   environment = {
     POSTGRES_HOST           = var.postgres_host
     POSTGRES_PORT           = tostring(var.postgres_port)
@@ -35,9 +36,14 @@ locals {
     POSTGRES_SSLMODE        = "require"
     SQLALCHEMY_POOL_SIZE    = "1"
     SQLALCHEMY_MAX_OVERFLOW = "0"
-    AUTH0_DOMAIN            = var.auth0_domain
-    AUTH0_CLIENT_ID         = var.auth0_client_id
+    AUTH0_DOMAIN            = local.secrets["AUTH0_DOMAIN"]
+    AUTH0_CLIENT_ID         = local.secrets["AUTH0_CLIENT_ID"]
   }
+}
+
+module "secrets" {
+  source         = "../ssm-secrets"
+  parameter_name = var.ssm_secrets_parameter
 }
 
 resource "aws_cloudwatch_log_group" "api" {

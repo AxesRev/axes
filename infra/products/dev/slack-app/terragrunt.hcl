@@ -103,10 +103,7 @@ inputs = {
   postgres_user     = dependency.rds.outputs.master_username
   postgres_password = dependency.rds.outputs.master_password
 
-  slack_signing_secret = get_env("SLACK_SIGNING_SECRET", "")
-  slack_client_id      = get_env("SLACK_CLIENT_ID", "")
-  slack_client_secret  = get_env("SLACK_CLIENT_SECRET", "")
-  slack_bot_token      = get_env("SLACK_BOT_TOKEN", "")
-  internal_api_secret  = get_env("INTERNAL_API_SECRET", "")
+  ssm_secrets_parameter = "/axes/${local.env.locals.environment}/secrets"
+
   integrations_public_url = dependency.integrations.outputs.invoke_url
 }

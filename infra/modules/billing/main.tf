@@ -26,6 +26,7 @@ resource "aws_iam_role_policy_attachment" "vpc" {
 }
 
 locals {
+  secrets = module.secrets.values
   environment = {
     POSTGRES_HOST           = var.postgres_host
     POSTGRES_PORT           = tostring(var.postgres_port)
@@ -35,11 +36,16 @@ locals {
     POSTGRES_SSLMODE        = "require"
     SQLALCHEMY_POOL_SIZE    = "1"
     SQLALCHEMY_MAX_OVERFLOW = "0"
-    INTERNAL_API_SECRET     = var.internal_api_secret
-    PADDLE_API_KEY          = var.paddle_api_key
-    PADDLE_WEBHOOK_SECRET   = var.paddle_webhook_secret
-    PADDLE_USAGE_PRICE_ID   = var.paddle_usage_price_id
+    INTERNAL_API_SECRET     = local.secrets["INTERNAL_API_SECRET"]
+    PADDLE_API_KEY          = local.secrets["PADDLE_API_KEY"]
+    PADDLE_WEBHOOK_SECRET   = local.secrets["PADDLE_WEBHOOK_SECRET"]
+    PADDLE_USAGE_PRICE_ID   = local.secrets["PADDLE_USAGE_PRICE_ID"]
   }
+}
+
+module "secrets" {
+  source         = "../ssm-secrets"
+  parameter_name = var.ssm_secrets_parameter
 }
 
 resource "aws_cloudwatch_log_group" "api" {

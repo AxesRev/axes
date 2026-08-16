@@ -38,67 +38,9 @@ variable "postgres_password" {
   sensitive = true
 }
 
-variable "webapp_url" {
-  type = string
-}
-
-variable "slack_client_id" {
-  type      = string
-  sensitive = true
-}
-
-variable "slack_client_secret" {
-  type      = string
-  sensitive = true
-}
-
-variable "github_app_slug" {
-  type = string
-}
-
-variable "github_install_state_secret" {
-  type      = string
-  sensitive = true
-}
-
-variable "github_client_id" {
-  type      = string
-  sensitive = true
-}
-
-variable "github_client_secret" {
-  type      = string
-  sensitive = true
-}
-
-variable "github_oauth_state_secret" {
-  type      = string
-  sensitive = true
-}
-
-variable "salesforce_package_version_id" {
-  type    = string
-  default = "04tg50000008CgjAAE"
-}
-
-variable "salesforce_install_state_secret" {
-  type      = string
-  sensitive = true
-}
-
-variable "salesforce_client_id" {
-  type      = string
-  sensitive = true
-}
-
-variable "salesforce_private_key" {
-  type      = string
-  sensitive = true
-}
-
-variable "salesforce_login_url" {
-  type    = string
-  default = "https://login.salesforce.com"
+variable "ssm_secrets_parameter" {
+  description = "Existing SSM SecureString JSON. Not managed by Terraform."
+  type        = string
 }
 
 variable "tags" {
