@@ -15,10 +15,22 @@ from slack_app.store import get_or_create_slack_user_identity_for_team, resolve_
 
 logger = logging.getLogger(__name__)
 
-# Map Slack thread root timestamps to LangGraph thread IDs.
-# Key: Slack channel + ":" + root message ts  →  LangGraph thread_id.
-# In production this should be persisted in a database.
-SLACK_THREAD_MAP: dict[str, str] = {}
+_SLACK_CHANNEL_META = "slack_channel"
+_SLACK_THREAD_TS_META = "slack_thread_ts"
+
+
+def _slack_thread_metadata(channel: str, thread_ts: str) -> dict[str, str]:
+    return {_SLACK_CHANNEL_META: channel, _SLACK_THREAD_TS_META: thread_ts}
+
+
+async def _find_langgraph_thread_id(client: Any, channel: str, thread_ts: str) -> str | None:
+    threads = await client.threads.search(
+        metadata=_slack_thread_metadata(channel, thread_ts),
+        limit=1,
+    )
+    if not threads:
+        return None
+    return threads[0]["thread_id"]
 
 
 async def handle_message_event(event: dict[str, Any], *, team_id: str | None = None) -> None:
@@ -28,8 +40,8 @@ async def handle_message_event(event: dict[str, Any], *, team_id: str | None = N
     - A **top-level message** (no ``thread_ts`` in the event) always starts a
       brand-new LangGraph thread and opens a new Slack reply-thread.
     - A **thread reply** (``thread_ts`` present) continues the LangGraph thread
-      that was created when the parent Slack message arrived.  If no mapping
-      exists (e.g. the thread pre-dates this bot), the reply is silently ignored.
+      that was created when the parent Slack message arrived.  If no LangGraph
+      thread is found for that Slack thread, the reply is silently ignored.
 
     Args:
         event: The raw Slack event payload.
@@ -56,12 +68,6 @@ async def handle_message_event(event: dict[str, Any], *, team_id: str | None = N
     is_thread_reply: bool = thread_ts is not None and thread_ts != ts
 
     if is_thread_reply:
-        # Only continue if this thread was started by our bot.
-        map_key = f"{channel}:{thread_ts}"
-        if map_key not in SLACK_THREAD_MAP:
-            logger.debug("Ignoring reply in untracked thread %s (channel %s)", thread_ts, channel)
-            return
-        # Replies are posted back into the same thread.
         reply_thread_ts: str = thread_ts  # type: ignore[assignment]
     else:
         # Top-level message — a new Slack thread will be opened by replying with
@@ -94,6 +100,16 @@ async def handle_message_event(event: dict[str, Any], *, team_id: str | None = N
         )
         return
 
+    client = get_client(url=slack_settings.LANGGRAPH_API_URL, headers={"X-Slack-User-ID": user_id})
+    thread_id: str | None = None
+
+    if is_thread_reply:
+        thread_id = await _find_langgraph_thread_id(client, channel, reply_thread_ts)
+        if thread_id is None:
+            logger.debug("Ignoring reply in untracked thread %s (channel %s)", reply_thread_ts, channel)
+            return
+        logger.info("Continuing thread %s for Slack thread %s", thread_id, reply_thread_ts)
+
     if not access_result.linked:
         await post_message(
             channel=channel,
@@ -110,20 +126,11 @@ async def handle_message_event(event: dict[str, Any], *, team_id: str | None = N
     github_installation_id = access_result.github_installation_id
     slack_email = await fetch_user_email(user_id) or ""
 
-    # --- Agent invocation ------------------------------------------------------
-    client = get_client(url=slack_settings.LANGGRAPH_API_URL, headers={"X-Slack-User-ID": user_id})
-
-    map_key = f"{channel}:{reply_thread_ts}"
-
-    if is_thread_reply:
-        # The mapping was already confirmed to exist above.
-        thread_id: str = SLACK_THREAD_MAP[map_key]
-        logger.info("Continuing thread %s for Slack thread %s", thread_id, reply_thread_ts)
-    else:
-        # New top-level message — always create a fresh LangGraph thread.
-        thread = await client.threads.create()
+    if thread_id is None:
+        thread = await client.threads.create(
+            metadata=_slack_thread_metadata(channel, reply_thread_ts),
+        )
         thread_id = thread["thread_id"]
-        SLACK_THREAD_MAP[map_key] = thread_id
         logger.info(
             "Created new LangGraph thread %s for Slack thread %s (user %s)",
             thread_id,

@@ -6,8 +6,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from common.db import build_database_url
 
-# Get the directory where this config file lives
-SLACK_APP_DIR = Path(__file__).parent
+_APP_DIR = Path(__file__).resolve().parents[2]
+_REPO_DIR = _APP_DIR.parent
 
 
 class SlackSettings(BaseSettings):
@@ -15,8 +15,8 @@ class SlackSettings(BaseSettings):
 
     model_config = SettingsConfigDict(
         env_file=(
-            str(SLACK_APP_DIR / ".env"),
-            str(SLACK_APP_DIR.parent / ".env"),
+            str(_APP_DIR / ".env"),
+            str(_REPO_DIR / ".env"),
         ),
         case_sensitive=True,
         extra="ignore",

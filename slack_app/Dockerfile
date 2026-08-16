@@ -20,12 +20,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-COPY langraph_server/pyproject.toml langraph_server/README.md ./
-COPY uv.lock ./
+WORKDIR /build
 
-RUN uv export --frozen --no-emit-project --format=requirements-txt > requirements.txt && \
+COPY pyproject.toml uv.lock ./
+COPY billing_service/pyproject.toml billing_service/pyproject.toml
+COPY tenant_service/pyproject.toml tenant_service/pyproject.toml
+COPY integrations_service/pyproject.toml integrations_service/pyproject.toml
+COPY slack_app/pyproject.toml slack_app/pyproject.toml
+COPY langraph_server/pyproject.toml langraph_server/README.md langraph_server/
+COPY graph_service/pyproject.toml graph_service/pyproject.toml
+COPY neo4j_mcp/pyproject.toml neo4j_mcp/pyproject.toml
+
+RUN uv export --frozen --package aegra-slack-app --no-emit-project --no-dev --format=requirements-txt > requirements.txt && \
     uv pip install --system --compile-bytecode -r requirements.txt && \
-    uv pip install --system --compile-bytecode langgraph-sdk && \
     rm requirements.txt
 
 FROM base AS final
@@ -38,7 +45,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY --from=builder /usr/local/lib/python${PY_VERSION}/site-packages/ /usr/local/lib/python${PY_VERSION}/site-packages/
 COPY --from=builder /usr/local/bin/ /usr/local/bin/
 
-COPY slack_app ./slack_app
+COPY slack_app/src/slack_app ./slack_app
 COPY common ./common
 
 EXPOSE 8000

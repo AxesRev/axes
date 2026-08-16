@@ -12,7 +12,7 @@ import httpx
 
 from slack_app.config import slack_settings
 
-MANIFEST_PATH = Path(__file__).parent / "slack_manifest.json"
+MANIFEST_PATH = Path(__file__).resolve().parents[2] / "slack_manifest.json"
 SLACK_API_BASE = "https://slack.com/api"
 
 
