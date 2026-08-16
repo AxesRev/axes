@@ -166,6 +166,8 @@ jobs:
           context: .
           file: langraph_server/Dockerfile
           platforms: linux/arm64
+          provenance: false
+          sbom: false
           push: true
           tags: ${{ steps.ecr.outputs.registry }}/axes/langraph-server:${{ env.IMAGE_TAG }}
           cache-from: type=gha,scope=langraph-server-arm64
@@ -232,6 +234,8 @@ jobs:
           context: neo4j_mcp
           file: neo4j_mcp/Dockerfile
           platforms: linux/arm64
+          provenance: false
+          sbom: false
           push: true
           tags: ${{ steps.ecr.outputs.registry }}/axes/neo4j-mcp:${{ env.IMAGE_TAG }}
           cache-from: type=gha,scope=neo4j-mcp-arm64
@@ -298,6 +302,8 @@ jobs:
           context: .
           file: slack_app/Dockerfile
           platforms: linux/arm64
+          provenance: false
+          sbom: false
           push: true
           tags: ${{ steps.ecr.outputs.registry }}/axes/slack-app:${{ env.IMAGE_TAG }}
           cache-from: type=gha,scope=slack-app-arm64
@@ -364,6 +370,8 @@ jobs:
           context: .
           file: billing_service/Dockerfile
           platforms: linux/arm64
+          provenance: false
+          sbom: false
           push: true
           tags: ${{ steps.ecr.outputs.registry }}/axes/billing:${{ env.IMAGE_TAG }}
           cache-from: type=gha,scope=billing-arm64
@@ -430,6 +438,8 @@ jobs:
           context: .
           file: tenant_service/Dockerfile
           platforms: linux/arm64
+          provenance: false
+          sbom: false
           push: true
           tags: ${{ steps.ecr.outputs.registry }}/axes/tenant:${{ env.IMAGE_TAG }}
           cache-from: type=gha,scope=tenant-arm64
@@ -496,6 +506,8 @@ jobs:
           context: .
           file: integrations_service/Dockerfile
           platforms: linux/arm64
+          provenance: false
+          sbom: false
           push: true
           tags: ${{ steps.ecr.outputs.registry }}/axes/integrations:${{ env.IMAGE_TAG }}
           cache-from: type=gha,scope=integrations-arm64
