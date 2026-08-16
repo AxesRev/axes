@@ -23,6 +23,8 @@ import {
   type TenantRecord,
 } from "@/lib/tenants";
 
+export const dynamic = "force-dynamic";
+
 function redirectToLoginIfUnauthorized(error: unknown): void {
   if (error instanceof ApiUnauthorizedError) {
     redirect("/auth/login");
