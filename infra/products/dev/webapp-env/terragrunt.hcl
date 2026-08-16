@@ -68,4 +68,5 @@ inputs = {
 
   ssm_secrets_parameter   = "/axes/${local.env.locals.environment}/secrets"
   ssm_generated_parameter = "/axes/${local.env.locals.environment}/generated"
+  source_path             = "${get_repo_root()}/webapp/axes"
 }

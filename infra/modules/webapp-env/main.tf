@@ -55,3 +55,22 @@ resource "vercel_project_environment_variables" "this" {
     }
   ]
 }
+
+data "vercel_project_directory" "this" {
+  path = var.source_path
+}
+
+resource "vercel_deployment" "this" {
+  project_id  = var.project_id
+  team_id     = var.team_id
+  files       = data.vercel_project_directory.this.files
+  path_prefix = data.vercel_project_directory.this.path
+  production  = true
+
+  project_settings = {
+    framework      = "nextjs"
+    root_directory = ""
+  }
+
+  depends_on = [vercel_project_environment_variables.this]
+}

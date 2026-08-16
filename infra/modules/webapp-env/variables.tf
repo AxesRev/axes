@@ -33,6 +33,11 @@ variable "ssm_generated_parameter" {
   type        = string
 }
 
+variable "source_path" {
+  description = "Absolute path to the Next.js app directory."
+  type        = string
+}
+
 variable "tags" {
   type    = map(string)
   default = {}
