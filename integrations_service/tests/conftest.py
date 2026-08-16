@@ -1,8 +1,17 @@
 import os
 
+os.environ.setdefault("POSTGRES_USER", "postgres")
 os.environ.setdefault("POSTGRES_PASSWORD", "test-postgres-password")
+os.environ.setdefault("POSTGRES_HOST", "localhost")
+os.environ.setdefault("POSTGRES_PORT", "5432")
+os.environ.setdefault("POSTGRES_DB", "aegra")
+os.environ.setdefault("SLACK_CLIENT_ID", "test-slack-client-id")
 os.environ.setdefault("SLACK_CLIENT_SECRET", "test-slack-client-secret")
 os.environ.setdefault("INSTALL_SECRET", "test-install-secret")
+os.environ.setdefault("GITHUB_APP_SLUG", "test-github-app")
+os.environ.setdefault("GITHUB_CLIENT_ID", "test-github-client-id")
 os.environ.setdefault("GITHUB_CLIENT_SECRET", "test-github-client-secret")
 os.environ.setdefault("GITHUB_OAUTH_STATE_SECRET", "test-github-oauth-state-secret")
+os.environ.setdefault("SALESFORCE_CLIENT_ID", "test-salesforce-client-id")
 os.environ.setdefault("SALESFORCE_PRIVATE_KEY", "test-salesforce-private-key")
+os.environ.setdefault("SALESFORCE_LOGIN_URL", "https://login.salesforce.com")

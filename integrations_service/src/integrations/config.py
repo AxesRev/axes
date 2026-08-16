@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Self
 
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -14,7 +13,6 @@ _REPO_ROOT = Path(__file__).resolve().parents[3]
 _ENV_FILE = str(_REPO_ROOT / ".env")
 
 DEFAULT_SALESFORCE_PACKAGE_VERSION_ID = "04tg50000008CgjAAE"
-DEFAULT_SALESFORCE_LOGIN_URL = "https://login.salesforce.com"
 
 SLACK_BOT_SCOPES = [
     "app_mentions:read",
@@ -37,11 +35,11 @@ class IntegrationSettings(BaseSettings):
     )
 
     DATABASE_URL: str | None = None
-    POSTGRES_USER: str = "postgres"
+    POSTGRES_USER: str
     POSTGRES_PASSWORD: str
-    POSTGRES_HOST: str = "localhost"
-    POSTGRES_PORT: str = "5433"
-    POSTGRES_DB: str = "aegra"
+    POSTGRES_HOST: str
+    POSTGRES_PORT: str
+    POSTGRES_DB: str
     POSTGRES_SSLMODE: str | None = "require"
     SQLALCHEMY_POOL_SIZE: int = 1
     SQLALCHEMY_MAX_OVERFLOW: int = 0
@@ -50,28 +48,38 @@ class IntegrationSettings(BaseSettings):
     SERVER_URL: str = ""
     WEBAPP_URL: str = "http://localhost:3000"
 
-    SLACK_CLIENT_ID: str = ""
+    SLACK_CLIENT_ID: str
     SLACK_CLIENT_SECRET: str
 
-    GITHUB_APP_SLUG: str = ""
+    GITHUB_APP_SLUG: str
     INSTALL_SECRET: str
-    GITHUB_CLIENT_ID: str = ""
+    GITHUB_CLIENT_ID: str
     GITHUB_CLIENT_SECRET: str
     GITHUB_OAUTH_STATE_SECRET: str
 
     SALESFORCE_PACKAGE_VERSION_ID: str = DEFAULT_SALESFORCE_PACKAGE_VERSION_ID
-    SALESFORCE_CLIENT_ID: str = ""
-    SALESFORCE_PRIVATE_KEY: str | None = None
+    SALESFORCE_CLIENT_ID: str
+    SALESFORCE_PRIVATE_KEY: str
     SALESFORCE_PRIVATE_KEY_PATH: str | None = None
-    SALESFORCE_LOGIN_URL: str = DEFAULT_SALESFORCE_LOGIN_URL
+    SALESFORCE_LOGIN_URL: str
 
-    @model_validator(mode="after")
-    def _require_salesforce_private_key(self) -> Self:
-        pem = (self.SALESFORCE_PRIVATE_KEY or "").strip()
-        path = (self.SALESFORCE_PRIVATE_KEY_PATH or "").strip()
-        if not pem and not path:
-            raise ValueError("SALESFORCE_PRIVATE_KEY or SALESFORCE_PRIVATE_KEY_PATH is required")
-        return self
+    @model_validator(mode="before")
+    @classmethod
+    def _load_salesforce_private_key(cls, data: object) -> object:
+        if not isinstance(data, dict):
+            return data
+        pem = str(data.get("SALESFORCE_PRIVATE_KEY") or "").strip()
+        if pem:
+            return data
+        raw_path = str(data.get("SALESFORCE_PRIVATE_KEY_PATH") or "").strip()
+        if not raw_path:
+            return data
+        path = Path(raw_path)
+        if not path.is_absolute():
+            path = _REPO_ROOT / path
+        if path.exists():
+            data["SALESFORCE_PRIVATE_KEY"] = path.read_text(encoding="utf-8")
+        return data
 
     @property
     def database_url(self) -> str:
@@ -87,15 +95,7 @@ class IntegrationSettings(BaseSettings):
 
     @property
     def salesforce_private_key(self) -> str:
-        pem = (self.SALESFORCE_PRIVATE_KEY or "").strip()
-        if pem:
-            return pem.replace("\\n", "\n")
-        if not self.SALESFORCE_PRIVATE_KEY_PATH:
-            return ""
-        path = Path(self.SALESFORCE_PRIVATE_KEY_PATH)
-        if not path.is_absolute():
-            path = _REPO_ROOT / path
-        return path.read_text(encoding="utf-8") if path.exists() else ""
+        return self.SALESFORCE_PRIVATE_KEY.strip().replace("\\n", "\n")
 
     @property
     def jwt_domain(self) -> str:

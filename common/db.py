@@ -12,11 +12,11 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 def build_database_url(
     *,
     database_url: str | None = None,
-    postgres_user: str = "postgres",
-    postgres_password: str = "postgres",
-    postgres_host: str = "localhost",
-    postgres_port: str | int = "5433",
-    postgres_db: str = "aegra",
+    postgres_user: str,
+    postgres_password: str,
+    postgres_host: str,
+    postgres_port: str | int,
+    postgres_db: str,
     postgres_sslmode: str | None = None,
 ) -> str:
     if database_url:

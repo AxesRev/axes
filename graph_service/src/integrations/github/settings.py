@@ -44,11 +44,11 @@ class RunnerSettings(BaseSettings):
     NEO4J_PASSWORD: str
 
     # Postgres
-    POSTGRES_USER: str = "postgres"
+    POSTGRES_USER: str
     POSTGRES_PASSWORD: str
-    POSTGRES_HOST: str = "localhost"
-    POSTGRES_PORT: int = 5433
-    POSTGRES_DB: str = "aegra"
+    POSTGRES_HOST: str
+    POSTGRES_PORT: int
+    POSTGRES_DB: str
 
     @computed_field
     @property

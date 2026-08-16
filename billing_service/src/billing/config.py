@@ -28,11 +28,11 @@ class BillingSettings(BaseSettings):
     INTERNAL_API_SECRET: str
 
     DATABASE_URL: str | None = None
-    POSTGRES_USER: str = "postgres"
+    POSTGRES_USER: str
     POSTGRES_PASSWORD: str
-    POSTGRES_HOST: str = "localhost"
-    POSTGRES_PORT: str = "5433"
-    POSTGRES_DB: str = "aegra"
+    POSTGRES_HOST: str
+    POSTGRES_PORT: str
+    POSTGRES_DB: str
     POSTGRES_SSLMODE: str | None = "require"
     SQLALCHEMY_POOL_SIZE: int = 1
     SQLALCHEMY_MAX_OVERFLOW: int = 0

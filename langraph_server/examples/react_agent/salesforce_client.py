@@ -9,8 +9,6 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from simple_salesforce import Salesforce
 
 _ENV_FILE = str(Path(__file__).resolve().parents[3] / ".env")
-_DEFAULT_PRIVATE_KEY_PATH = "graph_service/certs/salesforce/AxesRev.key"
-_DEFAULT_LOGIN_URL = "https://login.salesforce.com"
 
 
 class SalesforceJwtSettings(BaseSettings):
@@ -20,9 +18,9 @@ class SalesforceJwtSettings(BaseSettings):
         extra="ignore",
     )
 
-    SALESFORCE_CLIENT_ID: str = ""
-    SALESFORCE_PRIVATE_KEY_PATH: str = _DEFAULT_PRIVATE_KEY_PATH
-    SALESFORCE_LOGIN_URL: str = _DEFAULT_LOGIN_URL
+    SALESFORCE_CLIENT_ID: str
+    SALESFORCE_PRIVATE_KEY_PATH: str
+    SALESFORCE_LOGIN_URL: str
 
     @computed_field
     @property

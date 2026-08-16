@@ -24,7 +24,7 @@ class SlackSettings(BaseSettings):
 
     SLACK_BOT_TOKEN: str
     SLACK_SIGNING_SECRET: str
-    SLACK_CLIENT_ID: str = ""
+    SLACK_CLIENT_ID: str
     SLACK_CLIENT_SECRET: str
     SLACK_APP_ID: str = ""
     SLACK_APP_CONFIG_TOKEN: str | None = None
@@ -35,11 +35,11 @@ class SlackSettings(BaseSettings):
     LANGGRAPH_API_URL: str = "http://langraph-server.langraph-server.svc.cluster.local:8000"
 
     DATABASE_URL: str | None = None
-    POSTGRES_USER: str = "postgres"
+    POSTGRES_USER: str
     POSTGRES_PASSWORD: str
-    POSTGRES_HOST: str = "localhost"
-    POSTGRES_PORT: str = "5433"
-    POSTGRES_DB: str = "aegra"
+    POSTGRES_HOST: str
+    POSTGRES_PORT: str
+    POSTGRES_DB: str
     POSTGRES_SSLMODE: str | None = "require"
     SQLALCHEMY_POOL_SIZE: int = 5
     SQLALCHEMY_MAX_OVERFLOW: int = 5
