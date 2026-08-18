@@ -33,6 +33,7 @@ def test_apply_server_url_rewrites_events_commands_and_oauth() -> None:
     assert updated["oauth_config"]["redirect_urls"] == [
         "https://integrations.execute-api.eu-west-1.amazonaws.com/app_integrations/slack/callback"
     ]
+    assert updated["settings"]["org_deploy_enabled"] is True
     assert manifest["settings"]["event_subscriptions"]["request_url"] == "https://old/slack/events"
 
 

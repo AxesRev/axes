@@ -56,8 +56,11 @@ def _apply_server_url(
     for command in updated.get("features", {}).get("slash_commands", []):
         command["url"] = f"{server_url}/slack/commands"
 
-    event_subscriptions = updated.setdefault("settings", {}).setdefault("event_subscriptions", {})
+    settings = updated.setdefault("settings", {})
+    event_subscriptions = settings.setdefault("event_subscriptions", {})
     event_subscriptions["request_url"] = f"{server_url}/slack/events"
+    # Slack rejects turning this off after it has been enabled.
+    settings["org_deploy_enabled"] = True
 
     return updated
 
