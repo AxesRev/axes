@@ -26,6 +26,15 @@ dependency "ecr" {
   mock_outputs_allowed_terraform_commands = ["validate", "plan", "destroy"]
 }
 
+dependency "generated" {
+  config_path = "../generated"
+
+  mock_outputs = {
+    parameter_name = "/axes/dev/generated"
+  }
+  mock_outputs_allowed_terraform_commands = ["validate", "plan", "destroy"]
+}
+
 locals {
   env = read_terragrunt_config(find_in_parent_folders("env.hcl"))
 }
@@ -53,6 +62,6 @@ EOF
 inputs = {
   image = "${dependency.ecr.outputs.repository_urls["axes/langraph-server"]}:${get_env("LANGRAPH_SERVER_IMAGE_TAG", get_env("IMAGE_TAG", "latest"))}"
 
-  ssm_generated_parameter = "/axes/${local.env.locals.environment}/generated"
+  ssm_generated_parameter = dependency.generated.outputs.parameter_name
   ssm_secrets_parameter   = "/axes/${local.env.locals.environment}/secrets"
 }

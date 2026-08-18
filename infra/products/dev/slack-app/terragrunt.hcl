@@ -47,6 +47,15 @@ dependency "integrations" {
   mock_outputs_allowed_terraform_commands = ["validate", "plan", "destroy"]
 }
 
+dependency "generated" {
+  config_path = "../generated"
+
+  mock_outputs = {
+    parameter_name = "/axes/dev/generated"
+  }
+  mock_outputs_allowed_terraform_commands = ["validate", "plan", "destroy"]
+}
+
 locals {
   env = read_terragrunt_config(find_in_parent_folders("env.hcl"))
 }
@@ -83,7 +92,7 @@ inputs = {
   image = "${dependency.ecr.outputs.repository_urls["axes/slack-app"]}:${get_env("SLACK_APP_IMAGE_TAG", get_env("IMAGE_TAG", "latest"))}"
 
   ssm_secrets_parameter   = "/axes/${local.env.locals.environment}/secrets"
-  ssm_generated_parameter = "/axes/${local.env.locals.environment}/generated"
+  ssm_generated_parameter = dependency.generated.outputs.parameter_name
 
   integrations_public_url = dependency.integrations.outputs.invoke_url
 }

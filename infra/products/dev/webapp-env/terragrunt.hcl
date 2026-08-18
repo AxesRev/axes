@@ -67,6 +67,6 @@ inputs = {
   integrations_api_url = dependency.integrations.outputs.invoke_url
 
   ssm_secrets_parameter   = "/axes/${local.env.locals.environment}/secrets"
-  ssm_generated_parameter = "/axes/${local.env.locals.environment}/generated"
+  ssm_generated_parameter = dependency.generated.outputs.parameter_name
   source_path             = "${get_repo_root()}/webapp/axes"
 }
