@@ -78,9 +78,6 @@ async def _with_session():
 
 async def _handle(event: dict[str, Any]) -> dict[str, object]:
     method, path = _method_and_path(event)
-    if method == "GET" and path == "/health":
-        return _json_response(200, {"status": "healthy", "service": "billing"})
-
     try:
         if method == "GET" and path == "/billing/me":
             _require_internal_secret(event)

@@ -1,8 +1,8 @@
-"""Push slack_manifest.json after API Gateway URLs exist.
+"""Push slack_manifest.json after the Bolt pod answers through API Gateway.
 
-Reads SLACK_APP_ID and SLACK_APP_CONFIG_REFRESH_TOKEN from SSM, rotates the
-config access token, writes the new refresh token back immediately, then calls
-apps.manifest.update. Stdlib + AWS CLI so apply-apps needs no extra Python deps.
+Wait for public GET /health (routes + NLB + pod). Then rotate the Slack config
+token, write the new refresh token to SSM, and call apps.manifest.update.
+Stdlib + AWS CLI so apply-apps needs no extra Python deps.
 """
 
 from __future__ import annotations
@@ -144,18 +144,21 @@ def _rotate_config_token(refresh_token: str) -> tuple[str, str]:
     return access, new_refresh
 
 
-def _wait_healthy(server_url: str) -> None:
+def _wait_ready(server_url: str) -> None:
+    """Block until API Gateway reaches the live Bolt pod (404/502 keep waiting)."""
     url = f"{server_url.rstrip('/')}/health"
     last_error: Exception | None = None
-    for _ in range(HEALTH_ATTEMPTS):
+    for attempt in range(1, HEALTH_ATTEMPTS + 1):
         try:
             with urllib.request.urlopen(url, timeout=5) as response:  # nosec B310
                 if 200 <= response.status < 300:
+                    print(f"Slack Bolt ready at {url}", flush=True)
                     return
         except Exception as exc:  # noqa: BLE001 — poll until timeout
             last_error = exc
+            print(f"Waiting for Slack Bolt ({attempt}/{HEALTH_ATTEMPTS}): {exc}", flush=True)
         time.sleep(HEALTH_WAIT_SECONDS)
-    raise RuntimeError(f"Slack service not healthy at {url}: {last_error}")
+    raise RuntimeError(f"Slack Bolt not reachable at {url}: {last_error}")
 
 
 def _update_manifest(access_token: str, app_id: str, manifest: dict[str, Any]) -> None:
@@ -196,14 +199,14 @@ def deploy_manifest() -> None:
     if not refresh_token:
         raise ValueError("SLACK_APP_CONFIG_REFRESH_TOKEN is missing from SSM")
 
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest = _apply_server_url(manifest, server_url, oauth_url)
+    _wait_ready(server_url)
+
     access_token, new_refresh = _rotate_config_token(refresh_token)
     secrets["SLACK_APP_CONFIG_REFRESH_TOKEN"] = new_refresh
     secrets.pop("SLACK_APP_CONFIG_TOKEN", None)
     _ssm_put(ssm_name, region, secrets)
-
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    manifest = _apply_server_url(manifest, server_url, oauth_url)
-    _wait_healthy(server_url)
     _update_manifest(access_token, app_id, manifest)
     print(f"Slack manifest updated for app_id={app_id}")
 

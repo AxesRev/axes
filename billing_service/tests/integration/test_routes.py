@@ -73,13 +73,6 @@ def test_get_my_tenant_billing_requires_internal_secret() -> None:
 
 
 @pytest.mark.integration
-def test_health() -> None:
-    status_code, payload = _invoke(method="GET", path="/health")
-    assert status_code == 200
-    assert payload == {"status": "healthy", "service": "billing"}
-
-
-@pytest.mark.integration
 def test_get_my_tenant_billing_returns_not_setup(billing_session: AsyncMock) -> None:
     billing_session.get = AsyncMock(return_value=None)
 

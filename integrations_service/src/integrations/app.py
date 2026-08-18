@@ -24,9 +24,6 @@ async def _with_session():
 
 async def _handle(event: dict[str, Any]) -> dict[str, object]:
     method, path = method_and_path(event)
-    if method == "GET" and path == "/health":
-        return json_response(200, {"status": "healthy", "service": "integrations"})
-
     try:
         if method == "GET" and path == "/app_integrations/slack/install":
             async with await _with_session() as session:

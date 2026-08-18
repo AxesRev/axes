@@ -101,12 +101,6 @@ resource "aws_apigatewayv2_route" "tenants" {
   target    = "integrations/${aws_apigatewayv2_integration.this.id}"
 }
 
-resource "aws_apigatewayv2_route" "health" {
-  api_id    = aws_apigatewayv2_api.this.id
-  route_key = "GET /health"
-  target    = "integrations/${aws_apigatewayv2_integration.this.id}"
-}
-
 resource "aws_apigatewayv2_stage" "default" {
   api_id      = aws_apigatewayv2_api.this.id
   name        = "$default"

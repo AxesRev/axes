@@ -46,6 +46,9 @@ def test_deploy_manifest_writes_refresh_token_before_update(tmp_path) -> None:
     }
     order: list[str] = []
 
+    def wait(_server_url: str) -> None:
+        order.append("wait")
+
     def rotate(_refresh: str) -> tuple[str, str]:
         order.append("rotate")
         return "access-token", "new-refresh"
@@ -71,12 +74,12 @@ def test_deploy_manifest_writes_refresh_token_before_update(tmp_path) -> None:
         patch("slack_app.deploy_manifest._ssm_get", return_value=dict(secrets)),
         patch("slack_app.deploy_manifest._ssm_put", side_effect=put),
         patch("slack_app.deploy_manifest._rotate_config_token", side_effect=rotate),
-        patch("slack_app.deploy_manifest._wait_healthy"),
+        patch("slack_app.deploy_manifest._wait_ready", side_effect=wait),
         patch("slack_app.deploy_manifest._update_manifest", side_effect=update),
     ):
         deploy_manifest()
 
-    assert order == ["rotate", "put", "update"]
+    assert order == ["wait", "rotate", "put", "update"]
     assert secrets["SLACK_APP_CONFIG_REFRESH_TOKEN"] == "new-refresh"
     assert secrets["OTHER"] == "keep"
     assert "SLACK_APP_CONFIG_TOKEN" not in secrets

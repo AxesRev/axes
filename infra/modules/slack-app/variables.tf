@@ -1,30 +1,3 @@
-variable "name" {
-  description = "Name prefix for AWS resources."
-  type        = string
-}
-
-variable "vpc_id" {
-  type = string
-}
-
-variable "vpc_cidr" {
-  type = string
-}
-
-variable "private_subnet_ids" {
-  type = list(string)
-}
-
-variable "node_security_group_id" {
-  description = "EKS node SG; ingress opened for the NLB NodePort."
-  type        = string
-}
-
-variable "node_autoscaling_group_names" {
-  description = "EKS managed node group ASG names for NLB instance targets."
-  type        = list(string)
-}
-
 variable "namespace" {
   type    = string
   default = "slack-app"
@@ -36,14 +9,18 @@ variable "image" {
 }
 
 variable "node_port" {
-  description = "Static NodePort the internal NLB forwards to."
+  description = "Static NodePort the infra NLB forwards to. Must match slack-gateway."
   type        = number
-  default     = 30800
 }
 
 variable "replicas" {
   type    = number
   default = 1
+}
+
+variable "server_url" {
+  description = "Public HTTPS API Gateway URL from slack-gateway."
+  type        = string
 }
 
 variable "ssm_secrets_parameter" {
@@ -67,7 +44,7 @@ variable "manifest_path" {
 }
 
 variable "deploy_manifest_script" {
-  description = "Repo path to deploy_manifest.py. Runs after the public URL exists."
+  description = "Repo path to deploy_manifest.py. Runs after the Bolt pod is reachable."
   type        = string
 }
 

@@ -1,5 +1,5 @@
 output "invoke_url" {
-  description = "Public HTTPS URL for /tenants/* and /health."
+  description = "Public HTTPS URL for /tenants/*."
   value       = aws_apigatewayv2_api.this.api_endpoint
 }
 

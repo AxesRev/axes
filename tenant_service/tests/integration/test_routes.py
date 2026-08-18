@@ -51,13 +51,6 @@ def tenant_session(monkeypatch: pytest.MonkeyPatch) -> AsyncMock:
 
 
 @pytest.mark.integration
-def test_health() -> None:
-    status_code, payload = _invoke(method="GET", path="/health")
-    assert status_code == 200
-    assert payload == {"status": "healthy", "service": "tenant"}
-
-
-@pytest.mark.integration
 def test_get_my_tenant_requires_auth(monkeypatch: pytest.MonkeyPatch) -> None:
     def reject(_auth: str | None) -> dict[str, object]:
         raise HttpError(401, "Missing bearer token")

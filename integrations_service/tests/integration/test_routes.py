@@ -63,13 +63,6 @@ def session(monkeypatch: pytest.MonkeyPatch) -> AsyncMock:
 
 
 @pytest.mark.integration
-def test_health() -> None:
-    response = _invoke(method="GET", path="/health")
-    assert response["statusCode"] == 200
-    assert _json(response) == {"status": "healthy", "service": "integrations"}
-
-
-@pytest.mark.integration
 def test_github_install_redirects_to_github(session: AsyncMock, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("integrations.config.settings.GITHUB_APP_SLUG", "axes-test-app")
     monkeypatch.setattr("integrations.config.settings.INSTALL_SECRET", _GITHUB_SECRET)
