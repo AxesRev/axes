@@ -61,6 +61,16 @@ variable "integrations_public_url" {
   type        = string
 }
 
+variable "manifest_path" {
+  description = "Repo path to slack_manifest.json. Used to re-run deploy when the file changes."
+  type        = string
+}
+
+variable "deploy_manifest_script" {
+  description = "Repo path to deploy_manifest.py. Runs after the public URL exists."
+  type        = string
+}
+
 variable "tags" {
   type    = map(string)
   default = {}

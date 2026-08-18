@@ -95,4 +95,6 @@ inputs = {
   ssm_generated_parameter = dependency.generated.outputs.parameter_name
 
   integrations_public_url = dependency.integrations.outputs.invoke_url
+  manifest_path           = "${get_repo_root()}/slack_app/slack_manifest.json"
+  deploy_manifest_script  = "${get_repo_root()}/slack_app/src/slack_app/deploy_manifest.py"
 }

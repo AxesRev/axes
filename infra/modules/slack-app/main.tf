@@ -282,3 +282,30 @@ resource "aws_apigatewayv2_stage" "default" {
   auto_deploy = true
   tags        = var.tags
 }
+
+data "aws_region" "current" {}
+
+resource "terraform_data" "slack_manifest" {
+  input = {
+    server_url       = aws_apigatewayv2_api.this.api_endpoint
+    integrations_url = var.integrations_public_url
+    manifest_sha     = filesha256(var.manifest_path)
+  }
+
+  depends_on = [
+    kubernetes_deployment_v1.this,
+    aws_apigatewayv2_stage.default,
+  ]
+
+  provisioner "local-exec" {
+    command = "python3 -u \"${replace(var.deploy_manifest_script, "\\", "/")}\""
+
+    environment = {
+      SERVER_URL              = aws_apigatewayv2_api.this.api_endpoint
+      INTEGRATIONS_PUBLIC_URL = var.integrations_public_url
+      SSM_SECRETS_PARAMETER   = var.ssm_secrets_parameter
+      AWS_REGION              = data.aws_region.current.name
+      MANIFEST_PATH           = var.manifest_path
+    }
+  }
+}
