@@ -6,11 +6,23 @@ terraform {
   source = "../../../modules//slack-app"
 }
 
+dependency "vpc" {
+  config_path = "../vpc"
+
+  mock_outputs = {
+    vpc_id          = "vpc-mock"
+    private_subnets = ["subnet-a", "subnet-b"]
+  }
+  mock_outputs_allowed_terraform_commands = ["validate", "plan", "destroy"]
+}
+
 dependency "eks" {
   config_path = "../eks"
 
   mock_outputs = {
-    cluster_name = "axes-dev"
+    cluster_name                   = "axes-dev"
+    node_security_group_id         = "sg-mock"
+    node_autoscaling_group_names   = ["mock-asg"]
   }
   mock_outputs_allowed_terraform_commands = ["validate", "plan", "destroy"]
 }
@@ -22,16 +34,6 @@ dependency "ecr" {
     repository_urls = {
       "axes/slack-app" = "042993547532.dkr.ecr.eu-west-1.amazonaws.com/axes/slack-app"
     }
-  }
-  mock_outputs_allowed_terraform_commands = ["validate", "plan", "destroy"]
-}
-
-dependency "slack-gateway" {
-  config_path = "../slack-gateway"
-
-  mock_outputs = {
-    invoke_url = "https://example.execute-api.eu-west-1.amazonaws.com"
-    node_port  = 30800
   }
   mock_outputs_allowed_terraform_commands = ["validate", "plan", "destroy"]
 }
@@ -79,10 +81,15 @@ EOF
 }
 
 inputs = {
-  image = "${dependency.ecr.outputs.repository_urls["axes/slack-app"]}:${get_env("SLACK_APP_IMAGE_TAG", get_env("IMAGE_TAG", "latest"))}"
+  name = "${local.env.locals.environment}-slack"
 
-  server_url = dependency.slack-gateway.outputs.invoke_url
-  node_port  = dependency.slack-gateway.outputs.node_port
+  vpc_id                       = dependency.vpc.outputs.vpc_id
+  vpc_cidr                     = local.env.locals.vpc_cidr
+  private_subnet_ids           = dependency.vpc.outputs.private_subnets
+  node_security_group_id       = dependency.eks.outputs.node_security_group_id
+  node_autoscaling_group_names = dependency.eks.outputs.node_autoscaling_group_names
+
+  image = "${dependency.ecr.outputs.repository_urls["axes/slack-app"]}:${get_env("SLACK_APP_IMAGE_TAG", get_env("IMAGE_TAG", "latest"))}"
 
   ssm_secrets_parameter   = "/axes/${local.env.locals.environment}/secrets"
   ssm_generated_parameter = dependency.generated.outputs.parameter_name
