@@ -158,9 +158,10 @@ resource "kubernetes_deployment_v1" "this" {
               path = "/health"
               port = 8000
             }
-            initial_delay_seconds = 5
-            period_seconds        = 5
-            failure_threshold     = 5
+            initial_delay_seconds = 2
+            period_seconds        = 2
+            timeout_seconds       = 1
+            failure_threshold     = 60
           }
 
           liveness_probe {
@@ -168,8 +169,10 @@ resource "kubernetes_deployment_v1" "this" {
               path = "/health"
               port = 8000
             }
-            initial_delay_seconds = 30
-            period_seconds        = 20
+            initial_delay_seconds = 10
+            period_seconds        = 2
+            timeout_seconds       = 1
+            failure_threshold     = 60
           }
         }
       }

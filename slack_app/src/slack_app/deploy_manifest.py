@@ -23,8 +23,8 @@ MANIFEST_PATH = Path(__file__).resolve().parents[2] / "slack_manifest.json"
 SLACK_API_BASE = "https://slack.com/api"
 ROTATE_PATH = "/tooling.tokens.rotate"
 UPDATE_PATH = "/apps.manifest.update"
-HEALTH_ATTEMPTS = 60
-HEALTH_WAIT_SECONDS = 5
+HEALTH_ATTEMPTS = 150
+HEALTH_WAIT_SECONDS = 2
 UPDATE_ATTEMPTS = 8
 UPDATE_WAIT_SECONDS = 5
 FATAL_SLACK_ERRORS = frozenset(
@@ -150,7 +150,7 @@ def _wait_ready(server_url: str) -> None:
     last_error: Exception | None = None
     for attempt in range(1, HEALTH_ATTEMPTS + 1):
         try:
-            with urllib.request.urlopen(url, timeout=5) as response:  # nosec B310
+            with urllib.request.urlopen(url, timeout=1) as response:  # nosec B310
                 if 200 <= response.status < 300:
                     print(f"Slack Bolt ready at {url}", flush=True)
                     return
