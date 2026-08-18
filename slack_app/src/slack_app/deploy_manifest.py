@@ -35,6 +35,7 @@ FATAL_SLACK_ERRORS = frozenset(
         "not_allowed",
         "app_not_found",
         "account_inactive",
+        "invalid_manifest",
     }
 )
 
@@ -163,10 +164,11 @@ def _wait_ready(server_url: str) -> None:
 
 def _update_manifest(access_token: str, app_id: str, manifest: dict[str, Any]) -> None:
     last_error = "unknown_error"
+    body = json.dumps({"app_id": app_id, "manifest": json.dumps(manifest, separators=(",", ":"))}).encode()
     for attempt in range(UPDATE_ATTEMPTS):
         payload = _http_json(
             f"{SLACK_API_BASE}{UPDATE_PATH}",
-            json.dumps({"app_id": app_id, "manifest": manifest}).encode(),
+            body,
             {
                 "Authorization": f"Bearer {access_token}",
                 "Content-Type": "application/json",
@@ -174,8 +176,10 @@ def _update_manifest(access_token: str, app_id: str, manifest: dict[str, Any]) -
         )
         if payload.get("ok"):
             return
-        last_error = str(payload.get("error", "unknown_error"))
-        if last_error in FATAL_SLACK_ERRORS:
+        error_code = str(payload.get("error", "unknown_error"))
+        details = payload.get("errors")
+        last_error = f"{error_code}: {json.dumps(details)}" if details else error_code
+        if error_code in FATAL_SLACK_ERRORS:
             raise RuntimeError(f"apps.manifest.update failed: {last_error}")
         if attempt < UPDATE_ATTEMPTS - 1:
             time.sleep(UPDATE_WAIT_SECONDS)

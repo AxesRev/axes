@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from unittest.mock import patch
 
 import pytest
@@ -83,3 +84,38 @@ def test_deploy_manifest_writes_refresh_token_before_update(tmp_path) -> None:
     assert secrets["SLACK_APP_CONFIG_REFRESH_TOKEN"] == "new-refresh"
     assert secrets["OTHER"] == "keep"
     assert "SLACK_APP_CONFIG_TOKEN" not in secrets
+
+
+@pytest.mark.unit
+def test_update_manifest_sends_manifest_as_json_string() -> None:
+    captured: dict[str, bytes] = {}
+
+    def fake_http(_url: str, data: bytes, _headers: dict[str, str]) -> dict:
+        captured["data"] = data
+        return {"ok": True}
+
+    with patch("slack_app.deploy_manifest._http_json", side_effect=fake_http):
+        from slack_app.deploy_manifest import _update_manifest
+
+        _update_manifest("token", "A0TEST", {"display_information": {"name": "Axes"}})
+
+    payload = json.loads(captured["data"].decode())
+    assert payload["app_id"] == "A0TEST"
+    assert isinstance(payload["manifest"], str)
+    assert json.loads(payload["manifest"]) == {"display_information": {"name": "Axes"}}
+
+
+@pytest.mark.unit
+def test_update_manifest_includes_schema_errors() -> None:
+    def fake_http(_url: str, _data: bytes, _headers: dict[str, str]) -> dict:
+        return {
+            "ok": False,
+            "error": "invalid_manifest",
+            "errors": [{"message": "bad field", "pointer": "/settings"}],
+        }
+
+    with patch("slack_app.deploy_manifest._http_json", side_effect=fake_http):
+        from slack_app.deploy_manifest import _update_manifest
+
+        with pytest.raises(RuntimeError, match="invalid_manifest.*bad field"):
+            _update_manifest("token", "A0TEST", {})
