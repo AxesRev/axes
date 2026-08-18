@@ -68,11 +68,6 @@ resource "aws_lambda_function" "api" {
     command = ["tenants.app.handler"]
   }
 
-  vpc_config {
-    subnet_ids         = var.private_subnet_ids
-    security_group_ids = [var.db_clients_security_group_id]
-  }
-
   environment {
     variables = local.environment
   }

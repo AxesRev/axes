@@ -15,7 +15,7 @@ variable "vpc_id" {
 }
 
 variable "subnet_ids" {
-  description = "Subnet IDs for the control plane and managed nodes (typically private)."
+  description = "Subnet IDs for the control plane and managed nodes."
   type        = list(string)
 }
 

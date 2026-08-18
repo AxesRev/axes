@@ -65,6 +65,8 @@ module "eks" {
 
       disk_size = var.node_disk_size
 
+      subnet_ids = var.subnet_ids
+
       attach_cluster_primary_security_group = true
       vpc_security_group_ids                = var.additional_node_security_group_ids
     }
