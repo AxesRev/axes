@@ -294,7 +294,10 @@ resource "terraform_data" "slack_manifest" {
 
   depends_on = [
     kubernetes_deployment_v1.this,
+    aws_apigatewayv2_route.proxy,
+    aws_apigatewayv2_route.root,
     aws_apigatewayv2_stage.default,
+    aws_autoscaling_attachment.this,
   ]
 
   provisioner "local-exec" {
@@ -304,7 +307,7 @@ resource "terraform_data" "slack_manifest" {
       SERVER_URL              = aws_apigatewayv2_api.this.api_endpoint
       INTEGRATIONS_PUBLIC_URL = var.integrations_public_url
       SSM_SECRETS_PARAMETER   = var.ssm_secrets_parameter
-      AWS_REGION              = data.aws_region.current.name
+      AWS_REGION              = data.aws_region.current.region
       MANIFEST_PATH           = var.manifest_path
     }
   }
