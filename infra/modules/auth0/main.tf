@@ -38,6 +38,10 @@ resource "auth0_connection_client" "database" {
   client_id     = auth0_client.webapp.id
 }
 
+data "auth0_client" "webapp" {
+  client_id = auth0_client.webapp.id
+}
+
 import {
   to = auth0_client.webapp
   id = "Mgoww0WHHTlxXF0BtMwVDTjveNgMKqAB"
