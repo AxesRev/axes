@@ -1,6 +1,6 @@
 module "eks" {
   source  = "terraform-aws-modules/eks/aws"
-  version = "~> 21.24"
+  version = "~> 21.25"
 
   name               = var.cluster_name
   kubernetes_version = var.cluster_version
@@ -77,7 +77,7 @@ module "eks" {
 
 module "ebs_csi_irsa" {
   source  = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts"
-  version = "~> 6.6"
+  version = "~> 6.8"
 
   name                  = "${var.cluster_name}-ebs-csi"
   attach_ebs_csi_policy = true

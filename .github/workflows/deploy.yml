@@ -18,7 +18,7 @@ env:
   TF_IN_AUTOMATION: "true"
   TF_INPUT: "false"
   TF_LOG: ""
-  TERRAFORM_VERSION: "1.15.8"
+  TERRAFORM_VERSION: "1.15.9"
   TERRAGRUNT_VERSION: "1.1.1"
   DEPLOY_DIR: infra/products/dev
   IMAGE_TAG: ${{ github.sha }}
