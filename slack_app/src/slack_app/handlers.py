@@ -78,23 +78,32 @@ async def handle_message_event(event: dict[str, Any], *, team_id: str | None = N
 
     access_result = None
     tenant_id = ""
+    bot_token = None
     async with session_scope() as session:
-        identity = await get_or_create_slack_user_identity_for_team(
+        workspace = await get_or_create_slack_user_identity_for_team(
             slack_user_id=user_id,
             team_id=resolved_team_id,
             session=session,
         )
-        if identity is not None:
+        if workspace is not None:
             access_result = await resolve_github_access(
-                identity,
+                workspace.identity,
                 session,
                 server_url=slack_settings.integrations_public_url,
             )
-            tenant_id = identity.tenant_id
+            tenant_id = workspace.identity.tenant_id
+            bot_token = workspace.bot_token
 
     if access_result is None:
         logger.info(
             "Ignoring Slack message from unregistered workspace team_id=%s user=%s",
+            resolved_team_id,
+            user_id,
+        )
+        return
+    if not bot_token:
+        logger.info(
+            "Ignoring Slack message without a bot token team_id=%s user=%s",
             resolved_team_id,
             user_id,
         )
@@ -118,13 +127,14 @@ async def handle_message_event(event: dict[str, Any], *, team_id: str | None = N
                 f"Please connect it here: {access_result.connect_url}"
             ),
             thread_ts=reply_thread_ts,
+            bot_token=bot_token,
         )
         return
 
     github_user_id = access_result.github_user_id
     github_email = access_result.github_email
     github_installation_id = access_result.github_installation_id
-    slack_email = await fetch_user_email(user_id) or ""
+    slack_email = await fetch_user_email(user_id, bot_token=bot_token) or ""
 
     if thread_id is None:
         thread = await client.threads.create(
@@ -164,6 +174,7 @@ async def handle_message_event(event: dict[str, Any], *, team_id: str | None = N
                         channel=channel,
                         text=reply_text,
                         thread_ts=reply_thread_ts,
+                        bot_token=bot_token,
                     )
                     posted_replies += 1
             elif chunk.event == "end":
@@ -179,6 +190,7 @@ async def handle_message_event(event: dict[str, Any], *, team_id: str | None = N
                 channel=channel,
                 text="Sorry, I encountered an error processing your request. Please try again.",
                 thread_ts=reply_thread_ts,
+                bot_token=bot_token,
             )
     except Exception:
         logger.exception("Error invoking LangGraph agent for user %s", user_id)
@@ -186,4 +198,5 @@ async def handle_message_event(event: dict[str, Any], *, team_id: str | None = N
             channel=channel,
             text="Sorry, I encountered an error processing your request. Please try again.",
             thread_ts=reply_thread_ts,
+            bot_token=bot_token,
         )

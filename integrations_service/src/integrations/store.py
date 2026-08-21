@@ -27,11 +27,15 @@ async def upsert_slack_app_integration(
     tenant_id: str,
     team_id: str,
     team_name: str,
+    bot_token: str,
     session: AsyncSession,
 ) -> tuple[Tenant, AppIntegration]:
     tenant = await get_tenant(session, tenant_id)
     if tenant is None:
         raise ValueError(f"tenant not found: {tenant_id}")
+    normalized_token = bot_token.strip()
+    if not normalized_token:
+        raise ValueError("Slack bot token is required")
 
     result = await session.execute(
         select(AppIntegration).where(
@@ -40,7 +44,7 @@ async def upsert_slack_app_integration(
         )
     )
     integration = result.scalar_one_or_none()
-    config = {"team_id": team_id}
+    config = {"team_id": team_id, "bot_token": normalized_token}
 
     if integration is not None:
         if integration.tenant_id != tenant_id:

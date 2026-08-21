@@ -42,12 +42,24 @@ def _github_extra(identity: UserIdentity) -> dict[str, str]:
     return result
 
 
+@dataclass
+class SlackWorkspaceUser:
+    identity: UserIdentity
+    bot_token: str
+
+
+def slack_bot_token(config: object) -> str:
+    if not isinstance(config, dict):
+        return ""
+    return str(config.get("bot_token") or "").strip()
+
+
 async def get_or_create_slack_user_identity_for_team(
     *,
     slack_user_id: str,
     team_id: str,
     session: AsyncSession,
-) -> UserIdentity | None:
+) -> SlackWorkspaceUser | None:
     result = await session.execute(
         select(AppIntegration).where(
             AppIntegration.app_name == _SLACK_APP_NAME,
@@ -59,10 +71,11 @@ async def get_or_create_slack_user_identity_for_team(
         return None
 
     tenant_id = integration.tenant_id
+    bot_token = slack_bot_token(integration.config)
     result = await session.execute(select(UserIdentity).where(UserIdentity.slack_user_id == slack_user_id))
     identity = result.scalar_one_or_none()
     if identity is not None:
-        return identity
+        return SlackWorkspaceUser(identity=identity, bot_token=bot_token)
 
     identity = UserIdentity(slack_user_id=slack_user_id, tenant_id=tenant_id, extra_app_data={})
     session.add(identity)
@@ -73,7 +86,7 @@ async def get_or_create_slack_user_identity_for_team(
         team_id,
         tenant_id,
     )
-    return identity
+    return SlackWorkspaceUser(identity=identity, bot_token=bot_token)
 
 
 async def resolve_github_access(

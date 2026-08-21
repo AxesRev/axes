@@ -118,14 +118,18 @@ async def slack_callback(event: dict[str, Any], session: AsyncSession) -> dict[s
     team = payload.get("team") if isinstance(payload.get("team"), dict) else {}
     team_id = str(team.get("id") or "")
     team_name = str(team.get("name") or team_id)
+    bot_token = str(payload.get("access_token") or "").strip()
     if not team_id:
         raise HttpError(502, "Slack did not return a workspace team_id.")
+    if not bot_token:
+        raise HttpError(502, "Slack did not return a bot token.")
 
     try:
         await upsert_slack_app_integration(
             tenant_id=tenant_id,
             team_id=team_id,
             team_name=team_name,
+            bot_token=bot_token,
             session=session,
         )
     except ValueError as exc:

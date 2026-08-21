@@ -12,6 +12,13 @@ from tenants.errors import HttpError
 from tenants.service import tenant_from_claims
 
 AGENT_CONTEXT_MAX_LENGTH = 100_000
+_SECRET_INTEGRATION_CONFIG_KEYS = frozenset({"bot_token", "access_token"})
+
+
+def _public_integration_config(config: object) -> dict[str, object]:
+    if not isinstance(config, dict):
+        return {}
+    return {key: value for key, value in config.items() if key not in _SECRET_INTEGRATION_CONFIG_KEYS}
 
 
 def _tenant_payload(tenant_id: str, name: str, email: str | None) -> dict[str, object]:
@@ -35,7 +42,11 @@ async def get_my_integrations(*, claims: dict[str, object], session: AsyncSessio
         select(AppIntegration).where(AppIntegration.tenant_id == tenant.id).order_by(AppIntegration.app_name),
     )
     return [
-        {"id": integration.id, "app_name": integration.app_name, "config": integration.config}
+        {
+            "id": integration.id,
+            "app_name": integration.app_name,
+            "config": _public_integration_config(integration.config),
+        }
         for integration in result.scalars().all()
     ]
 

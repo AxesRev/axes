@@ -22,7 +22,6 @@ class SlackSettings(BaseSettings):
         extra="ignore",
     )
 
-    SLACK_BOT_TOKEN: str
     SLACK_SIGNING_SECRET: str
     SLACK_CLIENT_ID: str
     SLACK_CLIENT_SECRET: str

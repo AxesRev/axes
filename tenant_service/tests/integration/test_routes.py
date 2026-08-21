@@ -81,7 +81,7 @@ def test_get_my_integrations_returns_slack(tenant_session: AsyncMock, monkeypatc
         id="int-1",
         tenant_id="tenant-new",
         app_name="slack",
-        config={"team_id": "T01234567"},
+        config={"team_id": "T01234567", "bot_token": "xoxb-secret"},
     )
 
     async def fake_get_or_create(**kwargs: object) -> Tenant:

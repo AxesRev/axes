@@ -22,16 +22,14 @@ async def test_fetch_user_email_returns_profile_email() -> None:
     mock_client.__aenter__ = AsyncMock(return_value=mock_client)
     mock_client.__aexit__ = AsyncMock(return_value=None)
 
-    with (
-        patch("slack_app.client.slack_settings.SLACK_BOT_TOKEN", "xoxb-test"),
-        patch("slack_app.client.httpx.AsyncClient", return_value=mock_client),
-    ):
-        email = await fetch_user_email("U123")
+    with patch("slack_app.client.httpx.AsyncClient", return_value=mock_client):
+        email = await fetch_user_email("U123", bot_token="xoxb-test")
 
     assert email == "alice@example.com"
     mock_client.get.assert_awaited_once()
     call_kwargs = mock_client.get.await_args.kwargs
     assert call_kwargs["params"] == {"user": "U123"}
+    assert call_kwargs["headers"]["Authorization"] == "Bearer xoxb-test"
 
 
 @pytest.mark.unit
@@ -44,11 +42,8 @@ async def test_fetch_user_email_returns_none_when_api_fails() -> None:
     mock_client.__aenter__ = AsyncMock(return_value=mock_client)
     mock_client.__aexit__ = AsyncMock(return_value=None)
 
-    with (
-        patch("slack_app.client.slack_settings.SLACK_BOT_TOKEN", "xoxb-test"),
-        patch("slack_app.client.httpx.AsyncClient", return_value=mock_client),
-    ):
-        email = await fetch_user_email("U123")
+    with patch("slack_app.client.httpx.AsyncClient", return_value=mock_client):
+        email = await fetch_user_email("U123", bot_token="xoxb-test")
 
     assert email is None
 
@@ -56,7 +51,6 @@ async def test_fetch_user_email_returns_none_when_api_fails() -> None:
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_fetch_user_email_returns_none_without_token() -> None:
-    with patch("slack_app.client.slack_settings.SLACK_BOT_TOKEN", ""):
-        email = await fetch_user_email("U123")
+    email = await fetch_user_email("U123", bot_token="")
 
     assert email is None

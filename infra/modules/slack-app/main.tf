@@ -38,7 +38,6 @@ resource "kubernetes_secret_v1" "this" {
     SLACK_SIGNING_SECRET = local.secrets["SLACK_SIGNING_SECRET"]
     SLACK_CLIENT_ID      = local.secrets["SLACK_CLIENT_ID"]
     SLACK_CLIENT_SECRET  = local.secrets["SLACK_CLIENT_SECRET"]
-    SLACK_BOT_TOKEN      = local.secrets["SLACK_BOT_TOKEN"]
     INTERNAL_API_SECRET  = local.generated["INTERNAL_API_SECRET"]
   })
 
@@ -103,7 +102,6 @@ resource "kubernetes_deployment_v1" "this" {
               "SLACK_SIGNING_SECRET",
               "SLACK_CLIENT_ID",
               "SLACK_CLIENT_SECRET",
-              "SLACK_BOT_TOKEN",
               "INTERNAL_API_SECRET",
             ])
             content {
