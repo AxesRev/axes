@@ -1,5 +1,5 @@
 output "domain" {
-  value = local.secrets["AUTH0_DOMAIN"]
+  value = nonsensitive(local.secrets["AUTH0_DOMAIN"])
 }
 
 output "client_id" {
