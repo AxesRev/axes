@@ -60,12 +60,30 @@ data "vercel_project_directory" "this" {
   path = var.source_path
 }
 
+# Project env vars do not update an existing production deployment. Pin Auth0
+# (and the rest) on the deployment itself and replace it when those values change.
+resource "terraform_data" "webapp_runtime" {
+  triggers_replace = {
+    auth0_domain         = var.auth0_domain
+    auth0_client_id      = var.auth0_client_id
+    production_url       = var.production_url
+    tenant_api_url       = var.tenant_api_url
+    billing_api_url      = var.billing_api_url
+    integrations_api_url = var.integrations_api_url
+  }
+}
+
 resource "vercel_deployment" "this" {
   project_id  = var.project_id
   team_id     = var.team_id
   files       = data.vercel_project_directory.this.files
   path_prefix = data.vercel_project_directory.this.path
   production  = true
+  environment = local.environment
 
   depends_on = [vercel_project_environment_variables.this]
+
+  lifecycle {
+    replace_triggered_by = [terraform_data.webapp_runtime]
+  }
 }
