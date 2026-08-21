@@ -6,9 +6,9 @@ terraform {
       source  = "hashicorp/aws"
       version = ">= 6.61"
     }
-    vercel = {
-      source  = "vercel/vercel"
-      version = ">= 5.12.0"
+    auth0 = {
+      source  = "auth0/auth0"
+      version = ">= 1.55.0"
     }
   }
 }

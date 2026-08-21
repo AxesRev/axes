@@ -48,6 +48,7 @@ inputs = {
   private_subnet_ids           = dependency.vpc.outputs.private_subnets
   db_clients_security_group_id = dependency.vpc.outputs.db_clients_security_group_id
 
-  ssm_secrets_parameter   = "/axes/${local.env.locals.environment}/secrets"
-  ssm_generated_parameter = dependency.generated.outputs.parameter_name
+  ssm_secrets_parameter         = "/axes/${local.env.locals.environment}/secrets"
+  ssm_generated_parameter       = dependency.generated.outputs.parameter_name
+  deploy_notification_script    = "${get_repo_root()}/billing_service/src/billing/deploy_notification.py"
 }

@@ -16,7 +16,7 @@ env:
   TF_IN_AUTOMATION: "true"
   TF_INPUT: "false"
   TF_LOG: ""
-  TERRAFORM_VERSION: "1.15.8"
+  TERRAFORM_VERSION: "1.15.9"
   TERRAGRUNT_VERSION: "1.1.1"
   DEPLOY_DIR: infra/products/dev
 
@@ -46,4 +46,4 @@ jobs:
 
       - name: Destroy
         working-directory: ${{ env.DEPLOY_DIR }}
-        run: terragrunt run --all --non-interactive destroy
+        run: terragrunt run --all --non-interactive --filter '!./auth0' destroy

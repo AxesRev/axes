@@ -26,22 +26,16 @@ resource "aws_iam_role_policy_attachment" "vpc" {
 }
 
 locals {
-  secrets    = module.secrets.values
-  generated  = module.generated.values
+  generated = module.generated.values
   environment = sensitive({
-    POSTGRES_HOST           = local.generated["POSTGRES_HOST"]
-    POSTGRES_PORT           = local.generated["POSTGRES_PORT"]
-    POSTGRES_DB             = local.generated["POSTGRES_DB"]
-    POSTGRES_USER           = local.generated["POSTGRES_USER"]
-    POSTGRES_PASSWORD       = local.generated["POSTGRES_PASSWORD"]
-    AUTH0_DOMAIN            = local.secrets["AUTH0_DOMAIN"]
-    AUTH0_CLIENT_ID         = local.secrets["AUTH0_CLIENT_ID"]
+    POSTGRES_HOST     = local.generated["POSTGRES_HOST"]
+    POSTGRES_PORT     = local.generated["POSTGRES_PORT"]
+    POSTGRES_DB       = local.generated["POSTGRES_DB"]
+    POSTGRES_USER     = local.generated["POSTGRES_USER"]
+    POSTGRES_PASSWORD = local.generated["POSTGRES_PASSWORD"]
+    AUTH0_DOMAIN      = var.auth0_domain
+    AUTH0_CLIENT_ID   = var.auth0_client_id
   })
-}
-
-module "secrets" {
-  source         = "../ssm-secrets"
-  parameter_name = var.ssm_secrets_parameter
 }
 
 module "generated" {
