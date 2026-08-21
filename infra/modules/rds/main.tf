@@ -61,14 +61,14 @@ resource "aws_secretsmanager_secret" "master" {
 
 resource "aws_secretsmanager_secret_version" "master" {
   secret_id = aws_secretsmanager_secret.master.id
-  secret_string = jsonencode({
+  secret_string = sensitive(jsonencode({
     username = var.master_username
     password = random_password.master.result
     engine   = "postgres"
     host     = aws_db_instance.this.address
     port     = aws_db_instance.this.port
     dbname   = var.db_name
-  })
+  }))
 }
 
 resource "aws_db_instance" "this" {
@@ -89,7 +89,7 @@ resource "aws_db_instance" "this" {
 
   db_subnet_group_name   = aws_db_subnet_group.this.name
   vpc_security_group_ids = [aws_security_group.this.id]
-  publicly_accessible    = false
+  publicly_accessible    = var.publicly_accessible
   multi_az               = var.multi_az
 
   backup_retention_period = var.backup_retention_period

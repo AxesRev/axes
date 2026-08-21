@@ -11,23 +11,14 @@ module "eks" {
   endpoint_public_access  = var.cluster_endpoint_public_access
   endpoint_private_access = var.cluster_endpoint_private_access
 
+  # Caller already gets an access entry when this is true. CI assumes
+  # github-actions-deploy, so a second entry for that role 409s.
   enable_cluster_creator_admin_permissions = true
 
   access_entries = merge(
     {
       cluster_admin = {
         principal_arn = var.cluster_admin_principal_arn
-        policy_associations = {
-          admin = {
-            policy_arn = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
-            access_scope = {
-              type = "cluster"
-            }
-          }
-        }
-      }
-      github_actions = {
-        principal_arn = var.github_actions_deploy_role_arn
         policy_associations = {
           admin = {
             policy_arn = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
@@ -73,6 +64,8 @@ module "eks" {
       desired_size = var.node_desired_size
 
       disk_size = var.node_disk_size
+
+      subnet_ids = var.subnet_ids
 
       attach_cluster_primary_security_group = true
       vpc_security_group_ids                = var.additional_node_security_group_ids

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { auth0 } from "@/lib/auth0";
 import { isPaddleBillingConfigured } from "@/lib/paddle/config";
-import { ApiResponseError, fetchBillingPortalUrlForAccessToken } from "@/lib/tenants";
+import { ApiResponseError, fetchBillingPortalUrlForTenant, resolveTenantForSession } from "@/lib/tenants";
 
 export async function POST(): Promise<NextResponse> {
   if (!isPaddleBillingConfigured()) {
@@ -18,7 +18,8 @@ export async function POST(): Promise<NextResponse> {
   }
 
   try {
-    const url = await fetchBillingPortalUrlForAccessToken(session.tokenSet.idToken);
+    const tenant = await resolveTenantForSession(session);
+    const url = await fetchBillingPortalUrlForTenant(tenant.id);
     return NextResponse.json({ url });
   } catch (error: unknown) {
     if (error instanceof ApiResponseError) {

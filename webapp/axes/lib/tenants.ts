@@ -61,28 +61,40 @@ function apiBaseUrl(): string {
   return (process.env.AEGRA_API_URL ?? "http://127.0.0.1:8000").replace(/\/$/, "");
 }
 
+function tenantApiBaseUrl(): string {
+  return (process.env.TENANT_API_URL ?? apiBaseUrl()).replace(/\/$/, "");
+}
+
+function billingApiBaseUrl(): string {
+  return (process.env.BILLING_API_URL ?? apiBaseUrl()).replace(/\/$/, "");
+}
+
 function publicApiBaseUrl(): string {
   return (process.env.AEGRA_PUBLIC_URL ?? apiBaseUrl()).replace(/\/$/, "");
 }
 
+function integrationsApiBaseUrl(): string {
+  return (process.env.INTEGRATIONS_API_URL ?? publicApiBaseUrl()).replace(/\/$/, "");
+}
+
 export function buildSlackInstallUrl(tenantId: string): string {
-  return `${publicApiBaseUrl()}/slack/oauth/install?tenant_id=${encodeURIComponent(tenantId)}`;
+  return `${integrationsApiBaseUrl()}/app_integrations/slack/install?tenant_id=${encodeURIComponent(tenantId)}`;
 }
 
 export function buildGithubInstallUrl(tenantId: string): string {
-  return `${publicApiBaseUrl()}/auth/github/install?tenant_id=${encodeURIComponent(tenantId)}`;
+  return `${integrationsApiBaseUrl()}/app_integrations/github/install?tenant_id=${encodeURIComponent(tenantId)}`;
 }
 
 export function buildSalesforceInstallUrl(tenantId: string): string {
-  return `${publicApiBaseUrl()}/auth/salesforce/install?tenant_id=${encodeURIComponent(tenantId)}`;
+  return `${integrationsApiBaseUrl()}/app_integrations/salesforce/install?tenant_id=${encodeURIComponent(tenantId)}`;
 }
 
 export function buildSalesforceConnectUrl(tenantId: string): string {
-  return `${publicApiBaseUrl()}/auth/salesforce/connect?tenant_id=${encodeURIComponent(tenantId)}`;
+  return `${integrationsApiBaseUrl()}/app_integrations/salesforce/connect?tenant_id=${encodeURIComponent(tenantId)}`;
 }
 
 export async function resolveTenantForAccessToken(accessToken: string): Promise<TenantRecord> {
-  const response = await fetch(`${apiBaseUrl()}/tenants/me`, {
+  const response = await fetch(`${tenantApiBaseUrl()}/tenants/me`, {
     method: "GET",
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -113,7 +125,7 @@ export async function resolveTenantForSession(session: SessionData): Promise<Ten
 export async function fetchAppIntegrationsForAccessToken(
   accessToken: string,
 ): Promise<AppIntegrationRecord[]> {
-  const response = await fetch(`${apiBaseUrl()}/tenants/me/integrations`, {
+  const response = await fetch(`${tenantApiBaseUrl()}/tenants/me/integrations`, {
     method: "GET",
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -182,17 +194,26 @@ export function salesforceOrgId(integration: AppIntegrationRecord | null): strin
   return configString(integration, "org_id");
 }
 
-export async function fetchBillingStatusForAccessToken(accessToken: string): Promise<TenantBillingStatus> {
-  const response = await fetch(`${apiBaseUrl()}/tenants/me/billing`, {
+function internalApiSecret(): string {
+  const secret = process.env.INTERNAL_API_SECRET;
+  if (!secret) {
+    throw new Error("INTERNAL_API_SECRET is not configured");
+  }
+  return secret;
+}
+
+export async function fetchBillingStatusForTenant(tenantId: string): Promise<TenantBillingStatus> {
+  const response = await fetch(`${billingApiBaseUrl()}/billing/me`, {
     method: "GET",
     headers: {
-      Authorization: `Bearer ${accessToken}`,
+      "X-Internal-Secret": internalApiSecret(),
+      "X-Tenant-Id": tenantId,
     },
     cache: "no-store",
   });
 
   if (response.status === 401) {
-    throw new ApiUnauthorizedError("Invalid or missing access token");
+    throw new ApiUnauthorizedError("Invalid or missing internal secret");
   }
 
   if (!response.ok) {
@@ -203,17 +224,18 @@ export async function fetchBillingStatusForAccessToken(accessToken: string): Pro
   return (await response.json()) as TenantBillingStatus;
 }
 
-export async function fetchBillingPortalUrlForAccessToken(accessToken: string): Promise<string> {
-  const response = await fetch(`${apiBaseUrl()}/tenants/me/billing/portal`, {
+export async function fetchBillingPortalUrlForTenant(tenantId: string): Promise<string> {
+  const response = await fetch(`${billingApiBaseUrl()}/billing/me/portal`, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${accessToken}`,
+      "X-Internal-Secret": internalApiSecret(),
+      "X-Tenant-Id": tenantId,
     },
     cache: "no-store",
   });
 
   if (response.status === 401) {
-    throw new ApiUnauthorizedError("Invalid or missing access token");
+    throw new ApiUnauthorizedError("Invalid or missing internal secret");
   }
 
   if (!response.ok) {
@@ -230,7 +252,7 @@ export async function fetchBillingPortalUrlForAccessToken(accessToken: string): 
 }
 
 export async function fetchAgentContextForAccessToken(accessToken: string): Promise<AgentContextRecord> {
-  const response = await fetch(`${apiBaseUrl()}/tenants/me/agent-context`, {
+  const response = await fetch(`${tenantApiBaseUrl()}/tenants/me/agent-context`, {
     method: "GET",
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -254,7 +276,7 @@ export async function updateAgentContextForAccessToken(
   accessToken: string,
   content: string,
 ): Promise<AgentContextRecord> {
-  const response = await fetch(`${apiBaseUrl()}/tenants/me/agent-context`, {
+  const response = await fetch(`${tenantApiBaseUrl()}/tenants/me/agent-context`, {
     method: "PUT",
     headers: {
       Authorization: `Bearer ${accessToken}`,

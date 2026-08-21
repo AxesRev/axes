@@ -16,8 +16,8 @@ from langchain_community.utilities.requests import TextRequestsWrapper
 from langgraph.runtime import Runtime
 from requests import Response
 
-from app_integrations.github.installation_token import get_installation_access_token
 from examples.react_agent.context import Context
+from examples.react_agent.github_installation_token import get_installation_access_token
 from examples.react_agent.utils import load_chat_model
 
 logger = logging.getLogger(__name__)

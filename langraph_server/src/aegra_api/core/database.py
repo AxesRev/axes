@@ -34,15 +34,11 @@ class DatabaseManager:
         self._store: AsyncPostgresStore | None = None
         self._database_url = settings.db.database_url
 
-    async def initialize(self) -> None:
-        """Initialize database connections and LangGraph components"""
-        # Idempotency check: if already initialized, do nothing
+    def _ensure_engine(self) -> None:
+        """Create the SQLAlchemy engine if it does not already exist."""
         if self.engine:
             return
 
-        # 1. SQLAlchemy Engine (app metadata, uses asyncpg)
-        # We strictly limit this pool because the main load
-        # is handled by LangGraph components.
         self.engine = create_async_engine(
             self._database_url,
             pool_size=settings.pool.SQLALCHEMY_POOL_SIZE,
@@ -54,6 +50,17 @@ class DatabaseManager:
         @event.listens_for(self.engine.sync_engine, "connect")
         def _register_pgvector(dbapi_connection: Any, _connection_record: object) -> None:
             dbapi_connection.run_async(register_vector)
+
+    async def initialize_metadata(self) -> None:
+        """SQLAlchemy engine only. Billing Lambda does not need LangGraph pools."""
+        self._ensure_engine()
+
+    async def initialize(self) -> None:
+        """Initialize database connections and LangGraph components"""
+        if self.lg_pool:
+            return
+
+        self._ensure_engine()
 
         lg_max = settings.pool.LANGGRAPH_MAX_POOL_SIZE
         lg_kwargs = {

@@ -15,7 +15,7 @@ variable "vpc_id" {
 }
 
 variable "subnet_ids" {
-  description = "Subnet IDs for the control plane and managed nodes (typically private)."
+  description = "Subnet IDs for the control plane and managed nodes."
   type        = list(string)
 }
 
@@ -79,7 +79,7 @@ variable "cluster_admin_principal_arn" {
 }
 
 variable "github_actions_deploy_role_arn" {
-  description = "GitHub Actions deploy role ARN granted cluster admin via EKS access entry."
+  description = "GitHub Actions deploy role ARN. Unused when that role is the cluster creator (it already gets an access entry)."
   type        = string
 }
 

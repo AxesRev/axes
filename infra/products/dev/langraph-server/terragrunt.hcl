@@ -2,6 +2,10 @@ include "root" {
   path = find_in_parent_folders("root.hcl")
 }
 
+terraform {
+  source = "${get_repo_root()}/infra//products/dev/langraph-server"
+}
+
 dependency "eks" {
   config_path = "../eks"
 
@@ -22,15 +26,11 @@ dependency "ecr" {
   mock_outputs_allowed_terraform_commands = ["validate", "plan", "destroy"]
 }
 
-dependency "rds" {
-  config_path = "../rds"
+dependency "generated" {
+  config_path = "../generated"
 
   mock_outputs = {
-    address         = "localhost"
-    port            = 5432
-    db_name         = "axes"
-    master_username = "postgres"
-    master_password = "mock-password"
+    parameter_name = "/axes/dev/generated"
   }
   mock_outputs_allowed_terraform_commands = ["validate", "plan", "destroy"]
 }
@@ -62,12 +62,6 @@ EOF
 inputs = {
   image = "${dependency.ecr.outputs.repository_urls["axes/langraph-server"]}:${get_env("LANGRAPH_SERVER_IMAGE_TAG", get_env("IMAGE_TAG", "latest"))}"
 
-  postgres_host     = dependency.rds.outputs.address
-  postgres_port     = dependency.rds.outputs.port
-  postgres_db       = dependency.rds.outputs.db_name
-  postgres_user     = dependency.rds.outputs.master_username
-  postgres_password = dependency.rds.outputs.master_password
-
-  neo4j_mcp_host = local.env.locals.neo4j_mcp_host
-  auth_type      = "noop"
+  ssm_generated_parameter = dependency.generated.outputs.parameter_name
+  ssm_secrets_parameter   = "/axes/${local.env.locals.environment}/secrets"
 }

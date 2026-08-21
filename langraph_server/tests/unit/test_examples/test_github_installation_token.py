@@ -7,8 +7,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app_integrations.github import installation_token as token_module
-from app_integrations.github.installation_token import get_installation_access_token
+from examples.react_agent import github_installation_token as token_module
+from examples.react_agent.github_installation_token import get_installation_access_token
 
 
 def test_get_installation_access_token_requires_installation_id() -> None:

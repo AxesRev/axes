@@ -13,34 +13,12 @@ variable "replicas" {
   default = 1
 }
 
-variable "postgres_host" {
-  type = string
-}
-
-variable "postgres_port" {
-  type = number
-}
-
-variable "postgres_db" {
-  type = string
-}
-
-variable "postgres_user" {
-  type = string
-}
-
-variable "postgres_password" {
-  type      = string
-  sensitive = true
-}
-
-variable "neo4j_mcp_host" {
-  description = "In-cluster Neo4j MCP HTTP base URL."
+variable "ssm_generated_parameter" {
+  description = "Terraform-owned SSM SecureString JSON."
   type        = string
-  default     = ""
 }
 
-variable "auth_type" {
-  type    = string
-  default = "noop"
+variable "ssm_secrets_parameter" {
+  description = "Human-owned SSM SecureString JSON."
+  type        = string
 }

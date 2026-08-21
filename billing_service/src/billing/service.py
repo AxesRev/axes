@@ -7,14 +7,14 @@ from datetime import UTC, datetime
 from typing import Any
 
 import structlog
-from aegra_api.core.orm import Run
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from billing.config import billing_settings
+from billing.models import BillingAccount, Run, Tenant, UserIdentity
 from billing.paddle_client import PaddleApiError, charge_subscription_usage, create_customer_portal_url
 from billing.schemas import BillingChargeUsageResponse, BillingPortalResponse, TenantBillingStatusResponse
-from tenant.models import Tenant, UserIdentity
 
 logger = structlog.getLogger(__name__)
 
@@ -35,13 +35,14 @@ def sum_tokens_from_usage(token_usage: dict[str, Any] | None) -> int:
     return total
 
 
-async def _tenant_user_ids(*, tenant: Tenant, session: AsyncSession) -> list[str]:
+async def _tenant_user_ids(*, tenant_id: str, session: AsyncSession) -> list[str]:
     user_ids: list[str] = []
-    if tenant.auth0_sub:
+    tenant = await session.get(Tenant, tenant_id)
+    if tenant is not None and tenant.auth0_sub:
         user_ids.append(tenant.auth0_sub)
 
     result = await session.execute(
-        select(UserIdentity.slack_user_id).where(UserIdentity.tenant_id == tenant.id),
+        select(UserIdentity.slack_user_id).where(UserIdentity.tenant_id == tenant_id),
     )
     user_ids.extend(result.scalars().all())
     return user_ids
@@ -49,12 +50,12 @@ async def _tenant_user_ids(*, tenant: Tenant, session: AsyncSession) -> list[str
 
 async def aggregate_tenant_token_usage(
     *,
-    tenant: Tenant,
+    tenant_id: str,
     session: AsyncSession,
     period_start: datetime,
     period_end: datetime,
 ) -> int:
-    user_ids = await _tenant_user_ids(tenant=tenant, session=session)
+    user_ids = await _tenant_user_ids(tenant_id=tenant_id, session=session)
     if not user_ids:
         return 0
 
@@ -74,26 +75,33 @@ async def aggregate_tenant_token_usage(
     return total_tokens
 
 
-def _billing_setup(tenant: Tenant) -> bool:
-    return bool(tenant.paddle_customer_id and tenant.paddle_subscription_id)
+def _billing_setup(account: BillingAccount | None) -> bool:
+    return bool(account is not None and account.paddle_customer_id and account.paddle_subscription_id)
 
 
-def get_tenant_billing_status(*, tenant: Tenant) -> TenantBillingStatusResponse:
+def get_tenant_billing_status(*, account: BillingAccount | None) -> TenantBillingStatusResponse:
+    if account is None:
+        return TenantBillingStatusResponse(
+            billing_setup=False,
+            paddle_customer_id=None,
+            paddle_subscription_id=None,
+            subscription_status=None,
+        )
     return TenantBillingStatusResponse(
-        billing_setup=_billing_setup(tenant),
-        paddle_customer_id=tenant.paddle_customer_id,
-        paddle_subscription_id=tenant.paddle_subscription_id,
-        subscription_status=tenant.paddle_subscription_status,
+        billing_setup=_billing_setup(account),
+        paddle_customer_id=account.paddle_customer_id,
+        paddle_subscription_id=account.paddle_subscription_id,
+        subscription_status=account.paddle_subscription_status,
     )
 
 
-async def create_tenant_billing_portal_url(*, tenant: Tenant) -> BillingPortalResponse:
-    if not tenant.paddle_customer_id or not tenant.paddle_subscription_id:
+async def create_tenant_billing_portal_url(*, account: BillingAccount | None) -> BillingPortalResponse:
+    if account is None or not account.paddle_customer_id or not account.paddle_subscription_id:
         raise ValueError("Billing is not set up for this tenant")
 
     url = await create_customer_portal_url(
-        customer_id=tenant.paddle_customer_id,
-        subscription_id=tenant.paddle_subscription_id,
+        customer_id=account.paddle_customer_id,
+        subscription_id=account.paddle_subscription_id,
     )
     return BillingPortalResponse(url=url)
 
@@ -105,23 +113,34 @@ def _tenant_id_from_custom_data(custom_data: object) -> str | None:
     return tenant_id if isinstance(tenant_id, str) and tenant_id else None
 
 
-async def _apply_tenant_billing_link(
+async def _apply_billing_link(
     *,
-    tenant: Tenant,
+    tenant_id: str,
     paddle_customer_id: str,
     paddle_subscription_id: str,
     paddle_subscription_status: str | None,
     session: AsyncSession,
 ) -> None:
-    tenant.paddle_customer_id = paddle_customer_id
-    tenant.paddle_subscription_id = paddle_subscription_id
-    tenant.paddle_subscription_status = paddle_subscription_status
-    await session.commit()
-    await session.refresh(tenant)
+    account = await session.get(BillingAccount, tenant_id)
+    if account is None:
+        account = BillingAccount(tenant_id=tenant_id)
+        session.add(account)
 
+    account.paddle_customer_id = paddle_customer_id
+    account.paddle_subscription_id = paddle_subscription_id
+    account.paddle_subscription_status = paddle_subscription_status
+
+    try:
+        await session.commit()
+    except IntegrityError:
+        await session.rollback()
+        logger.warning("billing_account_tenant_not_found", tenant_id=tenant_id)
+        return
+
+    await session.refresh(account)
     logger.info(
         "tenant_paddle_billing_linked",
-        tenant_id=tenant.id,
+        tenant_id=account.tenant_id,
         paddle_customer_id=paddle_customer_id,
         paddle_subscription_id=paddle_subscription_id,
         paddle_subscription_status=paddle_subscription_status,
@@ -148,14 +167,9 @@ async def handle_subscription_created_webhook(
         )
         return
 
-    tenant = await session.get(Tenant, tenant_id)
-    if tenant is None:
-        logger.warning("billing_webhook_subscription_created_tenant_not_found", tenant_id=tenant_id)
-        return
-
     subscription_status = status if isinstance(status, str) else None
-    await _apply_tenant_billing_link(
-        tenant=tenant,
+    await _apply_billing_link(
+        tenant_id=tenant_id,
         paddle_customer_id=customer_id,
         paddle_subscription_id=subscription_id,
         paddle_subscription_status=subscription_status,
@@ -173,21 +187,21 @@ async def handle_subscription_updated_webhook(
         return
 
     result = await session.execute(
-        select(Tenant).where(Tenant.paddle_subscription_id == subscription_id),
+        select(BillingAccount).where(BillingAccount.paddle_subscription_id == subscription_id),
     )
-    tenant = result.scalar_one_or_none()
-    if tenant is None:
+    account = result.scalar_one_or_none()
+    if account is None:
         return
 
     status = subscription.get("status")
-    tenant.paddle_subscription_status = status if isinstance(status, str) else None
+    account.paddle_subscription_status = status if isinstance(status, str) else None
     await session.commit()
 
     logger.info(
         "tenant_paddle_subscription_status_updated",
-        tenant_id=tenant.id,
+        tenant_id=account.tenant_id,
         paddle_subscription_id=subscription_id,
-        paddle_subscription_status=tenant.paddle_subscription_status,
+        paddle_subscription_status=account.paddle_subscription_status,
     )
 
 
@@ -205,19 +219,19 @@ async def handle_transaction_completed_webhook(
     if not isinstance(customer_id, str) or not isinstance(subscription_id, str):
         return
 
-    tenant = await session.get(Tenant, tenant_id)
-    if tenant is None:
-        logger.warning("billing_webhook_transaction_completed_tenant_not_found", tenant_id=tenant_id)
+    account = await session.get(BillingAccount, tenant_id)
+    if (
+        account is not None
+        and account.paddle_subscription_id == subscription_id
+        and account.paddle_customer_id == customer_id
+    ):
         return
 
-    if tenant.paddle_subscription_id == subscription_id and tenant.paddle_customer_id == customer_id:
-        return
-
-    await _apply_tenant_billing_link(
-        tenant=tenant,
+    await _apply_billing_link(
+        tenant_id=tenant_id,
         paddle_customer_id=customer_id,
         paddle_subscription_id=subscription_id,
-        paddle_subscription_status=tenant.paddle_subscription_status,
+        paddle_subscription_status=account.paddle_subscription_status if account is not None else None,
         session=session,
     )
 
@@ -258,21 +272,21 @@ async def charge_monthly_usage_for_all_tenants(
         raise ValueError("PADDLE_USAGE_PRICE_ID is not configured")
 
     result = await session.execute(
-        select(Tenant).where(
-            Tenant.paddle_subscription_id.isnot(None),
-            Tenant.paddle_customer_id.isnot(None),
+        select(BillingAccount).where(
+            BillingAccount.paddle_subscription_id.isnot(None),
+            BillingAccount.paddle_customer_id.isnot(None),
         ),
     )
-    tenants = result.scalars().all()
+    accounts = result.scalars().all()
 
     charged = 0
     skipped = 0
     details: list[dict[str, object]] = []
 
-    for tenant in tenants:
-        assert tenant.paddle_subscription_id is not None
+    for account in accounts:
+        assert account.paddle_subscription_id is not None
         total_tokens = await aggregate_tenant_token_usage(
-            tenant=tenant,
+            tenant_id=account.tenant_id,
             session=session,
             period_start=period_start,
             period_end=period_end,
@@ -281,19 +295,19 @@ async def charge_monthly_usage_for_all_tenants(
 
         if quantity == 0:
             skipped += 1
-            details.append({"tenant_id": tenant.id, "status": "skipped", "total_tokens": 0})
+            details.append({"tenant_id": account.tenant_id, "status": "skipped", "total_tokens": 0})
             continue
 
         try:
             await charge_subscription_usage(
-                subscription_id=tenant.paddle_subscription_id,
+                subscription_id=account.paddle_subscription_id,
                 price_id=usage_price_id,
                 quantity=quantity,
             )
             charged += 1
             details.append(
                 {
-                    "tenant_id": tenant.id,
+                    "tenant_id": account.tenant_id,
                     "status": "charged",
                     "total_tokens": total_tokens,
                     "quantity": quantity,
@@ -303,7 +317,7 @@ async def charge_monthly_usage_for_all_tenants(
             skipped += 1
             details.append(
                 {
-                    "tenant_id": tenant.id,
+                    "tenant_id": account.tenant_id,
                     "status": "error",
                     "total_tokens": total_tokens,
                     "quantity": quantity,
@@ -312,8 +326,8 @@ async def charge_monthly_usage_for_all_tenants(
             )
             logger.error(
                 "tenant_usage_charge_failed",
-                tenant_id=tenant.id,
-                subscription_id=tenant.paddle_subscription_id,
+                tenant_id=account.tenant_id,
+                subscription_id=account.paddle_subscription_id,
                 detail=error.detail,
             )
 

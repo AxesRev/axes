@@ -9,8 +9,14 @@ variable "vpc_id" {
 }
 
 variable "subnet_ids" {
-  description = "Private subnet IDs for the DB subnet group."
+  description = "Subnet IDs for the DB subnet group."
   type        = list(string)
+}
+
+variable "publicly_accessible" {
+  description = "Assign a public IP so clients outside the VPC can reach Postgres."
+  type        = bool
+  default     = false
 }
 
 variable "allowed_cidr_blocks" {

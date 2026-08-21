@@ -28,9 +28,7 @@ pip install aegra-api
 git clone https://github.com/ibbybuilds/aegra.git
 cd aegra
 
-# Configure environment
-cp .env.example .env
-# Add your OPENAI_API_KEY to .env
+# Set secrets (OPENAI_API_KEY, etc.) in .env — app defaults live in code
 
 # Install dependencies
 uv sync --all-packages

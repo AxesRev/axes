@@ -170,7 +170,7 @@ class RunEvent(Base):
 class DocEmbeddingChunk(Base):
     """Chunk of ingested documentation with an embedding for semantic search.
 
-    Populated by app integration ingest CLIs (GitHub zip, Salesforce PDF, etc.).
+    Populated by ``python -m aegra_api.doc_ingest.github`` / ``salesforce`` ingest CLIs.
     Vector dimension must match ``settings.doc_corpus.DOCS_EMBED_DIMENSIONS`` (default 1536).
     """
 

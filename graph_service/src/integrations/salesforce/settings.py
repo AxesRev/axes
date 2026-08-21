@@ -21,7 +21,7 @@ class SalesforceAppSettings(BaseSettings):
 
     SALESFORCE_CLIENT_ID: str
     SALESFORCE_PRIVATE_KEY_PATH: str
-    SALESFORCE_LOGIN_URL: str = "https://login.salesforce.com"
+    SALESFORCE_LOGIN_URL: str
     SALESFORCE_SHARE_OBJECTS: str = ""
 
     @computed_field

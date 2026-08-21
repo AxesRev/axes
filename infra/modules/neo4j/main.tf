@@ -25,11 +25,11 @@ resource "kubernetes_secret_v1" "auth" {
     namespace = kubernetes_namespace_v1.this.metadata[0].name
   }
 
-  data = {
+  data = sensitive({
     NEO4J_AUTH     = local.auth
     NEO4J_USER     = "neo4j"
     NEO4J_PASSWORD = local.password
-  }
+  })
 
   type = "Opaque"
 }
@@ -132,8 +132,10 @@ resource "kubernetes_stateful_set_v1" "this" {
               path = "/"
               port = 7474
             }
-            initial_delay_seconds = 30
-            period_seconds        = 10
+            initial_delay_seconds = 2
+            period_seconds        = 2
+            timeout_seconds       = 1
+            failure_threshold     = 60
           }
 
           liveness_probe {
@@ -141,8 +143,10 @@ resource "kubernetes_stateful_set_v1" "this" {
               path = "/"
               port = 7474
             }
-            initial_delay_seconds = 60
-            period_seconds        = 20
+            initial_delay_seconds = 10
+            period_seconds        = 2
+            timeout_seconds       = 1
+            failure_threshold     = 60
           }
 
           volume_mount {

@@ -30,6 +30,11 @@ jobs:
       infra: ${{ steps.flags.outputs.infra }}
       langraph_server: ${{ steps.flags.outputs.langraph_server }}
       neo4j_mcp: ${{ steps.flags.outputs.neo4j_mcp }}
+      slack_app: ${{ steps.flags.outputs.slack_app }}
+      billing: ${{ steps.flags.outputs.billing }}
+      tenant: ${{ steps.flags.outputs.tenant }}
+      integrations: ${{ steps.flags.outputs.integrations }}
+      webapp: ${{ steps.flags.outputs.webapp }}
     steps:
       - uses: actions/checkout@v4
 
@@ -43,8 +48,23 @@ jobs:
               - 'infra/**'
             langraph_server:
               - 'langraph_server/**'
+              - 'common/**'
             neo4j_mcp:
               - 'neo4j_mcp/**'
+            slack_app:
+              - 'slack_app/**'
+              - 'common/**'
+            billing:
+              - 'billing_service/**'
+              - 'common/**'
+            tenant:
+              - 'tenant_service/**'
+              - 'common/**'
+            integrations:
+              - 'integrations_service/**'
+              - 'common/**'
+            webapp:
+              - 'webapp/**'
 
       - name: Set change flags
         id: flags
@@ -53,10 +73,20 @@ jobs:
             echo "infra=true" >> "$GITHUB_OUTPUT"
             echo "langraph_server=true" >> "$GITHUB_OUTPUT"
             echo "neo4j_mcp=true" >> "$GITHUB_OUTPUT"
+            echo "slack_app=true" >> "$GITHUB_OUTPUT"
+            echo "billing=true" >> "$GITHUB_OUTPUT"
+            echo "tenant=true" >> "$GITHUB_OUTPUT"
+            echo "integrations=true" >> "$GITHUB_OUTPUT"
+            echo "webapp=true" >> "$GITHUB_OUTPUT"
           else
             echo "infra=${{ steps.filter.outputs.infra }}" >> "$GITHUB_OUTPUT"
             echo "langraph_server=${{ steps.filter.outputs.langraph_server }}" >> "$GITHUB_OUTPUT"
             echo "neo4j_mcp=${{ steps.filter.outputs.neo4j_mcp }}" >> "$GITHUB_OUTPUT"
+            echo "slack_app=${{ steps.filter.outputs.slack_app }}" >> "$GITHUB_OUTPUT"
+            echo "billing=${{ steps.filter.outputs.billing }}" >> "$GITHUB_OUTPUT"
+            echo "tenant=${{ steps.filter.outputs.tenant }}" >> "$GITHUB_OUTPUT"
+            echo "integrations=${{ steps.filter.outputs.integrations }}" >> "$GITHUB_OUTPUT"
+            echo "webapp=${{ steps.filter.outputs.webapp }}" >> "$GITHUB_OUTPUT"
           fi
 
   apply-infra:
@@ -90,6 +120,11 @@ jobs:
           terragrunt run --all --non-interactive
           --filter '!./neo4j-mcp'
           --filter '!./langraph-server'
+          --filter '!./slack-app'
+          --filter '!./billing'
+          --filter '!./tenant'
+          --filter '!./integrations'
+          --filter '!./webapp-env'
           -- apply
 
   image-langraph-server:
@@ -131,6 +166,8 @@ jobs:
           context: .
           file: langraph_server/Dockerfile
           platforms: linux/arm64
+          provenance: false
+          sbom: false
           push: true
           tags: ${{ steps.ecr.outputs.registry }}/axes/langraph-server:${{ env.IMAGE_TAG }}
           cache-from: type=gha,scope=langraph-server-arm64
@@ -197,6 +234,8 @@ jobs:
           context: neo4j_mcp
           file: neo4j_mcp/Dockerfile
           platforms: linux/arm64
+          provenance: false
+          sbom: false
           push: true
           tags: ${{ steps.ecr.outputs.registry }}/axes/neo4j-mcp:${{ env.IMAGE_TAG }}
           cache-from: type=gha,scope=neo4j-mcp-arm64
@@ -224,14 +263,290 @@ jobs:
           fi
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
+  image-slack-app:
+    needs: [detect-changes, apply-infra]
+    if: |
+      always()
+      && !cancelled()
+      && (needs.apply-infra.result == 'success' || needs.apply-infra.result == 'skipped')
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::042993547532:role/github-actions-deploy
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: actions/checkout@v4
+        if: needs.detect-changes.outputs.slack_app == 'true'
+
+      - name: Login to Amazon ECR
+        id: ecr
+        if: needs.detect-changes.outputs.slack_app == 'true'
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up QEMU
+        if: needs.detect-changes.outputs.slack_app == 'true'
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        if: needs.detect-changes.outputs.slack_app == 'true'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push
+        if: needs.detect-changes.outputs.slack_app == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: slack_app/Dockerfile
+          platforms: linux/arm64
+          provenance: false
+          sbom: false
+          push: true
+          tags: ${{ steps.ecr.outputs.registry }}/axes/slack-app:${{ env.IMAGE_TAG }}
+          cache-from: type=gha,scope=slack-app-arm64
+          cache-to: type=gha,mode=max,scope=slack-app-arm64
+
+      - name: Resolve image tag
+        id: tag
+        env:
+          REPOSITORY: axes/slack-app
+          BUILD: ${{ needs.detect-changes.outputs.slack_app }}
+        run: |
+          if [ "$BUILD" = "true" ]; then
+            echo "tag=${{ env.IMAGE_TAG }}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          TAGS=$(aws ecr describe-images \
+            --repository-name "$REPOSITORY" \
+            --query 'sort_by(imageDetails,& imagePushedAt)[-1].imageTags' \
+            --output text)
+          TAG=$(echo "$TAGS" | tr '\t' '\n' | grep -v '^latest$' | head -n1)
+          TAG=${TAG:-$(echo "$TAGS" | tr '\t' '\n' | head -n1)}
+          if [ -z "$TAG" ] || [ "$TAG" = "None" ]; then
+            echo "No images found in ECR repository $REPOSITORY" >&2
+            exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+  image-billing:
+    needs: [detect-changes, apply-infra]
+    if: |
+      always()
+      && !cancelled()
+      && (needs.apply-infra.result == 'success' || needs.apply-infra.result == 'skipped')
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::042993547532:role/github-actions-deploy
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: actions/checkout@v4
+        if: needs.detect-changes.outputs.billing == 'true'
+
+      - name: Login to Amazon ECR
+        id: ecr
+        if: needs.detect-changes.outputs.billing == 'true'
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up QEMU
+        if: needs.detect-changes.outputs.billing == 'true'
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        if: needs.detect-changes.outputs.billing == 'true'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push
+        if: needs.detect-changes.outputs.billing == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: billing_service/Dockerfile
+          platforms: linux/arm64
+          provenance: false
+          sbom: false
+          push: true
+          tags: ${{ steps.ecr.outputs.registry }}/axes/billing:${{ env.IMAGE_TAG }}
+          cache-from: type=gha,scope=billing-arm64
+          cache-to: type=gha,mode=max,scope=billing-arm64
+
+      - name: Resolve image tag
+        id: tag
+        env:
+          REPOSITORY: axes/billing
+          BUILD: ${{ needs.detect-changes.outputs.billing }}
+        run: |
+          if [ "$BUILD" = "true" ]; then
+            echo "tag=${{ env.IMAGE_TAG }}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          TAGS=$(aws ecr describe-images \
+            --repository-name "$REPOSITORY" \
+            --query 'sort_by(imageDetails,& imagePushedAt)[-1].imageTags' \
+            --output text)
+          TAG=$(echo "$TAGS" | tr '\t' '\n' | grep -v '^latest$' | head -n1)
+          TAG=${TAG:-$(echo "$TAGS" | tr '\t' '\n' | head -n1)}
+          if [ -z "$TAG" ] || [ "$TAG" = "None" ]; then
+            echo "No images found in ECR repository $REPOSITORY" >&2
+            exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+  image-tenant:
+    needs: [detect-changes, apply-infra]
+    if: |
+      always()
+      && !cancelled()
+      && (needs.apply-infra.result == 'success' || needs.apply-infra.result == 'skipped')
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::042993547532:role/github-actions-deploy
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: actions/checkout@v4
+        if: needs.detect-changes.outputs.tenant == 'true'
+
+      - name: Login to Amazon ECR
+        id: ecr
+        if: needs.detect-changes.outputs.tenant == 'true'
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up QEMU
+        if: needs.detect-changes.outputs.tenant == 'true'
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        if: needs.detect-changes.outputs.tenant == 'true'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push
+        if: needs.detect-changes.outputs.tenant == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: tenant_service/Dockerfile
+          platforms: linux/arm64
+          provenance: false
+          sbom: false
+          push: true
+          tags: ${{ steps.ecr.outputs.registry }}/axes/tenant:${{ env.IMAGE_TAG }}
+          cache-from: type=gha,scope=tenant-arm64
+          cache-to: type=gha,mode=max,scope=tenant-arm64
+
+      - name: Resolve image tag
+        id: tag
+        env:
+          REPOSITORY: axes/tenant
+          BUILD: ${{ needs.detect-changes.outputs.tenant }}
+        run: |
+          if [ "$BUILD" = "true" ]; then
+            echo "tag=${{ env.IMAGE_TAG }}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          TAGS=$(aws ecr describe-images \
+            --repository-name "$REPOSITORY" \
+            --query 'sort_by(imageDetails,& imagePushedAt)[-1].imageTags' \
+            --output text)
+          TAG=$(echo "$TAGS" | tr '\t' '\n' | grep -v '^latest$' | head -n1)
+          TAG=${TAG:-$(echo "$TAGS" | tr '\t' '\n' | head -n1)}
+          if [ -z "$TAG" ] || [ "$TAG" = "None" ]; then
+            echo "No images found in ECR repository $REPOSITORY" >&2
+            exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+  image-integrations:
+    needs: [detect-changes, apply-infra]
+    if: |
+      always()
+      && !cancelled()
+      && (needs.apply-infra.result == 'success' || needs.apply-infra.result == 'skipped')
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::042993547532:role/github-actions-deploy
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: actions/checkout@v4
+        if: needs.detect-changes.outputs.integrations == 'true'
+
+      - name: Login to Amazon ECR
+        id: ecr
+        if: needs.detect-changes.outputs.integrations == 'true'
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up QEMU
+        if: needs.detect-changes.outputs.integrations == 'true'
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        if: needs.detect-changes.outputs.integrations == 'true'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push
+        if: needs.detect-changes.outputs.integrations == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: integrations_service/Dockerfile
+          platforms: linux/arm64
+          provenance: false
+          sbom: false
+          push: true
+          tags: ${{ steps.ecr.outputs.registry }}/axes/integrations:${{ env.IMAGE_TAG }}
+          cache-from: type=gha,scope=integrations-arm64
+          cache-to: type=gha,mode=max,scope=integrations-arm64
+
+      - name: Resolve image tag
+        id: tag
+        env:
+          REPOSITORY: axes/integrations
+          BUILD: ${{ needs.detect-changes.outputs.integrations }}
+        run: |
+          if [ "$BUILD" = "true" ]; then
+            echo "tag=${{ env.IMAGE_TAG }}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          TAGS=$(aws ecr describe-images \
+            --repository-name "$REPOSITORY" \
+            --query 'sort_by(imageDetails,& imagePushedAt)[-1].imageTags' \
+            --output text)
+          TAG=$(echo "$TAGS" | tr '\t' '\n' | grep -v '^latest$' | head -n1)
+          TAG=${TAG:-$(echo "$TAGS" | tr '\t' '\n' | head -n1)}
+          if [ -z "$TAG" ] || [ "$TAG" = "None" ]; then
+            echo "No images found in ECR repository $REPOSITORY" >&2
+            exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
   apply-apps:
-    needs: [apply-infra, image-langraph-server, image-neo4j-mcp]
+    needs: [apply-infra, image-langraph-server, image-neo4j-mcp, image-slack-app, image-billing, image-tenant, image-integrations]
     if: |
       always()
       && !cancelled()
       && (needs.apply-infra.result == 'success' || needs.apply-infra.result == 'skipped')
       && needs.image-langraph-server.result == 'success'
       && needs.image-neo4j-mcp.result == 'success'
+      && needs.image-slack-app.result == 'success'
+      && needs.image-billing.result == 'success'
+      && needs.image-tenant.result == 'success'
+      && needs.image-integrations.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -259,8 +574,17 @@ jobs:
         env:
           LANGRAPH_SERVER_IMAGE_TAG: ${{ needs.image-langraph-server.outputs.tag }}
           NEO4J_MCP_IMAGE_TAG: ${{ needs.image-neo4j-mcp.outputs.tag }}
+          SLACK_APP_IMAGE_TAG: ${{ needs.image-slack-app.outputs.tag }}
+          BILLING_IMAGE_TAG: ${{ needs.image-billing.outputs.tag }}
+          TENANT_IMAGE_TAG: ${{ needs.image-tenant.outputs.tag }}
+          INTEGRATIONS_IMAGE_TAG: ${{ needs.image-integrations.outputs.tag }}
         run: >
           terragrunt run --all --non-interactive
           --filter './neo4j-mcp'
           --filter './langraph-server'
+          --filter './slack-app'
+          --filter './billing'
+          --filter './tenant'
+          --filter './integrations'
+          --filter './webapp-env'
           -- apply

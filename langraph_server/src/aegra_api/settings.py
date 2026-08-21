@@ -7,7 +7,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from aegra_api import __version__
 
-_ENV_FILE: str = str(Path(__file__).resolve().parents[4] / ".env")
+_parents = Path(__file__).resolve().parents
+_ENV_FILE: str = str(_parents[4] / ".env") if len(_parents) > 4 else ""
 
 
 def parse_lower(v: str) -> str:
@@ -27,7 +28,7 @@ UpperStr = Annotated[str, BeforeValidator(parse_upper)]
 
 class EnvBase(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=_ENV_FILE,
+        env_file=_ENV_FILE or None,
         env_file_encoding="utf-8",
         extra="ignore",
     )
@@ -43,9 +44,10 @@ class AppSettings(EnvBase):
     HOST: str = "0.0.0.0"  # nosec B104
     PORT: int = 8000
     SERVER_URL: str = "http://localhost:8000"
+    NEO4J_MCP_HOST: str = "http://neo4j-mcp.neo4j.svc.cluster.local:8811"
 
     # App logic
-    AEGRA_CONFIG: str = "aegra.json"  # Default config file path
+    AEGRA_CONFIG: str = "aegra.json"
     AUTH_TYPE: LowerStr = "noop"
     ENV_MODE: UpperStr = "LOCAL"
     DEBUG: bool = False
@@ -65,12 +67,12 @@ class DatabaseSettings(EnvBase):
 
     DATABASE_URL: str | None = None
 
-    POSTGRES_USER: str = "postgres"
-    POSTGRES_PASSWORD: str = "postgres"
-    POSTGRES_HOST: str = "localhost"
-    POSTGRES_PORT: str = "5433"
-    POSTGRES_DB: str = "aegra"
-    POSTGRES_SSLMODE: str | None = None
+    POSTGRES_USER: str
+    POSTGRES_PASSWORD: str
+    POSTGRES_HOST: str
+    POSTGRES_PORT: str
+    POSTGRES_DB: str
+    POSTGRES_SSLMODE: str | None = "require"
     DB_ECHO_LOG: bool = False
 
     @staticmethod
@@ -122,8 +124,8 @@ class PoolSettings(EnvBase):
 class DocCorpusSettings(EnvBase):
     """Settings for ingesting external documentation into pgvector."""
 
-    OPENAI_API_KEY: str | None = None
-    # Local GitHub Docs archive for ``python -m app_integrations.github`` (markdown files inside the zip).
+    OPENAI_API_KEY: str
+    # Local GitHub Docs archive for ``python -m aegra_api.doc_ingest.github``.
     GITHUB_DOCS_ZIP_PATH: str | None = None
     DOCS_EMBED_MODEL: str = "text-embedding-3-small"
     DOCS_EMBED_DIMENSIONS: int = 1536

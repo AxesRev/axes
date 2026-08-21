@@ -6,7 +6,8 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=off \
     PIP_DISABLE_PIP_VERSION_CHECK=on \
-    PIP_DEFAULT_TIMEOUT=100
+    PIP_DEFAULT_TIMEOUT=100 \
+    PYTHONPATH=/app
 
 WORKDIR /app
 
@@ -47,9 +48,10 @@ COPY langraph_server/alembic.ini ./alembic.ini
 COPY langraph_server/alembic/ ./alembic/
 COPY langraph_server/aegra.json ./aegra.json
 COPY langraph_server/examples/ ./examples/
+COPY common ./common
 
 EXPOSE 8000
 
 USER app
 
-CMD ["uvicorn", "aegra_api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["python", "-m", "aegra_api.main"]

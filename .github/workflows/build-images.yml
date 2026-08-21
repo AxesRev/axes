@@ -33,6 +33,22 @@ jobs:
             context: neo4j_mcp
             dockerfile: neo4j_mcp/Dockerfile
             repository: axes/neo4j-mcp
+          - name: slack-app
+            context: .
+            dockerfile: slack_app/Dockerfile
+            repository: axes/slack-app
+          - name: billing
+            context: .
+            dockerfile: billing_service/Dockerfile
+            repository: axes/billing
+          - name: tenant
+            context: .
+            dockerfile: tenant_service/Dockerfile
+            repository: axes/tenant
+          - name: integrations
+            context: .
+            dockerfile: integrations_service/Dockerfile
+            repository: axes/integrations
 
     steps:
       - uses: actions/checkout@v4
