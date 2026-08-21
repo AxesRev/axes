@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from urllib.parse import quote_plus
@@ -46,9 +47,11 @@ class Database:
         self._echo = echo
         self._engine: AsyncEngine | None = None
         self._session_maker: async_sessionmaker[AsyncSession] | None = None
+        self._loop: asyncio.AbstractEventLoop | None = None
 
     def _ensure_engine(self) -> async_sessionmaker[AsyncSession]:
-        if self._session_maker is not None:
+        loop = asyncio.get_running_loop()
+        if self._session_maker is not None and self._loop is loop:
             return self._session_maker
         self._engine = create_async_engine(
             self._url,
@@ -58,6 +61,7 @@ class Database:
             echo=self._echo,
         )
         self._session_maker = async_sessionmaker(self._engine, expire_on_commit=False)
+        self._loop = loop
         return self._session_maker
 
     @asynccontextmanager
@@ -70,3 +74,4 @@ class Database:
             await self._engine.dispose()
         self._engine = None
         self._session_maker = None
+        self._loop = None

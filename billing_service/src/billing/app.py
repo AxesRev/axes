@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import base64
 import hmac
 import json
@@ -12,6 +11,7 @@ from billing.config import billing_settings
 from billing.db import session_scope
 from billing.errors import HttpError
 from billing.routes import create_my_billing_portal, get_my_billing, paddle_billing_webhook
+from common.lambda_async import run as run_async
 
 
 def _json_response(status_code: int, payload: dict[str, object]) -> dict[str, object]:
@@ -106,4 +106,4 @@ async def _handle(event: dict[str, Any]) -> dict[str, object]:
 
 
 def handler(event: dict[str, Any], _context: object) -> dict[str, object]:
-    return asyncio.run(_handle(event))
+    return run_async(_handle(event))

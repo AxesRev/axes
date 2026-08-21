@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import asyncio
 from typing import Any
 
+from common.lambda_async import run as run_async
 from integrations.db import session_scope
 from integrations.errors import HttpError
 from integrations.github import github_callback, github_install, github_oauth_start
@@ -60,4 +60,4 @@ async def _handle(event: dict[str, Any]) -> dict[str, object]:
 
 
 def handler(event: dict[str, Any], _context: object) -> dict[str, object]:
-    return asyncio.run(_handle(event))
+    return run_async(_handle(event))

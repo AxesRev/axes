@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import asyncio
 import base64
 import json
 from typing import Any
 
+from common.lambda_async import run as run_async
 from tenants.auth import claims_from_bearer
 from tenants.db import session_scope
 from tenants.errors import HttpError
@@ -98,4 +98,4 @@ async def _handle(event: dict[str, Any]) -> dict[str, object]:
 
 
 def handler(event: dict[str, Any], _context: object) -> dict[str, object]:
-    return asyncio.run(_handle(event))
+    return run_async(_handle(event))
