@@ -68,6 +68,20 @@ resource "kubernetes_secret_v1" "openai" {
   type = "Opaque"
 }
 
+resource "kubernetes_secret_v1" "github" {
+  metadata {
+    name      = "langraph-server-github"
+    namespace = kubernetes_namespace_v1.this.metadata[0].name
+  }
+
+  data = sensitive({
+    GITHUB_APP_ID          = tostring(local.secrets["GITHUB_APP_ID"])
+    GITHUB_APP_PRIVATE_KEY = local.secrets["GITHUB_APP_PRIVATE_KEY"]
+  })
+
+  type = "Opaque"
+}
+
 resource "kubernetes_job_v1" "migrate" {
   metadata {
     name      = local.migrate_job_name
@@ -309,6 +323,26 @@ resource "kubernetes_deployment_v1" "this" {
               secret_key_ref {
                 name = kubernetes_secret_v1.openai.metadata[0].name
                 key  = "OPENAI_API_KEY"
+              }
+            }
+          }
+
+          env {
+            name = "GITHUB_APP_ID"
+            value_from {
+              secret_key_ref {
+                name = kubernetes_secret_v1.github.metadata[0].name
+                key  = "GITHUB_APP_ID"
+              }
+            }
+          }
+
+          env {
+            name = "GITHUB_APP_PRIVATE_KEY"
+            value_from {
+              secret_key_ref {
+                name = kubernetes_secret_v1.github.metadata[0].name
+                key  = "GITHUB_APP_PRIVATE_KEY"
               }
             }
           }

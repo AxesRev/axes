@@ -7,12 +7,13 @@ import time
 from pathlib import Path
 
 from github import Auth, GithubIntegration
-from pydantic import computed_field
+from pydantic import computed_field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = logging.getLogger(__name__)
 
 _ENV_FILE = str(Path(__file__).resolve().parents[3] / ".env")
+_REPO_ROOT = Path(_ENV_FILE).parent
 
 _token_cache: dict[str, tuple[str, int]] = {}
 _REFRESH_BUFFER_SECONDS = 300
@@ -26,17 +27,32 @@ class GitHubAppSettings(BaseSettings):
     )
 
     GITHUB_APP_ID: int = 0
-    GITHUB_APP_PRIVATE_KEY_PATH: str = ""
+    GITHUB_APP_PRIVATE_KEY: str = ""
+    GITHUB_APP_PRIVATE_KEY_PATH: str | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _load_github_private_key(cls, data: object) -> object:
+        if not isinstance(data, dict):
+            return data
+        pem = str(data.get("GITHUB_APP_PRIVATE_KEY") or "").strip()
+        if pem:
+            return data
+        raw_path = str(data.get("GITHUB_APP_PRIVATE_KEY_PATH") or "").strip()
+        if not raw_path:
+            return data
+        path = Path(raw_path)
+        if not path.is_absolute():
+            path = _REPO_ROOT / path
+        if path.exists():
+            data["GITHUB_APP_PRIVATE_KEY"] = path.read_text(encoding="utf-8")
+        return data
 
     @computed_field
     @property
     def github_app_private_key(self) -> str | None:
-        if not self.GITHUB_APP_PRIVATE_KEY_PATH:
-            return None
-        path = Path(self.GITHUB_APP_PRIVATE_KEY_PATH)
-        if not path.is_absolute():
-            path = Path(_ENV_FILE).parent / path
-        return path.read_text(encoding="utf-8") if path.exists() else None
+        pem = self.GITHUB_APP_PRIVATE_KEY.strip().replace("\\n", "\n")
+        return pem or None
 
 
 github_settings = GitHubAppSettings()
@@ -45,7 +61,7 @@ github_settings = GitHubAppSettings()
 def _github_integration() -> GithubIntegration:
     private_key = github_settings.github_app_private_key
     if github_settings.GITHUB_APP_ID <= 0 or not private_key:
-        msg = "GITHUB_APP_ID and GITHUB_APP_PRIVATE_KEY_PATH are required for GitHub App auth"
+        msg = "GITHUB_APP_ID and GITHUB_APP_PRIVATE_KEY are required for GitHub App auth"
         raise ValueError(msg)
 
     auth = Auth.AppAuth(github_settings.GITHUB_APP_ID, private_key)

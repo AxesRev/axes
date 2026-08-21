@@ -26,20 +26,6 @@ def webhook_url(public_url: str) -> str:
     return f"{public_url.rstrip('/')}/billing/webhooks"
 
 
-def normalize_api_key(raw: str) -> str:
-    value = raw.strip()
-    if "#" in value:
-        value = value.split("#", 1)[0].strip()
-    if value.lower().startswith("bearer "):
-        value = value[7:].strip()
-    value = value.strip("\"'")
-    if value:
-        value = value.split()[0]
-    if not value:
-        raise ValueError("PADDLE_API_KEY is missing from SSM")
-    return value
-
-
 def api_base(api_key: str) -> str:
     if api_key.startswith("pdl_sdbx_"):
         return SANDBOX_API_BASE
@@ -211,7 +197,9 @@ def deploy_notification() -> None:
     destination = webhook_url(public_url)
 
     secrets = _ssm_get(ssm_name, region)
-    api_key = normalize_api_key(str(secrets.get("PADDLE_API_KEY") or ""))
+    api_key = str(secrets.get("PADDLE_API_KEY") or "").strip()
+    if not api_key:
+        raise ValueError("PADDLE_API_KEY is missing from SSM")
 
     setting_id = str(secrets.get("PADDLE_NOTIFICATION_SETTING_ID") or "").strip()
     existing = pick_setting(

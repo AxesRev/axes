@@ -16,6 +16,8 @@ os.environ.setdefault("SALESFORCE_CLIENT_ID", "test-salesforce-client-id")
 os.environ.setdefault("SALESFORCE_PRIVATE_KEY", "test-salesforce-private-key")
 os.environ.setdefault("SALESFORCE_LOGIN_URL", "https://login.salesforce.com")
 os.environ.setdefault("OPENAI_API_KEY", "test-openai-api-key")
+os.environ.setdefault("GITHUB_APP_ID", "0")
+os.environ.setdefault("GITHUB_APP_PRIVATE_KEY", "")
 
 import asyncio
 import sys
