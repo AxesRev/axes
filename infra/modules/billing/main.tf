@@ -162,3 +162,30 @@ resource "aws_lambda_permission" "charge" {
   principal     = "events.amazonaws.com"
   source_arn    = aws_cloudwatch_event_rule.charge.arn
 }
+
+data "aws_region" "current" {}
+
+resource "terraform_data" "paddle_notification" {
+  input = {
+    invoke_url = aws_apigatewayv2_api.this.api_endpoint
+  }
+
+  depends_on = [
+    aws_apigatewayv2_route.billing,
+    aws_apigatewayv2_stage.default,
+    aws_lambda_permission.apigw,
+  ]
+
+  provisioner "local-exec" {
+    command = "python3 -u \"${replace(var.deploy_notification_script, "\\", "/")}\""
+
+    environment = {
+      BILLING_PUBLIC_URL      = aws_apigatewayv2_api.this.api_endpoint
+      SSM_SECRETS_PARAMETER   = var.ssm_secrets_parameter
+      AWS_REGION              = data.aws_region.current.region
+      DESTINATION_DESCRIPTION = var.name
+      LAMBDA_API_FUNCTION     = aws_lambda_function.api.function_name
+      LAMBDA_CHARGE_FUNCTION  = aws_lambda_function.charge.function_name
+    }
+  }
+}

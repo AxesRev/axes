@@ -33,6 +33,11 @@ variable "charge_schedule_expression" {
   default     = "cron(0 8 1 * ? *)"
 }
 
+variable "deploy_notification_script" {
+  description = "Repo path to deploy_notification.py. Runs after the billing API URL exists."
+  type        = string
+}
+
 variable "tags" {
   type    = map(string)
   default = {}
