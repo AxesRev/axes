@@ -19,7 +19,7 @@ resource "auth0_client" "webapp" {
   app_type            = "regular_web"
   oidc_conformant     = true
   is_first_party      = true
-  callbacks           = ["${local.origin}/api/auth/callback", "http://localhost:3000/api/auth/callback"]
+  callbacks           = ["${local.origin}/auth/callback", "http://localhost:3000/auth/callback"]
   allowed_logout_urls = [local.origin, "http://localhost:3000"]
   web_origins         = [local.origin, "http://localhost:3000"]
   grant_types         = ["authorization_code", "refresh_token"]
