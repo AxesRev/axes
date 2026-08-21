@@ -1,10 +1,11 @@
-"""GitHub App installation and Slack → GitHub OAuth linking."""
+"""GitHub App tenant install and Slack user OAuth."""
 
 from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime, timedelta
-from typing import Any, Literal
+from typing import Any
+from urllib.parse import urlencode
 
 import httpx
 import jwt as pyjwt
@@ -19,7 +20,7 @@ from integrations.github_oauth import (
     fetch_github_user_id_and_email,
     verify_github_oauth_state,
 )
-from integrations.http import html_response, public_base_url, query_params, redirect
+from integrations.http import html_response, public_base_url, query_params, redirect, require_tenant_id
 from integrations.store import link_github_identity, upsert_github_app_integration
 
 logger = logging.getLogger(__name__)
@@ -76,17 +77,23 @@ _TENANT_INSTALL_SUCCESS_HTML = """<!DOCTYPE html>
 </html>"""
 
 
-def github_callback_url(event: dict[str, Any]) -> str:
-    return f"{public_base_url(event)}/app_integrations/github/callback"
+def github_oauth_callback_url(event: dict[str, Any]) -> str:
+    return f"{public_base_url(event)}/app_integrations/github/oauth/callback"
 
 
-def _state_kind(state: str) -> Literal["jwt", "oauth_hmac"]:
-    if state.count(".") == 2:
-        return "oauth_hmac"
-    return "jwt"
+def _encode_install_state(tenant_id: str) -> str:
+    return pyjwt.encode(
+        {
+            "tenant_id": tenant_id,
+            "exp": datetime.now(UTC) + timedelta(seconds=_INSTALL_STATE_TTL_SECONDS),
+        },
+        settings.INSTALL_SECRET,
+        algorithm="HS256",
+        headers={"typ": "JWT"},
+    )
 
 
-def _decode_tenant_install_state(state: str) -> str:
+def _decode_install_state(state: str) -> str:
     try:
         claims = pyjwt.decode(
             state,
@@ -126,34 +133,7 @@ async def _validate_oauth_state_token(token: str, session: AsyncSession) -> str:
 
 
 async def github_install(event: dict[str, Any], session: AsyncSession) -> dict[str, object]:
-    params = query_params(event)
-    tenant_id = params.get("tenant_id")
-    installation_id = params.get("installation_id")
-    state = params.get("state")
-    setup_action = params.get("setup_action")
-
-    if tenant_id is not None:
-        return await _github_app_install_start(tenant_id, session)
-
-    if installation_id is not None and state is not None and _state_kind(state) == "oauth_hmac":
-        if not settings.GITHUB_OAUTH_STATE_SECRET:
-            raise HttpError(500, "GITHUB_OAUTH_STATE_SECRET is not configured.")
-        try:
-            slack_user_id = verify_github_oauth_state(state, settings.GITHUB_OAUTH_STATE_SECRET)
-        except ValueError as exc:
-            raise HttpError(400, f"Invalid state parameter: {exc}") from exc
-        logger.info(
-            "github_app_install_slack_callback slack_user_id=%s installation_id=%s setup_action=%s",
-            slack_user_id,
-            installation_id,
-            setup_action,
-        )
-        return _install_success(installation_id)
-
-    raise HttpError(400, "Provide tenant_id to start installation, or installation_id with a valid state.")
-
-
-async def _github_app_install_start(tenant_id: str, session: AsyncSession) -> dict[str, object]:
+    tenant_id = require_tenant_id(query_params(event))
     result = await session.execute(select(Tenant).where(Tenant.id == tenant_id))
     tenant = result.scalar_one_or_none()
     if tenant is None:
@@ -161,18 +141,41 @@ async def _github_app_install_start(tenant_id: str, session: AsyncSession) -> di
     if not settings.GITHUB_APP_SLUG:
         raise HttpError(500, "GITHUB_APP_SLUG is not configured on this server.")
 
-    state = pyjwt.encode(
-        {
-            "tenant_id": tenant_id,
-            "exp": datetime.now(UTC) + timedelta(seconds=_INSTALL_STATE_TTL_SECONDS),
-        },
-        settings.INSTALL_SECRET,
-        algorithm="HS256",
-        headers={"typ": "JWT"},
-    )
-    install_url = f"https://github.com/apps/{settings.GITHUB_APP_SLUG}/installations/new?state={state}"
+    state = _encode_install_state(tenant_id)
+    install_url = f"https://github.com/apps/{settings.GITHUB_APP_SLUG}/installations/new?{urlencode({'state': state})}"
     logger.info("github_app_install_redirect tenant_id=%s", tenant_id)
     return redirect(install_url)
+
+
+async def github_callback(event: dict[str, Any], session: AsyncSession) -> dict[str, object]:
+    """GitHub App install redirect: Setup URL, or Callback URL when OAuth-during-install is on.
+
+    GitHub always sends installation_id and echoes state. A code is present only when
+    the app requests user authorization during installation; tenant install does not use it.
+    """
+    params = query_params(event)
+    installation_id = params.get("installation_id", "").strip()
+    state = params.get("state", "").strip()
+    if not installation_id or not state:
+        raise HttpError(400, "GitHub App callback requires installation_id and state.")
+
+    tenant_id = _decode_install_state(state)
+    try:
+        await upsert_github_app_integration(
+            tenant_id=tenant_id,
+            installation_id=installation_id,
+            session=session,
+        )
+    except ValueError as exc:
+        raise HttpError(400, str(exc)) from exc
+
+    logger.info(
+        "github_app_install_complete tenant_id=%s installation_id=%s setup_action=%s",
+        tenant_id,
+        installation_id,
+        params.get("setup_action"),
+    )
+    return _install_success(installation_id)
 
 
 async def github_oauth_start(event: dict[str, Any], session: AsyncSession) -> dict[str, object]:
@@ -185,74 +188,27 @@ async def github_oauth_start(event: dict[str, Any], session: AsyncSession) -> di
     if not settings.GITHUB_OAUTH_STATE_SECRET:
         raise HttpError(500, "GITHUB_OAUTH_STATE_SECRET is not configured.")
 
-    oauth_state = create_github_oauth_state(
-        slack_user_id=slack_user_id,
-        secret=settings.GITHUB_OAUTH_STATE_SECRET,
-    )
-    callback_url = github_callback_url(event)
-    authorize_url = (
-        f"{_GITHUB_AUTHORIZE_URL}"
-        f"?client_id={settings.GITHUB_CLIENT_ID}"
-        f"&redirect_uri={callback_url}"
-        f"&state={oauth_state}"
-        f"&scope=read:user%20user:email"
+    params = urlencode(
+        {
+            "client_id": settings.GITHUB_CLIENT_ID,
+            "redirect_uri": github_oauth_callback_url(event),
+            "state": create_github_oauth_state(
+                slack_user_id=slack_user_id,
+                secret=settings.GITHUB_OAUTH_STATE_SECRET,
+            ),
+            "scope": "read:user user:email",
+        }
     )
     logger.info("github_oauth_redirect slack_user_id=%s", slack_user_id)
-    return redirect(authorize_url)
+    return redirect(f"{_GITHUB_AUTHORIZE_URL}?{params}")
 
 
-async def github_callback(event: dict[str, Any], session: AsyncSession) -> dict[str, object]:
+async def github_oauth_callback(event: dict[str, Any], session: AsyncSession) -> dict[str, object]:
     params = query_params(event)
-    code = params.get("code")
-    state = params.get("state")
-    installation_id = params.get("installation_id")
-    setup_action = params.get("setup_action")
-
-    if code is not None:
-        return await _github_oauth_callback(
-            event=event,
-            code=code,
-            state=state,
-            installation_id=installation_id,
-            session=session,
-        )
-
-    if installation_id is None:
-        raise HttpError(400, "Missing installation_id or authorization code.")
-    if state is None:
-        raise HttpError(400, "Missing state parameter. Start installation from the Axes webapp.")
-
-    if _state_kind(state) == "jwt":
-        tenant_id = _decode_tenant_install_state(state)
-        try:
-            await upsert_github_app_integration(
-                tenant_id=tenant_id,
-                installation_id=installation_id,
-                session=session,
-            )
-        except ValueError as exc:
-            raise HttpError(400, str(exc)) from exc
-        logger.info(
-            "github_app_install_complete tenant_id=%s installation_id=%s setup_action=%s",
-            tenant_id,
-            installation_id,
-            setup_action,
-        )
-        return _install_success(installation_id)
-
-    return _install_success(installation_id)
-
-
-async def _github_oauth_callback(
-    *,
-    event: dict[str, Any],
-    code: str,
-    state: str | None,
-    installation_id: str | None,
-    session: AsyncSession,
-) -> dict[str, object]:
-    if state is None:
-        raise HttpError(400, "Missing OAuth state parameter.")
+    code = params.get("code", "").strip()
+    state = params.get("state", "").strip()
+    if not code or not state:
+        raise HttpError(400, "GitHub OAuth callback requires code and state.")
     if not settings.GITHUB_OAUTH_STATE_SECRET:
         raise HttpError(500, "GITHUB_OAUTH_STATE_SECRET is not configured.")
     if not settings.GITHUB_CLIENT_ID or not settings.GITHUB_CLIENT_SECRET:
@@ -270,7 +226,7 @@ async def _github_oauth_callback(
                 "client_id": settings.GITHUB_CLIENT_ID,
                 "client_secret": settings.GITHUB_CLIENT_SECRET,
                 "code": code,
-                "redirect_uri": github_callback_url(event),
+                "redirect_uri": github_oauth_callback_url(event),
             },
             headers={"Accept": "application/json"},
         )
@@ -298,10 +254,5 @@ async def _github_oauth_callback(
         oauth_token=oauth_token,
         session=session,
     )
-    logger.info(
-        "github_oauth_complete slack_user_id=%s github_user_id=%s installation_id=%s",
-        slack_user_id,
-        github_user_id,
-        installation_id,
-    )
+    logger.info("github_oauth_complete slack_user_id=%s github_user_id=%s", slack_user_id, github_user_id)
     return html_response(200, _SUCCESS_HTML.format(github_email=github_email))

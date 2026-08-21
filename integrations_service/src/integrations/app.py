@@ -7,7 +7,7 @@ from typing import Any
 from common.lambda_async import run as run_async
 from integrations.db import session_scope
 from integrations.errors import HttpError
-from integrations.github import github_callback, github_install, github_oauth_start
+from integrations.github import github_callback, github_install, github_oauth_callback, github_oauth_start
 from integrations.http import json_response, method_and_path
 from integrations.salesforce import (
     salesforce_complete_form,
@@ -41,6 +41,9 @@ async def _handle(event: dict[str, Any]) -> dict[str, object]:
         if method == "GET" and path == "/app_integrations/github/callback":
             async with await _with_session() as session:
                 return await github_callback(event, session)
+        if method == "GET" and path == "/app_integrations/github/oauth/callback":
+            async with await _with_session() as session:
+                return await github_oauth_callback(event, session)
 
         if method == "GET" and path == "/app_integrations/salesforce/install":
             async with await _with_session() as session:

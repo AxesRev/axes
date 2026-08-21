@@ -121,13 +121,57 @@ def test_github_callback_persists_installation(session: AsyncMock, monkeypatch: 
 
 
 @pytest.mark.integration
-def test_github_callback_requires_state(session: AsyncMock) -> None:
+def test_github_callback_persists_installation_after_oauth_during_install(
+    session: AsyncMock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("integrations.config.settings.GITHUB_APP_SLUG", "axes-test-app")
+    monkeypatch.setattr("integrations.config.settings.INSTALL_SECRET", _GITHUB_SECRET)
+
+    tenant = Tenant(id="tenant-1", name="Acme")
+    tenant_result = MagicMock()
+    tenant_result.scalar_one_or_none.return_value = tenant
+    empty = MagicMock()
+    empty.scalar_one_or_none.return_value = None
+    session.execute = AsyncMock(side_effect=[tenant_result, empty, empty])
+    session.commit = AsyncMock()
+    session.add = MagicMock()
+
+    install = _invoke(method="GET", path="/app_integrations/github/install", query={"tenant_id": "tenant-1"})
+    state = install["headers"]["location"].split("state=", 1)[1]
+    session.execute = AsyncMock(side_effect=[tenant_result, empty, empty])
+    session.commit = AsyncMock()
+    session.add = MagicMock()
+
     response = _invoke(
+        method="GET",
+        path="/app_integrations/github/callback",
+        query={
+            "code": "oauth-code-from-github",
+            "installation_id": "98765",
+            "setup_action": "install",
+            "state": state,
+        },
+    )
+    assert response["statusCode"] == 200
+    assert "98765" in str(response["body"])
+    assert "Return to Axes" in str(response["body"])
+
+
+@pytest.mark.integration
+def test_github_callback_requires_installation_id_and_state(session: AsyncMock) -> None:
+    missing_state = _invoke(
         method="GET",
         path="/app_integrations/github/callback",
         query={"installation_id": "98765", "setup_action": "install"},
     )
-    assert response["statusCode"] == 400
+    assert missing_state["statusCode"] == 400
+
+    missing_installation = _invoke(
+        method="GET",
+        path="/app_integrations/github/callback",
+        query={"code": "oauth-code", "state": "not-an-install-state"},
+    )
+    assert missing_installation["statusCode"] == 400
 
 
 @pytest.mark.integration
@@ -150,6 +194,7 @@ def test_github_oauth_start_redirects_to_github(session: AsyncMock, monkeypatch:
     location = response["headers"]["location"]
     assert "github.com/login/oauth/authorize" in location
     assert "client_id=client-id" in location
+    assert "redirect_uri=http%3A%2F%2Flocalhost%3A8000%2Fapp_integrations%2Fgithub%2Foauth%2Fcallback" in location
     assert "state=" in location
 
 
