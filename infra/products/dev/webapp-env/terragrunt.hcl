@@ -53,6 +53,17 @@ dependency "generated" {
   mock_outputs_allowed_terraform_commands = ["validate", "plan", "destroy"]
 }
 
+dependency "auth0" {
+  config_path = "../auth0"
+
+  mock_outputs = {
+    domain        = "example.auth0.com"
+    client_id     = "mock-client-id"
+    client_secret = "mock-client-secret"
+  }
+  mock_outputs_allowed_terraform_commands = ["validate", "plan", "destroy"]
+}
+
 locals {
   env = read_terragrunt_config(find_in_parent_folders("env.hcl"))
 }
@@ -65,6 +76,10 @@ inputs = {
   tenant_api_url       = dependency.tenant.outputs.invoke_url
   billing_api_url      = dependency.billing.outputs.invoke_url
   integrations_api_url = dependency.integrations.outputs.invoke_url
+
+  auth0_domain        = dependency.auth0.outputs.domain
+  auth0_client_id     = dependency.auth0.outputs.client_id
+  auth0_client_secret = dependency.auth0.outputs.client_secret
 
   ssm_secrets_parameter   = "/axes/${local.env.locals.environment}/secrets"
   ssm_generated_parameter = dependency.generated.outputs.parameter_name

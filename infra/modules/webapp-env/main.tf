@@ -18,13 +18,13 @@ locals {
     BILLING_API_URL      = var.billing_api_url
     INTEGRATIONS_API_URL = var.integrations_api_url
     INTERNAL_API_SECRET  = local.generated["INTERNAL_API_SECRET"]
+    AUTH0_DOMAIN         = var.auth0_domain
+    AUTH0_CLIENT_ID      = var.auth0_client_id
+    AUTH0_CLIENT_SECRET  = var.auth0_client_secret
+    AUTH0_SECRET         = local.generated["AUTH0_SECRET"]
   }
 
   optional_secret_keys = [
-    "AUTH0_DOMAIN",
-    "AUTH0_CLIENT_ID",
-    "AUTH0_CLIENT_SECRET",
-    "AUTH0_SECRET",
     "NEXT_PUBLIC_PADDLE_CLIENT_TOKEN",
     "NEXT_PUBLIC_PADDLE_BASE_PRICE_ID",
   ]

@@ -36,6 +36,16 @@ dependency "generated" {
   mock_outputs_allowed_terraform_commands = ["validate", "plan", "destroy"]
 }
 
+dependency "auth0" {
+  config_path = "../auth0"
+
+  mock_outputs = {
+    domain    = "example.auth0.com"
+    client_id = "mock-client-id"
+  }
+  mock_outputs_allowed_terraform_commands = ["validate", "plan", "destroy"]
+}
+
 locals {
   env = read_terragrunt_config(find_in_parent_folders("env.hcl"))
 }
@@ -48,6 +58,8 @@ inputs = {
   private_subnet_ids           = dependency.vpc.outputs.private_subnets
   db_clients_security_group_id = dependency.vpc.outputs.db_clients_security_group_id
 
-  ssm_secrets_parameter   = "/axes/${local.env.locals.environment}/secrets"
   ssm_generated_parameter = dependency.generated.outputs.parameter_name
+
+  auth0_domain    = dependency.auth0.outputs.domain
+  auth0_client_id = dependency.auth0.outputs.client_id
 }

@@ -23,6 +23,19 @@ variable "integrations_api_url" {
   type = string
 }
 
+variable "auth0_domain" {
+  type = string
+}
+
+variable "auth0_client_id" {
+  type = string
+}
+
+variable "auth0_client_secret" {
+  type      = string
+  sensitive = true
+}
+
 variable "ssm_secrets_parameter" {
   description = "Existing SSM SecureString JSON. Must contain VERCEL_API_TOKEN."
   type        = string
