@@ -87,6 +87,22 @@ def query_batches(sf: Salesforce, soql: str, *, batch_size: int = 2000) -> Itera
         result = sf.query_more(result["nextRecordsUrl"], identifier_is_url=True)
 
 
+def describe_sobject_field_names(sf: Salesforce, api_name: str) -> set[str] | None:
+    """Return field API names for one sObject, or None when describe fails."""
+    try:
+        payload = getattr(sf, api_name).describe()
+    except Exception as exc:
+        logger.debug("sobject_describe_failed name=%s error=%s", api_name, exc)
+        return None
+    if not isinstance(payload, dict):
+        return None
+    names: set[str] = set()
+    for field in payload.get("fields", []):
+        if isinstance(field, dict) and isinstance(field.get("name"), str):
+            names.add(str(field["name"]))
+    return names
+
+
 def describe_global(sf: Salesforce) -> list[dict[str, Any]]:
     """Return sobject describe summaries from the org."""
     payload = sf.describe()

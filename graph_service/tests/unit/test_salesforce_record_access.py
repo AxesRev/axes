@@ -11,13 +11,16 @@ from integrations.salesforce.ids import (
 )
 from integrations.salesforce.ingestion.record_access import record_permission_edge_from_share_access
 from integrations.salesforce.share_objects import (
+    access_level_field_for_sobject,
     discover_share_pairs,
     normalize_share_access,
     normalize_share_access_level,
     parent_id_field_for_sobject,
+    resolve_share_table_shape,
     share_object_for_sobject,
     sobject_for_share_object,
 )
+from integrations.salesforce.soql import build_share_table_soql
 
 
 @pytest.mark.unit
@@ -64,6 +67,68 @@ def test_parent_id_field_for_sobject() -> None:
 
 
 @pytest.mark.unit
+def test_access_level_field_for_sobject() -> None:
+    assert access_level_field_for_sobject("Account") == "AccountAccessLevel"
+    assert access_level_field_for_sobject("Asset") == "AssetAccessLevel"
+    assert access_level_field_for_sobject("Campaign") == "CampaignAccessLevel"
+    assert access_level_field_for_sobject("Custom__c") == "AccessLevel"
+
+
+@pytest.mark.unit
+def test_resolve_share_table_shape_uses_named_access_level() -> None:
+    shape = resolve_share_table_shape(
+        share_object_name="AssetShare",
+        target_sobject="Asset",
+        field_names={"Id", "AssetId", "UserOrGroupId", "RowCause", "AssetAccessLevel"},
+    )
+    assert shape is not None
+    assert shape.parent_id_field == "AssetId"
+    assert shape.access_level_field == "AssetAccessLevel"
+
+
+@pytest.mark.unit
+def test_resolve_share_table_shape_uses_parent_id_and_access_level() -> None:
+    shape = resolve_share_table_shape(
+        share_object_name="WorkStepTemplateShare",
+        target_sobject="WorkStepTemplate",
+        field_names={"Id", "ParentId", "UserOrGroupId", "RowCause", "AccessLevel"},
+    )
+    assert shape is not None
+    assert shape.parent_id_field == "ParentId"
+    assert shape.access_level_field == "AccessLevel"
+
+
+@pytest.mark.unit
+def test_resolve_share_table_shape_requires_user_or_group_and_row_cause() -> None:
+    assert (
+        resolve_share_table_shape(
+            share_object_name="AssetShare",
+            target_sobject="Asset",
+            field_names={"Id", "AssetId", "AssetAccessLevel"},
+        )
+        is None
+    )
+    assert (
+        resolve_share_table_shape(
+            share_object_name="AssetShare",
+            target_sobject="Asset",
+            field_names={"Id", "AssetId", "UserOrGroupId", "AssetAccessLevel"},
+        )
+        is None
+    )
+
+
+@pytest.mark.unit
+def test_build_share_table_soql_uses_described_fields() -> None:
+    soql = build_share_table_soql(
+        share_object_name="WorkStepTemplateShare",
+        parent_id_field="ParentId",
+        access_level_field="AccessLevel",
+    )
+    assert soql == ("SELECT Id, ParentId, UserOrGroupId, RowCause, AccessLevel FROM WorkStepTemplateShare")
+
+
+@pytest.mark.unit
 def test_normalize_share_access_for_account_share_row() -> None:
     access = normalize_share_access(
         {
@@ -80,6 +145,43 @@ def test_normalize_share_access_for_account_share_row() -> None:
     assert access.subject.external_id == "005000000000001AAA"
     assert access.row_cause == "Rule"
     assert access.access_level == "read"
+
+
+@pytest.mark.unit
+def test_normalize_share_access_for_named_access_level_share_row() -> None:
+    access = normalize_share_access(
+        {
+            "AssetId": "02i000000000001AAA",
+            "UserOrGroupId": "005000000000001AAA",
+            "RowCause": "Manual",
+            "AssetAccessLevel": "Edit",
+        },
+        target_sobject="Asset",
+        parent_id_field="AssetId",
+        access_level_field="AssetAccessLevel",
+    )
+    assert access is not None
+    assert access.record_id == "02i000000000001AAA"
+    assert access.access_level == "edit"
+
+
+@pytest.mark.unit
+def test_normalize_share_access_for_parent_id_share_row() -> None:
+    access = normalize_share_access(
+        {
+            "ParentId": "0ST000000000001AAA",
+            "UserOrGroupId": "00G000000000001AAA",
+            "RowCause": "Owner",
+            "AccessLevel": "All",
+        },
+        target_sobject="WorkStepTemplate",
+        parent_id_field="ParentId",
+        access_level_field="AccessLevel",
+    )
+    assert access is not None
+    assert access.record_id == "0ST000000000001AAA"
+    assert access.subject.kind == "group"
+    assert access.access_level == "all"
 
 
 @pytest.mark.unit

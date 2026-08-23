@@ -54,19 +54,30 @@ def slack_bot_token(config: object) -> str:
     return str(config.get("bot_token") or "").strip()
 
 
-async def get_or_create_slack_user_identity_for_team(
-    *,
-    slack_user_id: str,
-    team_id: str,
-    session: AsyncSession,
-) -> SlackWorkspaceUser | None:
+async def _slack_integration_for_team(session: AsyncSession, team_id: str) -> AppIntegration | None:
     result = await session.execute(
         select(AppIntegration).where(
             AppIntegration.app_name == _SLACK_APP_NAME,
             AppIntegration.config["team_id"].astext == team_id,
         )
     )
-    integration = result.scalar_one_or_none()
+    return result.scalar_one_or_none()
+
+
+async def find_slack_bot_token(session: AsyncSession, *, team_id: str) -> str:
+    integration = await _slack_integration_for_team(session, team_id)
+    if integration is None:
+        return ""
+    return slack_bot_token(integration.config)
+
+
+async def get_or_create_slack_user_identity_for_team(
+    *,
+    slack_user_id: str,
+    team_id: str,
+    session: AsyncSession,
+) -> SlackWorkspaceUser | None:
+    integration = await _slack_integration_for_team(session, team_id)
     if integration is None:
         return None
 

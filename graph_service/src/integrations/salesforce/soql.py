@@ -6,11 +6,8 @@ from collections.abc import Iterable
 
 from integrations.salesforce.ids import validate_salesforce_id
 from integrations.salesforce.share_objects import (
-    access_level_field_for_sobject,
-    parent_id_field_for_sobject,
     validate_field_name,
     validate_share_object_api_name,
-    validate_sobject_api_name,
 )
 
 
@@ -32,13 +29,15 @@ def build_group_by_ids_soql(ids: Iterable[str]) -> str:
     return "SELECT Id, Name, DeveloperName, Type FROM Group WHERE Id IN (" + id_clause + ")"  # nosec B608
 
 
-def build_share_table_soql(*, share_object_name: str, target_sobject: str) -> str:
+def build_share_table_soql(
+    *,
+    share_object_name: str,
+    parent_id_field: str,
+    access_level_field: str,
+) -> str:
     validated_share_object = validate_share_object_api_name(share_object_name)
-    validated_target = validate_sobject_api_name(target_sobject)
-    parent_field = parent_id_field_for_sobject(validated_target)
-    access_field = access_level_field_for_sobject(validated_target)
-    validate_field_name(parent_field)
-    validate_field_name(access_field)
+    parent_field = validate_field_name(parent_id_field)
+    access_field = validate_field_name(access_level_field)
     return (
         "SELECT Id, "  # nosec B608
         + parent_field

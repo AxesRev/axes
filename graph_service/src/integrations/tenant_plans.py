@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import ssl
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -76,6 +77,13 @@ def build_tenant_plans(rows: list[asyncpg.Record]) -> list[TenantFetchPlan]:
     return [by_id[tid] for tid in order]
 
 
+def _postgres_ssl() -> ssl.SSLContext:
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    return ctx
+
+
 async def load_tenant_fetch_plans() -> list[TenantFetchPlan]:
     """Load every tenant and its ``app_integrations`` from the metadata database."""
     runner = get_runner_settings()
@@ -89,7 +97,7 @@ async def load_tenant_fetch_plans() -> list[TenantFetchPlan]:
         LEFT JOIN app_integrations ai ON ai.tenant_id = t.id
         ORDER BY t.name, ai.app_name
     """
-    conn = await asyncpg.connect(dsn=runner.postgres_url)
+    conn = await asyncpg.connect(dsn=runner.postgres_url, ssl=_postgres_ssl())
     try:
         rows = await conn.fetch(query)
     finally:

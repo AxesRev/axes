@@ -18,7 +18,12 @@ from integrations.salesforce.ingestion.shared import (
 from integrations.salesforce.ingestion.users import ensure_identities_for_ids
 from integrations.salesforce.models import PERMISSION_EFFECT_GRANT, build_record_permission_extra
 from integrations.salesforce.settings import get_salesforce_settings
-from integrations.salesforce.share_objects import NormalizedShareAccess, discover_share_pairs, normalize_share_access
+from integrations.salesforce.share_objects import (
+    NormalizedShareAccess,
+    describe_share_table,
+    discover_share_pairs,
+    normalize_share_access,
+)
 from integrations.salesforce.soql import build_share_table_soql
 
 logger = logging.getLogger(__name__)
@@ -64,12 +69,24 @@ async def ingest_record_access(
     for share_object_name, target_sobject in share_pairs:
         if target_sobject not in resources_by_name:
             continue
+        shape = describe_share_table(
+            sf,
+            share_object_name=share_object_name,
+            target_sobject=target_sobject,
+        )
+        if shape is None:
+            logger.debug(
+                "record_access_skip_unrecognized_share_table share_object=%s",
+                share_object_name,
+            )
+            continue
         try:
             share_rows = query_all(
                 sf,
                 build_share_table_soql(
-                    share_object_name=share_object_name,
-                    target_sobject=target_sobject,
+                    share_object_name=shape.share_object_name,
+                    parent_id_field=shape.parent_id_field,
+                    access_level_field=shape.access_level_field,
                 ),
             )
         except SalesforceMalformedRequest as exc:
@@ -77,7 +94,12 @@ async def ingest_record_access(
             continue
 
         for share_row in share_rows:
-            access = normalize_share_access(share_row, target_sobject=target_sobject)
+            access = normalize_share_access(
+                share_row,
+                target_sobject=target_sobject,
+                parent_id_field=shape.parent_id_field,
+                access_level_field=shape.access_level_field,
+            )
             if access is None:
                 continue
             edge = record_permission_edge_from_share_access(access, target_sobject=target_sobject)

@@ -10,16 +10,10 @@ from typing import Any
 
 from simple_salesforce import Salesforce
 
-from integrations.salesforce.client import describe_global, query_all_or_empty
+from integrations.salesforce.client import describe_global, describe_sobject_field_names
 from integrations.salesforce.ids import GraphSubjectRef, graph_subject_from_user_or_group_id
 
 logger = logging.getLogger(__name__)
-
-_ENTITY_SHARE_SOQL = """
-SELECT QualifiedApiName
-FROM EntityDefinition
-WHERE IsSharingEnabled = true
-"""
 
 _SOBJECT_NAME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]*(__c)?$")
 _SHARE_OBJECT_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]*(__Share|Share)$")
@@ -65,6 +59,14 @@ class NormalizedShareAccess:
     access_level: str
 
 
+@dataclass(frozen=True, slots=True)
+class ShareTableShape:
+    share_object_name: str
+    target_sobject: str
+    parent_id_field: str
+    access_level_field: str
+
+
 def validate_sobject_api_name(name: str) -> str:
     if not _SOBJECT_NAME_RE.fullmatch(name):
         msg = f"invalid SObject api name: {name!r}"
@@ -107,7 +109,62 @@ def parent_id_field_for_sobject(sobject_name: str) -> str:
 
 
 def access_level_field_for_sobject(sobject_name: str) -> str:
-    return ACCESS_LEVEL_FIELD_BY_SOBJECT.get(sobject_name, "AccessLevel")
+    if sobject_name.endswith("__c"):
+        return "AccessLevel"
+    return ACCESS_LEVEL_FIELD_BY_SOBJECT.get(sobject_name, f"{sobject_name}AccessLevel")
+
+
+def resolve_share_table_shape(
+    *,
+    share_object_name: str,
+    target_sobject: str,
+    field_names: set[str],
+) -> ShareTableShape | None:
+    """Pick parent and access fields that actually exist on a Share table."""
+    if "UserOrGroupId" not in field_names or "RowCause" not in field_names:
+        return None
+
+    guessed_parent = parent_id_field_for_sobject(target_sobject)
+    if guessed_parent in field_names:
+        parent_id_field = guessed_parent
+    elif "ParentId" in field_names:
+        parent_id_field = "ParentId"
+    else:
+        return None
+
+    named_access = f"{target_sobject}AccessLevel"
+    mapped_access = ACCESS_LEVEL_FIELD_BY_SOBJECT.get(target_sobject)
+    if named_access in field_names:
+        access_level_field = named_access
+    elif mapped_access and mapped_access in field_names:
+        access_level_field = mapped_access
+    elif "AccessLevel" in field_names:
+        access_level_field = "AccessLevel"
+    else:
+        return None
+
+    return ShareTableShape(
+        share_object_name=share_object_name,
+        target_sobject=target_sobject,
+        parent_id_field=parent_id_field,
+        access_level_field=access_level_field,
+    )
+
+
+def describe_share_table(
+    sf: Salesforce,
+    *,
+    share_object_name: str,
+    target_sobject: str,
+) -> ShareTableShape | None:
+    field_names = describe_sobject_field_names(sf, share_object_name)
+    if field_names is None:
+        return None
+    return resolve_share_table_shape(
+        share_object_name=share_object_name,
+        target_sobject=target_sobject,
+        field_names=field_names,
+    )
 
 
 def normalize_share_access_level(access_level: object | None) -> str:
@@ -121,6 +178,8 @@ def normalize_share_access(
     row: Mapping[str, Any],
     *,
     target_sobject: str,
+    parent_id_field: str | None = None,
+    access_level_field: str | None = None,
 ) -> NormalizedShareAccess | None:
     """Normalize a Salesforce Share row into graph-ready record access."""
     subject = graph_subject_from_user_or_group_id(str(row.get("UserOrGroupId") or ""))
@@ -131,17 +190,20 @@ def normalize_share_access(
     if row_cause not in ALLOWED_SHARE_ROW_CAUSES:
         return None
 
-    parent_field = parent_id_field_for_sobject(target_sobject)
+    parent_field = parent_id_field or parent_id_field_for_sobject(target_sobject)
     record_id = row.get(parent_field) or row.get("ParentId")
     if not record_id:
         return None
 
-    access_field = access_level_field_for_sobject(target_sobject)
+    access_field = access_level_field or access_level_field_for_sobject(target_sobject)
+    access_value = row.get(access_field)
+    if access_value is None:
+        access_value = row.get("AccessLevel")
     return NormalizedShareAccess(
         record_id=str(record_id),
         subject=subject,
         row_cause=row_cause,
-        access_level=normalize_share_access_level(row.get(access_field)),
+        access_level=normalize_share_access_level(access_value),
     )
 
 
@@ -163,10 +225,6 @@ def discover_share_pairs(
         return _pairs_from_allowlist(allowlist)
 
     queryable = _queryable_share_object_names(sf)
-    entities = query_all_or_empty(sf, _ENTITY_SHARE_SOQL, context="entity_definition_sharing")
-    if entities:
-        return _pairs_from_shareable_entities(entities, queryable=queryable)
-
     return _pairs_from_queryable_share_objects(queryable)
 
 
@@ -178,21 +236,6 @@ def _pairs_from_allowlist(allowlist: frozenset[str]) -> list[tuple[str, str]]:
             logger.warning("share_allowlist_invalid name=%s", share_name)
             continue
         pairs.append((share_name, target))
-    return pairs
-
-
-def _pairs_from_shareable_entities(
-    entities: list[dict[str, Any]],
-    *,
-    queryable: set[str],
-) -> list[tuple[str, str]]:
-    pairs: list[tuple[str, str]] = []
-    for row in entities:
-        sobject_name = str(row["QualifiedApiName"])
-        share_name = share_object_for_sobject(sobject_name)
-        if share_name not in queryable:
-            continue
-        pairs.append((share_name, sobject_name))
     return pairs
 
 
