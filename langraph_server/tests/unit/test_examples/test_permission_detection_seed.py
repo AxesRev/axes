@@ -1,15 +1,14 @@
-"""Tests for permission_detection seeding and submit routing."""
+"""Tests for permission_detection seeding and validator routing."""
 
 from __future__ import annotations
 
 from langchain_core.messages import HumanMessage
 
-from examples.react_agent.state import State
+from examples.react_agent.state import DetectedPermission, FieldResult, State
 from examples.react_agent.subgraphs.permission_detection import (
-    _command_from_submit,
     _extra_detector_context,
     _seed,
-    route_after_model,
+    apply_structured_response,
     route_validator,
 )
 from examples.react_agent.user_context_models import UserContextData, UserContextGroup, UserContextPermission
@@ -64,7 +63,8 @@ def test_seed_includes_user_request_and_resource_context() -> None:
     text = _seed(state).content if isinstance(_seed(state).content, str) else ""
     assert "I want to become the admin" in text
     assert "AxesRev/Test_repo" in text
-    assert "submit_detected_permission" in text
+    assert "submit_detected_permission" not in text
+    assert "structured output" in text
 
 
 def test_seed_includes_validator_feedback() -> None:
@@ -76,26 +76,17 @@ def test_seed_includes_validator_feedback() -> None:
     assert "Use the exact repo name." in text
 
 
-def test_command_from_submit_writes_field_results_and_routes_to_validator() -> None:
-    command = _command_from_submit(
-        {
-            "id": "call-1",
-            "name": "submit_detected_permission",
-            "args": {
-                "domain": "repository",
-                "resource": "AxesRev/Test_repo",
-                "permission": "write",
-                "domain_justification": "User asked for repo access.",
-                "resource_justification": "Matched the named test repo.",
-                "permission_justification": "User asked to push code.",
-            },
-        },
-        [],
+async def test_apply_structured_response_copies_field_results() -> None:
+    detected = DetectedPermission(
+        domain_result=FieldResult(value="repository", justification="User asked for repo access."),
+        resource_result=FieldResult(value="AxesRev/Test_repo", justification="Matched the named test repo."),
+        permission_result=FieldResult(value="write", justification="User asked to push code."),
     )
-    assert command.goto == "validator"
-    assert command.update["domain_result"].value == "repository"
-    assert command.update["resource_result"].value == "AxesRev/Test_repo"
-    assert command.update["permission_result"].value == "write"
+    state = State(structured_response=detected)
+    update = await apply_structured_response(state, runtime=None)  # type: ignore[arg-type]
+    assert update["domain_result"].value == "repository"
+    assert update["resource_result"].value == "AxesRev/Test_repo"
+    assert update["permission_result"].value == "write"
 
 
 def test_route_validator_reruns_detector_when_feedback_present() -> None:
@@ -105,8 +96,3 @@ def test_route_validator_reruns_detector_when_feedback_present() -> None:
 
 def test_route_validator_finalizes_when_passed() -> None:
     assert route_validator(State()) == "finalize"
-
-
-def test_route_after_model_finalizes_when_no_tool_calls() -> None:
-    state = State(messages=[HumanMessage(content="hello")])
-    assert route_after_model(state) == "finalize"

@@ -35,9 +35,9 @@ You operate in a fully autonomous runtime:
 
 Your job:
   - Determine domain, resource, and permission together, using shared evidence from tools.
-  - Use the available tools to look up real information whenever the answer depends on the user's environment.
-  - When you are confident, call `submit_detected_permission` with all three fields. Do not call it together with lookup tools.
-  - Never finish with a plain-text answer. The only way to complete this task is `submit_detected_permission`.
+  - Use the available lookup tools to look up real information whenever the answer depends on the user's environment.
+  - When you are confident, stop calling lookup tools and emit structured output with all three fields and justifications.
+  - Never finish with a plain-text answer. Complete the task by emitting structured output.
 
 Field meanings:
   - domain: The TYPE of resource the user wants access to — the resource category used by the target system. Pick the most specific, conventional name for that system. Do not include a specific resource identifier here — that belongs to the `resource` field.
@@ -62,8 +62,8 @@ PERMISSION_DETECTOR_TASK_TEMPLATE = """Original user request:
 {user_request}
 \"\"\"
 {feedback_block}
-Determine domain, resource, and permission together. Use tools as needed to verify real information.
-When you are confident, call `submit_detected_permission` (and only that tool) with all three fields and justifications.
+Determine domain, resource, and permission together. Use lookup tools as needed to verify real information.
+When you are confident, emit structured output with all three fields and justifications.
 
 Tool and user-context data reflect the user's current access state. That state is accurate for what exists now,
 but is not an exhaustive list of valid domains, resources, or permission levels. When tools return permission
@@ -74,8 +74,8 @@ Do NOT treat the permission labels present on a resource as the only valid optio
 """
 
 PERMISSION_DETECTOR_FEEDBACK_TEMPLATE = """
-Your previous submission was rejected by the validator. Re-check the fields using tools if needed, then call
-`submit_detected_permission` again.
+Your previous structured output was rejected by the validator. Re-check the fields using lookup tools if needed,
+then emit structured output again.
 Validator feedback:
 {feedback}
 """
