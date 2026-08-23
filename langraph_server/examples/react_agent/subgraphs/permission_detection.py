@@ -2,101 +2,48 @@
 
 from __future__ import annotations
 
-import dataclasses
 import logging
-from dataclasses import dataclass, field
-from typing import Any, Literal, cast
+from datetime import UTC, datetime
+from typing import Any, Literal, NotRequired
 
+from langchain.agents import AgentState, create_agent
+from langchain.agents.middleware import ModelRequest, dynamic_prompt, wrap_model_call
+from langchain.agents.structured_output import ToolStrategy
 from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.graph import StateGraph
 from langgraph.runtime import Runtime
 
 from examples.react_agent.context import Context
-from examples.react_agent.edges.end import route_model_output
-from examples.react_agent.nodes.llm_call import call_model
-from examples.react_agent.nodes.tools import execute_tools
+from examples.react_agent.nodes.tools import _get_all_tools
 from examples.react_agent.nodes.validator import validate_results
 from examples.react_agent.prompts import (
-    FIELD_DESCRIPTIONS,
-    FIELD_DETECTOR_BASE_PROMPT,
-    FIELD_DETECTOR_FEEDBACK_TEMPLATE,
-    FIELD_DETECTOR_TASK_TEMPLATE,
-    FIELD_EXTRACTOR_PROMPT,
+    PERMISSION_DETECTOR_BASE_PROMPT,
+    PERMISSION_DETECTOR_FEEDBACK_TEMPLATE,
+    PERMISSION_DETECTOR_TASK_TEMPLATE,
 )
-from examples.react_agent.state import FieldResult, InputState, Permission, State
+from examples.react_agent.state import DetectedPermission, InputState, Permission, State
+from examples.react_agent.user_context_models import UserContextData
+from examples.react_agent.user_context_prompt import build_user_context_block
 from examples.react_agent.utils import get_message_text, load_chat_model
 
 logger = logging.getLogger(__name__)
 
 MAX_REVISIONS: int = 3
 
-_FieldName = Literal["domain", "resource", "permission"]
-
 _RESOURCE_DETECTOR_GROUP_LIMIT: int = 20
 _RESOURCE_DETECTOR_PERMISSION_LIMIT: int = 50
 
 
-# ---------------------------------------------------------------------------
-# Per-field subgraph — reuses call_model, execute_tools, route_model_output
-# ---------------------------------------------------------------------------
+class PermissionDetectorState(AgentState):
+    """create_agent state_schema without managed channels such as is_last_step."""
+
+    user_contexts: NotRequired[list[UserContextData]]
+    doc_corpus_context: NotRequired[str]
 
 
-@dataclass
-class FieldDetectionState(State):
-    """Extends State with the two fields needed by the per-field subgraph."""
-
-    field_name: _FieldName = "domain"
-    result: FieldResult | None = field(default=None)
-
-
-def _partial_system_prompt(field_name: _FieldName) -> str:
-    """Pre-fill {field_name}/{field_description}; leave {user_context}/{system_time} for call_model."""
-
-    class _Keep(dict):
-        def __missing__(self, key: str) -> str:
-            return "{" + key + "}"
-
-    return FIELD_DETECTOR_BASE_PROMPT.format_map(
-        _Keep(field_name=field_name, field_description=FIELD_DESCRIPTIONS[field_name])
-    )
-
-
-async def _extract_result(state: FieldDetectionState, runtime: Runtime[Context]) -> dict[str, Any]:
-    model = load_chat_model(runtime.context.model).with_structured_output(FieldResult)
-    result = cast(
-        FieldResult,
-        await model.ainvoke(
-            [*state.messages, {"role": "user", "content": FIELD_EXTRACTOR_PROMPT.format(field_name=state.field_name)}]
-        ),
-    )
-    logger.info("extract_result[%s]: value=%r", state.field_name, result.value)
-    return {"result": result}
-
-
-_field_builder = StateGraph(FieldDetectionState, context_schema=Context)
-_field_builder.add_node("call_model", call_model)
-_field_builder.add_node("tools", execute_tools)
-_field_builder.add_node("extract_result", _extract_result)
-_field_builder.add_edge("__start__", "call_model")
-_field_builder.add_conditional_edges(
-    "call_model",
-    route_model_output,
-    {"tools": "tools", "__end__": "extract_result"},
-)
-_field_builder.add_edge("tools", "call_model")
-_field_builder.add_edge("extract_result", "__end__")
-
-_field_detection_graph = _field_builder.compile()
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
-def _extra_detector_context(state: State, field_name: _FieldName) -> str:
-    """Add the user's current group and resource-access data when detecting `resource`."""
-    if field_name != "resource" or not state.user_contexts:
+def _extra_detector_context(state: State) -> str:
+    """Add the user's current group and resource-access data."""
+    if not state.user_contexts:
         return ""
 
     sections: list[str] = []
@@ -126,105 +73,93 @@ def _extra_detector_context(state: State, field_name: _FieldName) -> str:
     return "\n\n" + "\n\n".join(sections)
 
 
-def _seed(state: State, field_name: _FieldName, feedback: str | None) -> HumanMessage:
-    user_request = next((get_message_text(m) for m in state.messages if isinstance(m, HumanMessage)), "")
-    feedback_block = (
-        FIELD_DETECTOR_FEEDBACK_TEMPLATE.format(field_name=field_name, feedback=feedback) if feedback else ""
+def _feedback_block(state: State) -> str:
+    lines: list[str] = []
+    if state.domain_feedback:
+        lines.append(f"- domain: {state.domain_feedback}")
+    if state.resource_feedback:
+        lines.append(f"- resource: {state.resource_feedback}")
+    if state.permission_feedback:
+        lines.append(f"- permission: {state.permission_feedback}")
+    if not lines:
+        return ""
+    return PERMISSION_DETECTOR_FEEDBACK_TEMPLATE.format(feedback="\n".join(lines))
+
+
+def _seed(state: State) -> HumanMessage:
+    user_request = next(
+        (get_message_text(message) for message in state.messages if isinstance(message, HumanMessage)), ""
     )
-    base_content = FIELD_DETECTOR_TASK_TEMPLATE.format(
+    base_content = PERMISSION_DETECTOR_TASK_TEMPLATE.format(
         user_request=user_request,
-        field_name=field_name,
-        feedback_block=feedback_block,
+        feedback_block=_feedback_block(state),
     )
-    return HumanMessage(content=base_content + _extra_detector_context(state, field_name))
+    return HumanMessage(content=base_content + _extra_detector_context(state))
 
 
-async def _detect(
-    state: State,
-    runtime: Runtime[Context],
-    *,
-    field_name: _FieldName,
-    feedback: str | None,
-    result_key: str,
-    model: str | None = None,
-) -> dict[str, Any]:
-    sub_input = FieldDetectionState(
-        messages=[_seed(state, field_name, feedback)],
-        field_name=field_name,
-        selected_apps=state.selected_apps,
-        user_contexts=state.user_contexts,
-        doc_corpus_context=state.doc_corpus_context,
-    )
-    field_context = dataclasses.replace(
-        runtime.context,
-        model=model or runtime.context.model,
-        system_prompt=_partial_system_prompt(field_name),
-    )
-    output = await _field_detection_graph.ainvoke(sub_input, context=field_context)
-    return {result_key: output["result"]}
-
-
-# ---------------------------------------------------------------------------
-# Detector nodes
-# ---------------------------------------------------------------------------
-
-
-async def detect_domain(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
-    return await _detect(
-        state,
-        runtime,
-        field_name="domain",
-        feedback=state.domain_feedback,
-        result_key="domain_result",
-        model="openai/gpt-5.4-nano",
+@dynamic_prompt
+def _detector_system_prompt(request: ModelRequest) -> str:
+    state = request.state
+    return PERMISSION_DETECTOR_BASE_PROMPT.format(
+        system_time=datetime.now(tz=UTC).isoformat(),
+        user_context=build_user_context_block(state.get("user_contexts") or []),
+        doc_corpus_context=(state.get("doc_corpus_context") or "").strip(),
     )
 
 
-async def detect_resource(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
-    return await _detect(
-        state,
-        runtime,
-        field_name="resource",
-        feedback=state.resource_feedback,
-        result_key="resource_result",
+@wrap_model_call
+async def _bind_configured_model(request: ModelRequest, handler):
+    context = request.runtime.context
+    return await handler(
+        request.override(
+            model=load_chat_model(
+                context.model,
+                thinking_budget_tokens=context.thinking_budget_tokens,
+                reasoning_effort=context.reasoning_effort,
+            )
+        )
     )
 
 
-async def detect_permission(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
-    return await _detect(
-        state,
-        runtime,
-        field_name="permission",
-        feedback=state.permission_feedback,
-        result_key="permission_result",
-        model="openai/gpt-5.4-nano",
+async def seed_detection(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
+    logger.info("seed_detection: starting permission detection")
+    return {"messages": [_seed(state)]}
+
+
+async def apply_structured_response(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
+    detected = state.structured_response
+    if detected is None:
+        logger.warning("apply_structured_response: missing structured_response")
+        return {}
+    logger.info(
+        "apply_structured_response: domain=%r resource=%r permission=%r",
+        detected.domain_result.value,
+        detected.resource_result.value,
+        detected.permission_result.value,
     )
+    return {
+        "domain_result": detected.domain_result,
+        "resource_result": detected.resource_result,
+        "permission_result": detected.permission_result,
+    }
 
 
-# ---------------------------------------------------------------------------
-# Routing & finalize
-# ---------------------------------------------------------------------------
+async def inject_feedback(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
+    logger.info("inject_feedback: sending validator feedback back to detector")
+    return {"messages": [_seed(state)]}
 
 
-def route_validator(state: State) -> list[str]:
+def route_validator(state: State) -> Literal["inject_feedback", "finalize"]:
     if state.revision_count >= MAX_REVISIONS:
         logger.warning("route_validator: revision cap (%d) — forcing finalize", state.revision_count)
-        return ["finalize"]
+        return "finalize"
 
-    rerun: list[str] = []
-    if state.domain_feedback:
-        rerun.append("detect_domain")
-    if state.resource_feedback:
-        rerun.append("detect_resource")
-    if state.permission_feedback:
-        rerun.append("detect_permission")
+    if state.domain_feedback or state.resource_feedback or state.permission_feedback:
+        logger.info("route_validator: feedback present — re-running detector")
+        return "inject_feedback"
 
-    if not rerun:
-        logger.info("route_validator: passed — finalize")
-        return ["finalize"]
-
-    logger.info("route_validator: re-running %s", rerun)
-    return rerun
+    logger.info("route_validator: passed — finalize")
+    return "finalize"
 
 
 async def finalize(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
@@ -252,32 +187,36 @@ async def finalize(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
     }
 
 
-# ---------------------------------------------------------------------------
-# Graph
-# ---------------------------------------------------------------------------
+async def make_permission_detection_graph():
+    tools = await _get_all_tools()
+    logger.info("permission_detection: %d lookup tool(s): %s", len(tools), [tool.name for tool in tools])
+    detector = create_agent(
+        model=load_chat_model(Context().model),
+        tools=tools,
+        system_prompt=PERMISSION_DETECTOR_BASE_PROMPT,
+        middleware=[_detector_system_prompt, _bind_configured_model],
+        response_format=ToolStrategy(DetectedPermission),
+        state_schema=PermissionDetectorState,
+        context_schema=Context,
+        name="detector",
+    )
 
-builder = StateGraph(State, input_schema=InputState, context_schema=Context)
-
-builder.add_node("detect_domain", detect_domain)
-builder.add_node("detect_resource", detect_resource)
-builder.add_node("detect_permission", detect_permission)
-builder.add_node("validator", validate_results)
-builder.add_node("finalize", finalize)
-
-builder.add_edge("__start__", "detect_domain")
-builder.add_edge("__start__", "detect_resource")
-builder.add_edge("__start__", "detect_permission")
-
-builder.add_edge("detect_domain", "validator")
-builder.add_edge("detect_resource", "validator")
-builder.add_edge("detect_permission", "validator")
-
-builder.add_conditional_edges(
-    "validator",
-    route_validator,
-    ["detect_domain", "detect_resource", "detect_permission", "finalize"],
-)
-
-builder.add_edge("finalize", "__end__")
-
-permission_detection_graph = builder.compile(name="Required Permission Agent")
+    builder = StateGraph(State, input_schema=InputState, context_schema=Context)
+    builder.add_node("seed_detection", seed_detection)
+    builder.add_node("detector", detector)
+    builder.add_node("apply_structured_response", apply_structured_response)
+    builder.add_node("inject_feedback", inject_feedback)
+    builder.add_node("validator", validate_results)
+    builder.add_node("finalize", finalize)
+    builder.add_edge("__start__", "seed_detection")
+    builder.add_edge("seed_detection", "detector")
+    builder.add_edge("detector", "apply_structured_response")
+    builder.add_edge("apply_structured_response", "validator")
+    builder.add_conditional_edges(
+        "validator",
+        route_validator,
+        ["inject_feedback", "finalize"],
+    )
+    builder.add_edge("inject_feedback", "detector")
+    builder.add_edge("finalize", "__end__")
+    return builder.compile(name="Required Permission Agent")

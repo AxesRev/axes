@@ -43,6 +43,14 @@ class FieldResult(BaseModel):
     ]
 
 
+class DetectedPermission(BaseModel):
+    """Structured detector output: domain, resource, and permission field results."""
+
+    domain_result: FieldResult
+    resource_result: FieldResult
+    permission_result: FieldResult
+
+
 class AccessRequestEvaluation(BaseModel):
     """Whether a detected permission request should be granted to the user."""
 
@@ -184,6 +192,9 @@ class State(InputState):
 
     permission_result: FieldResult | None = field(default=None)
     """Result produced by the permission detector."""
+
+    structured_response: DetectedPermission | None = field(default=None)
+    """Structured output from the detector agent. Copied into the per-field results."""
 
     domain_feedback: str | None = field(default=None)
     """Feedback from the validator when the domain result must be re-derived."""

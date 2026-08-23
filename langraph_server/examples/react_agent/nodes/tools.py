@@ -83,7 +83,7 @@ def _mcp_servers() -> dict[str, dict[str, Any]]:
     return servers
 
 
-async def _get_all_tools(_runtime: Runtime[Context]) -> list[Any]:
+async def _get_all_tools(_runtime: Runtime[Context] | None = None) -> list[Any]:
     """Static TOOLS plus MCP tools when ``NEO4J_MCP_HOST`` is set."""
     servers = _mcp_servers()
     if not servers:
