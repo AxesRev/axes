@@ -7,7 +7,6 @@ from typing import Any
 SLACK_OUTPUT_NODES: frozenset[str] = frozenset(
     {"respond_unsupported_app", "permission_detection", "access_request_evaluation", "access_grant_execution"}
 )
-SLACK_FINAL_AI_ONLY_NODES: frozenset[str] = frozenset({"access_grant_execution"})
 
 
 def _message_content(message: dict[str, Any]) -> str:
@@ -25,52 +24,53 @@ def _message_content(message: dict[str, Any]) -> str:
     return str(content)
 
 
-def latest_ai_content(node_update: dict[str, Any], *, final_only: bool = False) -> str | None:
-    """Return the latest AI message content from a node update, if any."""
+def ai_message_contents(node_update: dict[str, Any]) -> list[str]:
+    """Return every AI message with text from a node update, in order."""
     messages = node_update.get("messages")
     if not isinstance(messages, list):
-        return None
+        return []
 
-    ai_contents: list[str] = []
+    contents: list[str] = []
     for message in messages:
         if not isinstance(message, dict):
             continue
         if message.get("type") != "ai":
             continue
-        if final_only and message.get("tool_calls"):
-            continue
         content = _message_content(message)
         if content:
-            ai_contents.append(content)
-    return ai_contents[-1] if ai_contents else None
+            contents.append(content)
+    return contents
 
 
-def _collect_output_updates(data: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
-    """Collect message-bearing updates for Slack output nodes, including nested subgraph steps."""
-    collected: list[tuple[str, dict[str, Any]]] = []
+def _has_nested_messages(payload: dict[str, Any]) -> bool:
+    for key, value in payload.items():
+        if key == "messages" or not isinstance(value, dict):
+            continue
+        if "messages" in value or _has_nested_messages(value):
+            return True
+    return False
+
+
+def _collect_output_updates(data: dict[str, Any]) -> list[dict[str, Any]]:
+    """Collect the innermost message lists under Slack output nodes."""
+    collected: list[dict[str, Any]] = []
 
     def walk(payload: dict[str, Any], active_output: str | None = None) -> None:
         for key, value in payload.items():
             if not isinstance(value, dict):
                 continue
-
             current_output = key if key in SLACK_OUTPUT_NODES else active_output
-            if "messages" in value and current_output is not None:
-                collected.append((current_output, value))
             walk(value, current_output)
+            if current_output is not None and "messages" in value and not _has_nested_messages(value):
+                collected.append(value)
 
     walk(data)
     return collected
 
 
 def slack_replies_from_updates(data: dict[str, Any]) -> list[str]:
-    """Extract Slack-ready AI replies from a LangGraph ``updates`` stream event."""
+    """Extract every completed AI message from a LangGraph ``updates`` event."""
     replies: list[str] = []
-    for node_name, node_update in _collect_output_updates(data):
-        content = latest_ai_content(
-            node_update,
-            final_only=node_name in SLACK_FINAL_AI_ONLY_NODES,
-        )
-        if content:
-            replies.append(content)
+    for node_update in _collect_output_updates(data):
+        replies.extend(ai_message_contents(node_update))
     return replies

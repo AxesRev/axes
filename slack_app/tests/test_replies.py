@@ -21,7 +21,7 @@ def test_slack_replies_from_permission_detection_update() -> None:
     ]
 
 
-def test_slack_replies_from_evaluation_update_uses_latest_ai_message() -> None:
+def test_slack_replies_from_evaluation_update_posts_every_ai_message() -> None:
     data = {
         "access_request_evaluation": {
             "access_evaluation": {"should_grant": False, "justification": "Not a member."},
@@ -32,7 +32,10 @@ def test_slack_replies_from_evaluation_update_uses_latest_ai_message() -> None:
         }
     }
 
-    assert slack_replies_from_updates(data) == ['{"should_grant": false, "justification": "Not a member."}']
+    assert slack_replies_from_updates(data) == [
+        "Checking membership in Neo4j...",
+        '{"should_grant": false, "justification": "Not a member."}',
+    ]
 
 
 def test_slack_replies_ignore_unlisted_nodes() -> None:
@@ -50,7 +53,7 @@ def test_slack_replies_ignore_unlisted_nodes() -> None:
     assert slack_replies_from_updates(data) == ['{"domain":"github_repository","resource":null,"permission":"read"}']
 
 
-def test_slack_replies_from_grant_execution_uses_final_ai_message_only() -> None:
+def test_slack_replies_from_grant_execution_posts_every_ai_turn() -> None:
     data = {
         "access_grant_execution": {
             "call_model": {
@@ -65,10 +68,13 @@ def test_slack_replies_from_grant_execution_uses_final_ai_message_only() -> None
         }
     }
 
-    assert slack_replies_from_updates(data) == ["Granted write access by adding the user as a repository collaborator."]
+    assert slack_replies_from_updates(data) == [
+        "Looking up the endpoint...",
+        "Granted write access by adding the user as a repository collaborator.",
+    ]
 
 
-def test_slack_replies_from_grant_execution_skips_tool_call_only_update() -> None:
+def test_slack_replies_from_grant_execution_posts_tool_call_turn_with_text() -> None:
     data = {
         "access_grant_execution": {
             "call_model": {
@@ -79,4 +85,4 @@ def test_slack_replies_from_grant_execution_skips_tool_call_only_update() -> Non
         }
     }
 
-    assert slack_replies_from_updates(data) == []
+    assert slack_replies_from_updates(data) == ["Calling GitHub..."]
