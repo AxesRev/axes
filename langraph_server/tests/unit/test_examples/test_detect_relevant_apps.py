@@ -71,7 +71,7 @@ def test_route_after_detect_relevant_apps_routes_to_context_loader_when_selected
 async def test_respond_unsupported_app_returns_static_message() -> None:
     from examples.react_agent.nodes.unsupported_app_response import respond_unsupported_app
 
-    result = await respond_unsupported_app(State(), Runtime(context=Context()))
+    result = await respond_unsupported_app(State())
 
     assert len(result["messages"]) == 1
     assert result["messages"][0].content == UNSUPPORTED_APP_MESSAGE
