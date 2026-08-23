@@ -25,7 +25,7 @@ When the answer depends on membership, resource names, or existing access, use t
 
 {user_context}System time: {system_time}"""
 
-FIELD_DETECTOR_BASE_PROMPT = """You are a permission-detection specialist focused on a SINGLE field of an access request.
+PERMISSION_DETECTOR_BASE_PROMPT = """You are a permission-detection specialist. Fill ALL THREE fields of an access request: domain, resource, and permission.
 
 You operate in a fully autonomous runtime:
   - There is NO interactive user.
@@ -34,12 +34,15 @@ You operate in a fully autonomous runtime:
   - Never output questions directed at a user.
 
 Your job:
-  - Determine the value of the `{field_name}` field for this request.
+  - Determine domain, resource, and permission together, using shared evidence from tools.
   - Use the available tools to look up real information whenever the answer depends on the user's environment.
-  - When you are confident, stop calling tools and return your conclusion as a final assistant message.
+  - When you are confident, call `submit_detected_permission` with all three fields. Do not call it together with lookup tools.
+  - Never finish with a plain-text answer. The only way to complete this task is `submit_detected_permission`.
 
-The `{field_name}` field describes:
-{field_description}
+Field meanings:
+  - domain: The TYPE of resource the user wants access to — the resource category used by the target system. Pick the most specific, conventional name for that system. Do not include a specific resource identifier here — that belongs to the `resource` field.
+  - resource: The specific NAMED entity within the domain (an exact identifier used by the target system). If the request does not refer to a specific named entity, the value MUST be null. Always verify the exact name with the available tools when the user implies a specific resource without naming it. Search for the required resource with the available tools to confirm against system data, and search for related data as well.
+  - permission: The access level the user is REQUESTING — not what they already have, and not a label chosen because it appears among existing bindings on a resource. Derive the canonical name from the user's wording and documentation snippets. If they ask to push or write code, output WRITE (or the doc-backed equivalent) — not ADMIN unless they explicitly request admin access. Tool data showing bindings on a resource describes current assignments only; it is not the catalog of grantable permission levels.
 
 Documentation snippets semantically matched to the user's latest message:
 {doc_corpus_context}
@@ -47,64 +50,35 @@ Documentation snippets semantically matched to the user's latest message:
 Known data about the user (current state only — not an exhaustive list of valid choices):
 {user_context}
 
-When `{field_name}` is `permission`:
+When filling `permission`:
   - Output the access level the user is REQUESTING, using canonical vocabulary from their wording and documentation.
   - Do NOT output ADMIN unless the user explicitly asked for admin/administrator access.
   - Do NOT pick a permission label because it is the only non-read binding on a resource in tool results or user data.
   - Bindings you see (e.g. READ, ADMIN on a repo) describe current assignments — not the complete set of grantable levels.
 System time: {system_time}"""
 
-FIELD_DESCRIPTIONS: dict[str, str] = {
-    "domain": (
-        "The TYPE of resource the user wants access to — the resource category used by the target system. "
-        "Pick the most specific, conventional name for that system. Do not include a specific resource "
-        "identifier here — that belongs to the `resource` field."
-    ),
-    "resource": (
-        "The specific NAMED entity within the domain (an exact identifier used by the target system). "
-        "If the request does not refer to a specific named entity, the value MUST be null. "
-        "Always verify the exact name with the available tools when the user implies a specific resource "
-        "without naming it."
-        "You should search for the required resource with the available tools to confirm against the data in the system"
-        "Also search for data that might be related to this resource"
-    ),
-    "permission": (
-        "The access level the user is REQUESTING — not what they already have, and not a label chosen "
-        "because it appears among existing bindings on a resource. Derive the canonical name from the "
-        "user's wording and documentation snippets. If they ask to push or write code, output WRITE (or "
-        "the doc-backed equivalent) — not ADMIN unless they explicitly request admin access. Tool data "
-        "showing bindings on a resource describes current assignments only; it is not the catalog of "
-        "grantable permission levels."
-    ),
-}
-
-FIELD_DETECTOR_TASK_TEMPLATE = """Original user request:
+PERMISSION_DETECTOR_TASK_TEMPLATE = """Original user request:
 \"\"\"
 {user_request}
 \"\"\"
 {feedback_block}
-Determine the `{field_name}` field. Use tools as needed to verify real information. When you are confident,
-stop calling tools and write a final message describing your answer and the reasoning that supports it.
+Determine domain, resource, and permission together. Use tools as needed to verify real information.
+When you are confident, call `submit_detected_permission` (and only that tool) with all three fields and justifications.
 
 Tool and user-context data reflect the user's current access state. That state is accurate for what exists now,
 but is not an exhaustive list of valid domains, resources, or permission levels. When tools return permission
 bindings on a resource, that shows who currently has what — not the complete set of grantable levels.
 Prefer the user request and documentation snippets for valid choices; use tools to verify current facts.
 Do not infer policies that are not explicitly stated.
-Do NOT treat the permission labels present on a resource as the only valid options for this field.
+Do NOT treat the permission labels present on a resource as the only valid options.
 """
 
-FIELD_DETECTOR_FEEDBACK_TEMPLATE = """
-Your previous attempt at the `{field_name}` field was rejected by the validator.
-Validator feedback (what was wrong and how to improve):
+PERMISSION_DETECTOR_FEEDBACK_TEMPLATE = """
+Your previous submission was rejected by the validator. Re-check the fields using tools if needed, then call
+`submit_detected_permission` again.
+Validator feedback:
 {feedback}
 """
-
-FIELD_EXTRACTOR_PROMPT = """From the conversation above, produce the structured `FieldResult` for `{field_name}`.
-Use the model's structured-output schema (value + justification); do not emit free-form prose outside it.
-
-When `{field_name}` is `permission`, the value must name the permission the user requested (from their wording
-and documentation) — not a label chosen only because it appears among existing bindings on a resource."""
 
 VALIDATOR_PROMPT = """You validate three field results (`domain`, `resource`, `permission`) against the original user request.
 
