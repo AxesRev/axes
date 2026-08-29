@@ -8,6 +8,10 @@ module "eks" {
   vpc_id     = var.vpc_id
   subnet_ids = var.subnet_ids
 
+  # Off: default api/audit/authenticator ingest was ~1 GB/day.
+  enabled_log_types           = []
+  create_cloudwatch_log_group = false
+
   endpoint_public_access  = var.cluster_endpoint_public_access
   endpoint_private_access = var.cluster_endpoint_private_access
 
