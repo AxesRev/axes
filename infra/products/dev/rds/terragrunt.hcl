@@ -18,8 +18,18 @@ dependency "vpc" {
   mock_outputs_allowed_terraform_commands = ["validate", "plan", "destroy"]
 }
 
+dependency "rds_password" {
+  config_path = "../rds-password"
+
+  mock_outputs = {
+    password = "mock-password"
+  }
+  mock_outputs_allowed_terraform_commands = ["validate", "plan", "destroy"]
+}
+
 locals {
-  env = read_terragrunt_config(find_in_parent_folders("env.hcl"))
+  env                 = read_terragrunt_config(find_in_parent_folders("env.hcl"))
+  snapshot_identifier = get_env("RDS_SNAPSHOT_IDENTIFIER", "")
 }
 
 inputs = {
@@ -38,4 +48,6 @@ inputs = {
   multi_az              = false
   deletion_protection   = false
   skip_final_snapshot   = false
+  snapshot_identifier   = local.snapshot_identifier == "" ? null : local.snapshot_identifier
+  master_password       = dependency.rds_password.outputs.password
 }

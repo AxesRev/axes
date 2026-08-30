@@ -23,7 +23,7 @@ output "master_username" {
 }
 
 output "master_password" {
-  value     = random_password.master.result
+  value     = var.master_password
   sensitive = true
 }
 

@@ -1,8 +1,3 @@
-resource "random_password" "master" {
-  length  = 32
-  special = false
-}
-
 resource "random_id" "final_snapshot" {
   count = var.skip_final_snapshot ? 0 : 1
 
@@ -63,7 +58,7 @@ resource "aws_secretsmanager_secret_version" "master" {
   secret_id = aws_secretsmanager_secret.master.id
   secret_string = sensitive(jsonencode({
     username = var.master_username
-    password = random_password.master.result
+    password = var.master_password
     engine   = "postgres"
     host     = aws_db_instance.this.address
     port     = aws_db_instance.this.port
@@ -84,7 +79,7 @@ resource "aws_db_instance" "this" {
   storage_encrypted     = true
 
   username = var.master_username
-  password = random_password.master.result
+  password = var.master_password
   port     = var.database_port
 
   db_subnet_group_name   = aws_db_subnet_group.this.name
@@ -92,10 +87,11 @@ resource "aws_db_instance" "this" {
   publicly_accessible    = var.publicly_accessible
   multi_az               = var.multi_az
 
-  backup_retention_period = var.backup_retention_period
-  deletion_protection     = var.deletion_protection
+  backup_retention_period   = var.backup_retention_period
+  deletion_protection       = var.deletion_protection
   skip_final_snapshot       = var.skip_final_snapshot
   final_snapshot_identifier = var.skip_final_snapshot ? null : "${var.identifier}-final-${random_id.final_snapshot[0].hex}"
+  snapshot_identifier       = var.snapshot_identifier
 
   db_name = var.db_name
 
@@ -105,4 +101,10 @@ resource "aws_db_instance" "this" {
   copy_tags_to_snapshot = true
 
   tags = var.tags
+
+  # Restore is a one-shot ForceNew. Ignoring later diffs lets us unset
+  # snapshot_identifier in terragrunt without replacing the instance.
+  lifecycle {
+    ignore_changes = [snapshot_identifier]
+  }
 }

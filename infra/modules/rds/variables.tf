@@ -61,6 +61,12 @@ variable "master_username" {
   default     = "postgres"
 }
 
+variable "master_password" {
+  description = "Master password from the persistent rds-password stack."
+  type        = string
+  sensitive   = true
+}
+
 variable "db_name" {
   description = "Initial database name created with the instance. Null skips creation (Postgres still has the postgres DB)."
   type        = string
@@ -95,6 +101,12 @@ variable "skip_final_snapshot" {
   description = "Skip final snapshot on destroy. Set false to keep a manual snapshot you can restore later."
   type        = bool
   default     = false
+}
+
+variable "snapshot_identifier" {
+  description = "Restore this instance from an existing snapshot. Null creates a fresh database. After the restore apply, leave unset — the instance ignores later changes to this field so removing it does not replace RDS."
+  type        = string
+  default     = null
 }
 
 variable "tags" {

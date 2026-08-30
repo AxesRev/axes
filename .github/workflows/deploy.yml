@@ -114,6 +114,19 @@ jobs:
         with:
           terragrunt-version: ${{ env.TERRAGRUNT_VERSION }}
 
+      - name: Select RDS restore snapshot
+        run: |
+          SNAPSHOT=$(aws rds describe-db-snapshots \
+            --snapshot-type manual \
+            --query 'reverse(sort_by(DBSnapshots[?starts_with(DBSnapshotIdentifier, `dev-postgres-final-`) && Status==`available`], &SnapshotCreateTime))[0].DBSnapshotIdentifier' \
+            --output text)
+          if [ -n "$SNAPSHOT" ] && [ "$SNAPSHOT" != "None" ]; then
+            echo "Restoring RDS from ${SNAPSHOT}"
+            echo "RDS_SNAPSHOT_IDENTIFIER=${SNAPSHOT}" >> "$GITHUB_ENV"
+          else
+            echo "No final snapshot found; creating a fresh database"
+          fi
+
       - name: Apply infra
         working-directory: ${{ env.DEPLOY_DIR }}
         run: >
@@ -126,6 +139,18 @@ jobs:
           --filter '!./integrations'
           --filter '!./webapp-env'
           -- apply
+
+      - name: Reset RDS master password
+        working-directory: ${{ env.DEPLOY_DIR }}/rds-password
+        run: |
+          PASSWORD=$(terragrunt output -raw password)
+          echo "::add-mask::${PASSWORD}"
+          aws rds modify-db-instance \
+            --db-instance-identifier dev-postgres \
+            --master-user-password "$PASSWORD" \
+            --apply-immediately
+          aws rds wait db-instance-available \
+            --db-instance-identifier dev-postgres
 
   image-langraph-server:
     needs: [detect-changes, apply-infra]
