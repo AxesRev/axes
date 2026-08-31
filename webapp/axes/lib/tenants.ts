@@ -77,12 +77,18 @@ function integrationsApiBaseUrl(): string {
   return (process.env.INTEGRATIONS_API_URL ?? publicApiBaseUrl()).replace(/\/$/, "");
 }
 
+function publicWebOrigin(): string {
+  return (process.env.APP_BASE_URL ?? "").replace(/\/$/, "");
+}
+
 export function buildSlackInstallUrl(tenantId: string): string {
   return `${integrationsApiBaseUrl()}/app_integrations/slack/install?tenant_id=${encodeURIComponent(tenantId)}`;
 }
 
 export function buildGithubInstallUrl(tenantId: string): string {
-  return `${integrationsApiBaseUrl()}/app_integrations/github/install?tenant_id=${encodeURIComponent(tenantId)}`;
+  const integrations = (process.env.INTEGRATIONS_API_URL ?? "").replace(/\/$/, "");
+  const origin = integrations ? publicWebOrigin() || integrations : integrationsApiBaseUrl();
+  return `${origin}/app_integrations/github/install?tenant_id=${encodeURIComponent(tenantId)}`;
 }
 
 export function buildSalesforceInstallUrl(tenantId: string): string {

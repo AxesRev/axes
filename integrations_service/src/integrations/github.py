@@ -20,7 +20,7 @@ from integrations.github_oauth import (
     fetch_github_user_id_and_email,
     verify_github_oauth_state,
 )
-from integrations.http import html_response, public_base_url, query_params, redirect, require_tenant_id
+from integrations.http import html_response, query_params, redirect, require_tenant_id
 from integrations.store import link_github_identity, upsert_github_app_integration
 
 logger = logging.getLogger(__name__)
@@ -77,8 +77,8 @@ _TENANT_INSTALL_SUCCESS_HTML = """<!DOCTYPE html>
 </html>"""
 
 
-def github_oauth_callback_url(event: dict[str, Any]) -> str:
-    return f"{public_base_url(event)}/app_integrations/github/oauth/callback"
+def github_oauth_callback_url() -> str:
+    return f"{settings.WEBAPP_URL.rstrip('/')}/app_integrations/github/oauth/callback"
 
 
 def _encode_install_state(tenant_id: str) -> str:
@@ -191,7 +191,7 @@ async def github_oauth_start(event: dict[str, Any], session: AsyncSession) -> di
     params = urlencode(
         {
             "client_id": settings.GITHUB_CLIENT_ID,
-            "redirect_uri": github_oauth_callback_url(event),
+            "redirect_uri": github_oauth_callback_url(),
             "state": create_github_oauth_state(
                 slack_user_id=slack_user_id,
                 secret=settings.GITHUB_OAUTH_STATE_SECRET,
@@ -226,7 +226,7 @@ async def github_oauth_callback(event: dict[str, Any], session: AsyncSession) ->
                 "client_id": settings.GITHUB_CLIENT_ID,
                 "client_secret": settings.GITHUB_CLIENT_SECRET,
                 "code": code,
-                "redirect_uri": github_oauth_callback_url(event),
+                "redirect_uri": github_oauth_callback_url(),
             },
             headers={"Accept": "application/json"},
         )

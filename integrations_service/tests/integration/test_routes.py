@@ -194,7 +194,7 @@ def test_github_oauth_start_redirects_to_github(session: AsyncMock, monkeypatch:
     location = response["headers"]["location"]
     assert "github.com/login/oauth/authorize" in location
     assert "client_id=client-id" in location
-    assert "redirect_uri=http%3A%2F%2Flocalhost%3A8000%2Fapp_integrations%2Fgithub%2Foauth%2Fcallback" in location
+    assert "redirect_uri=http%3A%2F%2Flocalhost%3A3000%2Fapp_integrations%2Fgithub%2Foauth%2Fcallback" in location
     assert "state=" in location
 
 
