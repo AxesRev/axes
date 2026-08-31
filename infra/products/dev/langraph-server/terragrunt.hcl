@@ -21,6 +21,7 @@ dependency "ecr" {
   mock_outputs = {
     repository_urls = {
       "axes/langraph-server" = "042993547532.dkr.ecr.eu-west-1.amazonaws.com/axes/langraph-server"
+      "axes/graph-service"   = "042993547532.dkr.ecr.eu-west-1.amazonaws.com/axes/graph-service"
     }
   }
   mock_outputs_allowed_terraform_commands = ["validate", "plan", "destroy"]
@@ -60,7 +61,8 @@ EOF
 }
 
 inputs = {
-  image = "${dependency.ecr.outputs.repository_urls["axes/langraph-server"]}:${get_env("LANGRAPH_SERVER_IMAGE_TAG", get_env("IMAGE_TAG", "latest"))}"
+  image               = "${dependency.ecr.outputs.repository_urls["axes/langraph-server"]}:${get_env("LANGRAPH_SERVER_IMAGE_TAG", get_env("IMAGE_TAG", "latest"))}"
+  graph_service_image = "${dependency.ecr.outputs.repository_urls["axes/graph-service"]}:${get_env("GRAPH_SERVICE_IMAGE_TAG", get_env("IMAGE_TAG", "latest"))}"
 
   ssm_generated_parameter = dependency.generated.outputs.parameter_name
   ssm_secrets_parameter   = "/axes/${local.env.locals.environment}/secrets"

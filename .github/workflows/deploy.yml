@@ -143,7 +143,6 @@ jobs:
           --filter '!./tenant'
           --filter '!./integrations'
           --filter '!./webapp-env'
-          --filter '!./graph-fetch'
           -- apply
 
       - name: Reset RDS master password
@@ -688,5 +687,4 @@ jobs:
           --filter './tenant'
           --filter './integrations'
           --filter './webapp-env'
-          --filter './graph-fetch'
           -- apply

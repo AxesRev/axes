@@ -82,6 +82,20 @@ resource "kubernetes_secret_v1" "github" {
   type = "Opaque"
 }
 
+resource "kubernetes_secret_v1" "neo4j" {
+  metadata {
+    name      = "langraph-server-neo4j"
+    namespace = kubernetes_namespace_v1.this.metadata[0].name
+  }
+
+  data = sensitive({
+    NEO4J_USER     = "neo4j"
+    NEO4J_PASSWORD = local.generated["NEO4J_PASSWORD"]
+  })
+
+  type = "Opaque"
+}
+
 resource "kubernetes_job_v1" "migrate" {
   metadata {
     name      = local.migrate_job_name
@@ -406,5 +420,73 @@ resource "kubernetes_service_v1" "this" {
     }
 
     type = "ClusterIP"
+  }
+}
+
+resource "kubernetes_cron_job_v1" "fetch_graph" {
+  metadata {
+    name      = "fetch-graph"
+    namespace = kubernetes_namespace_v1.this.metadata[0].name
+    labels = {
+      "app.kubernetes.io/name" = "fetch-graph"
+    }
+  }
+
+  spec {
+    schedule                      = "0 0 1 1 *"
+    suspend                       = true
+    concurrency_policy            = "Forbid"
+    successful_jobs_history_limit = 1
+    failed_jobs_history_limit     = 1
+
+    job_template {
+      metadata {
+        labels = {
+          "app.kubernetes.io/name" = "fetch-graph"
+        }
+      }
+
+      spec {
+        backoff_limit              = 2
+        ttl_seconds_after_finished = 86400
+
+        template {
+          metadata {
+            labels = {
+              "app.kubernetes.io/name" = "fetch-graph"
+            }
+          }
+
+          spec {
+            restart_policy       = "Never"
+            enable_service_links = false
+
+            container {
+              name  = "fetch-graph"
+              image = var.graph_service_image
+
+              env {
+                name  = "NEO4J_URI"
+                value = var.neo4j_bolt_uri
+              }
+
+              dynamic "env_from" {
+                for_each = [
+                  kubernetes_secret_v1.postgres.metadata[0].name,
+                  kubernetes_secret_v1.github.metadata[0].name,
+                  kubernetes_secret_v1.salesforce.metadata[0].name,
+                  kubernetes_secret_v1.neo4j.metadata[0].name,
+                ]
+                content {
+                  secret_ref {
+                    name = env_from.value
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
   }
 }
