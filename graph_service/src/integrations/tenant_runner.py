@@ -107,8 +107,8 @@ async def fetch_all_tenants() -> None:
     """Load tenants from Postgres and ingest each tenant's configured apps."""
     plans = await load_tenant_fetch_plans()
     if not plans:
-        logger.error("no_tenants_in_database")
-        raise SystemExit(1)
+        logger.warning("no_tenants_in_database")
+        return
 
     for plan in plans:
         await fetch_tenant(plan)

@@ -1,49 +1,49 @@
 from __future__ import annotations
 
 from functools import lru_cache
-from pathlib import Path
 
-from pydantic import computed_field
+from pydantic import Field, computed_field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-_REPO_ROOT = Path(__file__).resolve().parents[4]
-_ENV_FILE = str(_REPO_ROOT / ".env")
+from integrations.paths import ENV_FILE
 
 
 class GithubAppSettings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=_ENV_FILE,
+        env_file=ENV_FILE,
         env_file_encoding="utf-8",
         extra="ignore",
     )
 
     GITHUB_APP_ID: int
-    GITHUB_APP_PRIVATE_KEY_PATH: str
+    GITHUB_APP_PRIVATE_KEY: str = Field(min_length=1)
+
+    @field_validator("GITHUB_APP_PRIVATE_KEY", mode="before")
+    @classmethod
+    def _normalize_pem(cls, value: object) -> object:
+        if isinstance(value, str):
+            return value.strip().replace("\\n", "\n")
+        return value
 
     @computed_field
     @property
     def private_key(self) -> str:
-        path = Path(self.GITHUB_APP_PRIVATE_KEY_PATH)
-        if not path.is_absolute():
-            path = _REPO_ROOT / path
-        return path.read_text(encoding="utf-8")
+        return self.GITHUB_APP_PRIVATE_KEY
 
 
 class RunnerSettings(BaseSettings):
     """Settings required to run the fetcher as a standalone script."""
 
     model_config = SettingsConfigDict(
-        env_file=_ENV_FILE,
+        env_file=ENV_FILE,
         env_file_encoding="utf-8",
         extra="ignore",
     )
 
-    # Neo4j
     NEO4J_URI: str = "bolt://localhost:7687"
     NEO4J_USER: str = "neo4j"
     NEO4J_PASSWORD: str
 
-    # Postgres
     POSTGRES_USER: str
     POSTGRES_PASSWORD: str
     POSTGRES_HOST: str

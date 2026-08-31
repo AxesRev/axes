@@ -49,6 +49,10 @@ jobs:
             context: .
             dockerfile: integrations_service/Dockerfile
             repository: axes/integrations
+          - name: graph-service
+            context: .
+            dockerfile: graph_service/Dockerfile
+            repository: axes/graph-service
 
     steps:
       - uses: actions/checkout@v4

@@ -1,36 +1,38 @@
 from __future__ import annotations
 
 from functools import lru_cache
-from pathlib import Path
 
-from pydantic import computed_field
+from pydantic import Field, computed_field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-_REPO_ROOT = Path(__file__).resolve().parents[4]
-_ENV_FILE = str(_REPO_ROOT / ".env")
+from integrations.paths import ENV_FILE
 
 
 class SalesforceAppSettings(BaseSettings):
     """JWT credentials for the Axes External Client App."""
 
     model_config = SettingsConfigDict(
-        env_file=_ENV_FILE,
+        env_file=ENV_FILE,
         env_file_encoding="utf-8",
         extra="ignore",
     )
 
     SALESFORCE_CLIENT_ID: str
-    SALESFORCE_PRIVATE_KEY_PATH: str
+    SALESFORCE_PRIVATE_KEY: str = Field(min_length=1)
     SALESFORCE_LOGIN_URL: str
     SALESFORCE_SHARE_OBJECTS: str = ""
+
+    @field_validator("SALESFORCE_PRIVATE_KEY", mode="before")
+    @classmethod
+    def _normalize_pem(cls, value: object) -> object:
+        if isinstance(value, str):
+            return value.strip().replace("\\n", "\n")
+        return value
 
     @computed_field
     @property
     def private_key(self) -> str:
-        path = Path(self.SALESFORCE_PRIVATE_KEY_PATH)
-        if not path.is_absolute():
-            path = _REPO_ROOT / path
-        return path.read_text(encoding="utf-8")
+        return self.SALESFORCE_PRIVATE_KEY
 
     @computed_field
     @property

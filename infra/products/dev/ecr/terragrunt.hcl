@@ -14,5 +14,6 @@ inputs = {
     "axes/billing",
     "axes/tenant",
     "axes/integrations",
+    "axes/graph-service",
   ]
 }
