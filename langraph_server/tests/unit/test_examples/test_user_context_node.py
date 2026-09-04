@@ -88,3 +88,18 @@ async def test_load_user_context_prefers_slack_email_for_salesforce() -> None:
         user_id=None,
         email="kirill@slack.example.com",
     )
+
+
+async def test_load_user_context_only_fetches_selected_apps() -> None:
+    salesforce_context = UserContextData(app="salesforce", user_id="005", user_name="Kirill")
+    runtime = Runtime(context=Context(github_user_id="123", slack_email="kirill@example.com"))
+    state = State(selected_apps=["salesforce"])
+
+    with patch(
+        "examples.react_agent.nodes.user_context.fetch_user_context_for_app",
+        new=AsyncMock(return_value=salesforce_context),
+    ) as mock_fetch:
+        result = await load_user_context(state, runtime)
+
+    assert result == {"user_contexts": [salesforce_context]}
+    mock_fetch.assert_awaited_once_with(app="salesforce", user_id=None, email="kirill@example.com")

@@ -65,7 +65,9 @@ async def detect_relevant_apps(state: State, runtime: Runtime[Context]) -> dict[
                 "content": (
                     "You classify access requests by supported application. "
                     "Choose only from: github, salesforce. "
-                    "Return one or both when clearly relevant. Return [] when neither applies."
+                    "Include an app only when the request is about that app. "
+                    "A Salesforce-only request must not include github; a GitHub-only request must not include salesforce. "
+                    "Return both only when the request clearly involves both. Return [] when neither applies."
                 ),
             },
             {"role": "user", "content": user_message},

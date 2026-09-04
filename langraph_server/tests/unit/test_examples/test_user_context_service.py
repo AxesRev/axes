@@ -170,3 +170,6 @@ def test_format_for_prompt_includes_group_descriptions() -> None:
     prompt = user_context.format_for_prompt()
 
     assert "  - AxesRev - Main org" in prompt
+    assert "The requesting user is already identified" in prompt
+    assert "User ID: 123" in prompt
+    assert "If a tool returns a different person or AppIdentity, ignore it." in prompt

@@ -43,13 +43,14 @@ class UserContextData(BaseModel):
             f"  - App: {self.app}\n"
             f"  - User ID: {self.user_id}\n"
             f"  - Username: {self.user_name}\n\n"
+            "Use this User ID as the requester in every lookup, decision, grant, and justification. "
+            "Tools may only fetch additional facts about this User ID (role, team, org, related records). "
+            "If a tool returns a different person or AppIdentity, ignore it.\n\n"
             "Groups this user belongs to (current membership):\n"
             f"{group_lines}\n\n"
             "Permissions this user currently has (present access — not all valid permission levels):\n"
             f"{permission_lines}\n\n"
-            'Always use this identity when the user refers to "me", "my access", "my resources", etc.\n'
-            "This block reflects current user data. It is reliable for present state, but does not enumerate "
-            "every valid resource or permission level."
+            "This block is reliable for present state, but does not enumerate every valid resource or permission level."
         )
 
     @staticmethod
