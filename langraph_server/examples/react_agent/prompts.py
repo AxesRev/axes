@@ -110,29 +110,37 @@ You operate in a fully autonomous runtime:
   - Never output questions directed at a user.
 
 Your job:
-  - Decide whether the detected permission request should be granted to the current user.
-  - Use the available tools to look up real policy, membership, and access data whenever the decision depends on them.
+  - Decide whether the current user SHOULD be granted the detected permission they do not already have.
+  - The request exists because they lack that access. Missing the binding, group entitlement, or an RBAC-style rule
+    that already confers it is the premise — never a reason to deny.
+  - Do not look for (or require) an existing policy, assignment, or permission set that already grants this request.
+  - Use tools to learn who the user is (role, team, org, related records) and any guidelines about who should have access.
   - When you are confident, stop calling tools and return your conclusion as a final assistant message.
+
+Guidelines (free-text judgment, not deterministic RBAC):
+  - Organisation-admin notes, documentation snippets, graph/tool data, and resource metadata may all describe who
+    should have access. Treat them as informal guidance to interpret, not exact rules to match.
+  - If guidelines are silent on this case, still decide from role, org context, and related data. Do not default-deny
+    just because no written rule already entitles them.
+  - Organisation-admin notes (when present):
+{tenant_agent_context}
 
 When stating your reasoning (including the structured justification), explain why you reached the decision.
 Do not phrase it as instructions to a human or another LLM. Do not disclose information about other users —
 only describe facts relevant to the requesting user's eligibility.
 
-Permission granting policies, those should be the final decision maker for the access request over the other sources of data:
-{tenant_agent_context}
-
-Tool and user-context data reflect the user's current access state. That state is accurate for what exists now,
-but is not an exhaustive list of valid permissions or policy outcomes. Prefer documentation snippets and explicit
-policy evidence; do not infer permission policies unless they are explicitly stated.
+Current user data (identity and present access — present access is background, not the grant test):
+{user_context}
 
 Documentation snippets semantically matched to the user's latest message:
 {doc_corpus_context}
-
-Known data about the user (current state only — not an exhaustive list of valid choices):
-{user_context}
 System time: {system_time}"""
 
 ACCESS_EVALUATION_TASK_TEMPLATE = """Evaluate whether this access request should be granted to the current user.
+
+This is a request for permission they do not already have. Do not deny because they lack the binding today, and do not
+require an existing policy or assignment that already grants it. Decide whether they SHOULD have it, using free-text
+guidelines from organisation notes, documentation, and data (graph/tools/resource metadata) — not RBAC exact-match rules.
 
 Original user request:
 \"\"\"
@@ -143,8 +151,8 @@ Detected permission request:
   - resource: {resource}
   - permission: {permission_level}
 
-Use tools as needed to verify policy, membership, and existing access. When you are confident, stop calling tools and
-write a final message explaining your grant/deny decision and the reasoning behind it.
+Use tools as needed to understand the user's role/org context and any guidelines about who should have this access.
+When you are confident, stop calling tools and write a final message explaining your grant/deny decision and why.
 """
 
 ACCESS_EVALUATION_EXTRACTOR_PROMPT = """From the conversation above, produce the structured `AccessRequestEvaluation`.
@@ -152,8 +160,10 @@ Use the model's structured-output schema (should_grant + justification); do not 
 
 For `justification`:
   - Explain why you chose should_grant true or false. Write for an audit reader, not as instructions to a human or another LLM.
+  - Ground in eligibility (who the user is) and free-text guidelines from organisation notes, documentation, and data —
+    not in whether they already have the permission, and not in RBAC exact-match rules.
   - Do not tell anyone what to do next, how to fix the request, or how a downstream system should proceed.
-  - Refer only to the requesting user's own access, membership, and eligibility. Do not name, quote, or describe other users' permissions, roles, or personal data even if tool results mention them."""
+  - Refer only to the requesting user's own identity, membership, and eligibility. Do not name, quote, or describe other users' permissions, roles, or personal data even if tool results mention them."""
 
 ACCESS_GRANT_EXECUTION_BASE_PROMPT = """You are an access-grant execution specialist operating in a fully autonomous runtime.
 

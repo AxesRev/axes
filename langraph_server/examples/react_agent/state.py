@@ -70,8 +70,10 @@ class AccessRequestEvaluation(BaseModel):
         Field(
             description=(
                 "Past-tense explanation of why should_grant is true or false — an audit record of the decision, "
-                "not instructions to a human or LLM. Ground in policy and the requesting user's own access/membership. "
-                "Do not name or describe other users' permissions, roles, or personal data."
+                "not instructions to a human or LLM. Ground in eligibility and free-text guidelines (organisation "
+                "notes, documentation, graph/tool data about who should have access) — not in whether the user "
+                "already has the permission, and not in RBAC exact-match rules. Do not name or describe other "
+                "users' permissions, roles, or personal data."
             ),
         ),
     ]

@@ -45,4 +45,4 @@ async def test_call_model_includes_tenant_context_in_evaluation_prompt() -> None
     system_message = captured_messages[0][0]
     assert system_message["role"] == "system"
     assert "Never grant admin without manager approval." in system_message["content"]
-    assert "Tenant-specific policy and instructions" in system_message["content"]
+    assert "Organisation guidelines (free-text, not RBAC rules)" in system_message["content"]

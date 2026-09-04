@@ -12,7 +12,7 @@ def test_build_tenant_agent_context_block_returns_empty_for_blank_content() -> N
 def test_build_tenant_agent_context_block_formats_non_empty_content() -> None:
     block = build_tenant_agent_context_block("Grant read access to contractors.")
 
-    assert "Tenant-specific policy and instructions" in block
+    assert "Organisation guidelines (free-text, not RBAC rules)" in block
     assert "Grant read access to contractors." in block
 
 
@@ -25,4 +25,4 @@ def test_access_evaluation_prompt_accepts_tenant_context_placeholder() -> None:
     )
 
     assert "Deny admin unless VP approved." in prompt
-    assert "Tenant-specific policy and instructions" in prompt
+    assert "Organisation guidelines (free-text, not RBAC rules)" in prompt

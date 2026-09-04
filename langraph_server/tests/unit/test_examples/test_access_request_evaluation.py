@@ -17,6 +17,8 @@ def test_seed_evaluation_message_includes_permission_fields() -> None:
     assert "Give me admin on AxesRev org" in message.content
     assert "AxesRev" in message.content
     assert "admin" in message.content
+    assert "Do not deny because they lack the binding today" in message.content
+    assert "graph/tools/resource metadata" in message.content
 
 
 def test_seed_evaluation_message_uses_placeholder_for_missing_resource() -> None:
