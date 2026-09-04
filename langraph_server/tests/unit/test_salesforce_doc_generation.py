@@ -17,6 +17,7 @@ from aegra_api.doc_ingest.salesforce_pdf import (
     _sanitize_text_for_postgres,
     build_pdf_sections,
     chunk_pdf_sections,
+    delete_salesforce_chunks_for_document_stmt,
     extract_page_lines,
     extract_page_text,
     extract_pdf_pages,
@@ -301,7 +302,22 @@ async def test_ingest_salesforce_documentation_from_pdf_persists_chunks(
     assert added.application == "salesforce"
     assert added.collection_key == "default"
     assert added.metadata_dict["salesforce_pdf"]["source_format"] == "pdf"
+    assert added.metadata_dict["salesforce_pdf"]["source_pdf"] == "sf_docs.pdf"
     session.commit.assert_awaited_once()
+
+
+def test_delete_salesforce_chunks_for_document_stmt_scopes_to_title() -> None:
+    stmt = delete_salesforce_chunks_for_document_stmt("Object Reference for the Salesforce Platform")
+    compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "doc_embedding_chunks" in compiled
+    assert "Object Reference for the Salesforce Platform" in compiled
+    assert "salesforce_pdf" in compiled
+    assert "document_title" in compiled
+
+
+def test_delete_salesforce_chunks_for_document_stmt_rejects_blank_title() -> None:
+    with pytest.raises(ValueError, match="document_title is required"):
+        delete_salesforce_chunks_for_document_stmt("  ")
 
 
 @pytest.mark.asyncio
