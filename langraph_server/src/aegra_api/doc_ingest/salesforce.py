@@ -26,8 +26,12 @@ async def _async_main(pdf_path: Path) -> int:
         if db_manager.engine is not None:
             await db_manager.close()
 
-    for title in row_titles:
+    unique_titles = sorted(set(row_titles))
+    print(f"ingested pdfs={_pdfs} chunks={_chunks} unique_titles={len(unique_titles)}")
+    for title in unique_titles[:20]:
         print(title)
+    if len(unique_titles) > 20:
+        print(f"... {len(unique_titles) - 20} more titles")
     return 0
 
 

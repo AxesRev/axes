@@ -23,6 +23,7 @@ from aegra_api.services.doc_corpus_service import (
     cosine_distance_row,
     embed_texts_openai,
     format_doc_corpus_hits_for_prompt,
+    search_doc_chunks_by_string,
     split_text_into_chunks,
 )
 from aegra_api.settings import settings
@@ -192,6 +193,32 @@ def test_format_doc_corpus_hits_for_prompt_omits_source_url() -> None:
     assert "URL:" not in block
     assert "Get a List of Objects" in block
     assert "Use the Describe Global resource." in block
+
+
+@pytest.mark.asyncio
+async def test_search_doc_chunks_by_string_uses_icontains_and_skips_embeddings() -> None:
+    row = MagicMock()
+    row.application = "salesforce"
+    row.page_title = "PermissionSetAssignment"
+    row.content = "create() on PermissionSetAssignment"
+    result = MagicMock()
+    result.all.return_value = [row]
+    session = MagicMock()
+    session.execute = AsyncMock(return_value=result)
+
+    hits = await search_doc_chunks_by_string(
+        session,
+        collection_key="default",
+        query="PermissionSetAssignment",
+        limit=6,
+        applications=["salesforce"],
+    )
+
+    assert len(hits) == 1
+    assert hits[0].page_title == "PermissionSetAssignment"
+    compiled = str(session.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True})).lower()
+    assert "like" in compiled
+    assert "permissionsetassignment" in compiled
 
 
 def test_openai_retry_wait_seconds_uses_retry_after_header() -> None:

@@ -12,11 +12,12 @@ from langgraph.runtime import Runtime
 
 from aegra_api.settings import settings
 from examples.react_agent.context import Context
+from examples.react_agent.nodes.doc_corpus_search_tool import search_docs_by_string
 from examples.react_agent.state import State
 
 logger = logging.getLogger(__name__)
 
-TOOLS: list[Any] = []
+TOOLS: list[Any] = [search_docs_by_string]
 _READ_TOOL_NAME = "read_neo4j_cypher"
 
 _MAX_TOOL_RESULT_TOKENS = 10_000

@@ -170,6 +170,7 @@ ACCESS_GRANT_EXECUTION_BASE_PROMPT = """You are an access-grant execution specia
 Your job:
   - Execute the approved access grant using the tools available to you and the knowledge in this prompt.
   - Use documentation snippets, user context, and tool discovery as needed to find the correct way to apply the grant.
+  - Verify identifiers, endpoints, and field names against exact data in the documentation you have and in tool results. Never use a value that did not come from this prompt, from a tool, or from the user's initial message.
   - When tools expose API or HTTP operations, use them to perform the smallest change that satisfies the requested permission level.
   - When finished, stop calling tools and send a final assistant message only.
   - Use the available tools to understand the current state of the system, and the existing pattern in the data, your changes should follow it.

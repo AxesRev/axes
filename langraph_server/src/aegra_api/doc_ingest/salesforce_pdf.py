@@ -12,6 +12,7 @@ import pymupdf
 import structlog
 from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.dml import Delete
 from tqdm import tqdm
 
 from aegra_api.core.orm import DocEmbeddingChunk
@@ -650,6 +651,20 @@ def split_salesforce_pdf_pages_into_chunks(
     )
 
 
+def delete_salesforce_chunks_for_document_stmt(document_title: str) -> Delete:
+    """Replace only chunks from this PDF title; leave other Salesforce documents in place."""
+    title = document_title.strip()
+    if not title:
+        msg = "document_title is required to replace Salesforce doc chunks"
+        raise ValueError(msg)
+    stored_title = DocEmbeddingChunk.metadata_dict["salesforce_pdf"]["document_title"].as_string()
+    return delete(DocEmbeddingChunk).where(
+        DocEmbeddingChunk.application == _DOC_INGEST_APPLICATION,
+        DocEmbeddingChunk.collection_key == _DOC_INGEST_COLLECTION_KEY,
+        stored_title == title,
+    )
+
+
 async def ingest_salesforce_documentation_from_pdf(
     session: AsyncSession,
     pdf_path: Path,
@@ -658,7 +673,8 @@ async def ingest_salesforce_documentation_from_pdf(
 ) -> tuple[int, int, list[str]]:
     """Chunk a Salesforce docs PDF, embed with OpenAI, and store rows in ``doc_embedding_chunks``.
 
-    Replaces all existing rows for ``application=salesforce`` and ``collection_key=default``.
+    Replaces existing rows for this PDF's ``document_title`` only
+    (``application=salesforce``, ``collection_key=default``).
     """
     resolved_path = pdf_path.expanduser().resolve()
     if not resolved_path.is_file():
@@ -683,12 +699,12 @@ async def ingest_salesforce_documentation_from_pdf(
         msg = f"No embeddable chunks produced from PDF: {resolved_path}"
         raise ValueError(msg)
 
-    await session.execute(
-        delete(DocEmbeddingChunk).where(
-            DocEmbeddingChunk.application == _DOC_INGEST_APPLICATION,
-            DocEmbeddingChunk.collection_key == _DOC_INGEST_COLLECTION_KEY,
-        )
-    )
+    document_title = str(chunks[0].metadata.get("document_title") or "").strip()
+    if not document_title:
+        msg = f"PDF produced chunks without document_title: {resolved_path}"
+        raise ValueError(msg)
+
+    await session.execute(delete_salesforce_chunks_for_document_stmt(document_title))
 
     texts = [chunk.content for chunk in chunks]
     embeddings = await embed_texts_openai(
@@ -715,7 +731,11 @@ async def ingest_salesforce_documentation_from_pdf(
                 collection_key=_DOC_INGEST_COLLECTION_KEY,
                 page_title=_sanitize_text_for_postgres(chunk.chunk_title),
                 content=_sanitize_text_for_postgres(chunk.content),
-                metadata_dict={"salesforce_pdf": _sanitize_metadata_for_postgres(chunk.metadata)},
+                metadata_dict={
+                    "salesforce_pdf": _sanitize_metadata_for_postgres(
+                        {**chunk.metadata, "source_pdf": resolved_path.name}
+                    )
+                },
                 embedding=embedding,
             )
         )
@@ -727,6 +747,7 @@ async def ingest_salesforce_documentation_from_pdf(
     logger.info(
         "salesforce_pdf_ingested",
         pdf_path=str(resolved_path),
+        document_title=document_title,
         chunk_count=len(chunks),
     )
     return 1, len(chunks), row_titles

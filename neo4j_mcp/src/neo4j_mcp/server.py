@@ -8,17 +8,40 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from typing import Any
 
 from dotenv import load_dotenv
+from fastmcp.server.middleware import CallNext, Middleware, MiddlewareContext
+from fastmcp.tools.tool import ToolResult
+from mcp.types import CallToolRequestParams
 from mcp_neo4j_cypher import server as neo4j_mcp_server
 from mcp_neo4j_cypher.server import create_mcp_server as _create_mcp_server
 from starlette.responses import JSONResponse
 
 from neo4j_mcp.settings import Neo4jMcpSettings
 
+logger = logging.getLogger("neo4j_mcp")
 
-def _create_mcp_server_with_health(*args, **kwargs):
+
+class ReturnToolErrorsMiddleware(Middleware):
+    """Return tool failures as text so MCP clients can continue instead of crashing."""
+
+    async def on_call_tool(
+        self,
+        context: MiddlewareContext[CallToolRequestParams],
+        call_next: CallNext[CallToolRequestParams, ToolResult],
+    ) -> ToolResult:
+        try:
+            return await call_next(context)
+        except Exception as exc:
+            tool_name = context.message.name
+            logger.warning("tool_error name=%s error=%s", tool_name, exc)
+            return ToolResult(content=f"Error calling tool {tool_name!r}: {exc}")
+
+
+def _create_mcp_server_with_health(*args: Any, **kwargs: Any):
     mcp = _create_mcp_server(*args, **kwargs)
+    mcp.add_middleware(ReturnToolErrorsMiddleware())
 
     @mcp.custom_route("/health", methods=["GET"])
     async def health(_request):
