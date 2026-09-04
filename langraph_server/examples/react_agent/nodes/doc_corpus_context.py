@@ -45,7 +45,9 @@ def resolve_doc_corpus_search_phrase(
 def grant_execution_doc_corpus_search_phrase(state: State) -> str:
     """Build a grant-focused doc search phrase from the detected permission."""
     permission = cast(Permission, state.permission)
-    return f"How to grant {permission.permission} for {permission.domain}"
+    if permission.resource:
+        return f"How to grant {permission.permission} on {permission.resource}"
+    return f"How to grant {permission.permission}"
 
 
 async def load_doc_corpus_context_with_phrase(

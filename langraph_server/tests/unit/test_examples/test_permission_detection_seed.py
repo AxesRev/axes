@@ -78,19 +78,17 @@ def test_seed_includes_validator_feedback() -> None:
 
 async def test_apply_structured_response_copies_field_results() -> None:
     detected = DetectedPermission(
-        domain_result=FieldResult(value="repository", justification="User asked for repo access."),
         resource_result=FieldResult(value="AxesRev/Test_repo", justification="Matched the named test repo."),
         permission_result=FieldResult(value="write", justification="User asked to push code."),
     )
     state = State(structured_response=detected)
     update = await apply_structured_response(state, runtime=None)  # type: ignore[arg-type]
-    assert update["domain_result"].value == "repository"
     assert update["resource_result"].value == "AxesRev/Test_repo"
     assert update["permission_result"].value == "write"
 
 
 def test_route_validator_reruns_detector_when_feedback_present() -> None:
-    state = State(domain_feedback="too generic")
+    state = State(resource_feedback="too generic")
     assert route_validator(state) == "inject_feedback"
 
 

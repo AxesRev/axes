@@ -20,12 +20,12 @@ Documentation snippets semantically matched to the user's latest message:
 
 User context below reflects the user's current identity, group membership, and existing permission bindings.
 Those bindings show who has what now — they are NOT the catalog of grantable permission levels for new requests.
-That data is reliable for present state, but it does not list every valid domain, resource, or permission level.
+That data is reliable for present state, but it does not list every valid resource or permission level.
 When the answer depends on membership, resource names, or existing access, use tools to verify current facts.
 
 {user_context}System time: {system_time}"""
 
-PERMISSION_DETECTOR_BASE_PROMPT = """You are a permission-detection specialist. Fill ALL THREE fields of an access request: domain, resource, and permission.
+PERMISSION_DETECTOR_BASE_PROMPT = """You are a permission-detection specialist. Fill BOTH fields of an access request: resource and permission.
 
 You operate in a fully autonomous runtime:
   - There is NO interactive user.
@@ -34,14 +34,13 @@ You operate in a fully autonomous runtime:
   - Never output questions directed at a user.
 
 Your job:
-  - Determine domain, resource, and permission together, using shared evidence from tools.
+  - Determine resource and permission together, using shared evidence from tools.
   - Use the available lookup tools to look up real information whenever the answer depends on the user's environment.
-  - When you are confident, stop calling lookup tools and emit structured output with all three fields and justifications.
+  - When you are confident, stop calling lookup tools and emit structured output with both fields and justifications.
   - Never finish with a plain-text answer. Complete the task by emitting structured output.
 
 Field meanings:
-  - domain: The TYPE of resource the user wants access to — the resource category used by the target system. Pick the most specific, conventional name for that system. Do not include a specific resource identifier here — that belongs to the `resource` field.
-  - resource: The specific NAMED entity within the domain (an exact identifier used by the target system). If the request does not refer to a specific named entity, the value MUST be null. Always verify the exact name with the available tools when the user implies a specific resource without naming it. Search for the required resource with the available tools to confirm against system data, and search for related data as well.
+  - resource: The specific NAMED entity (an exact identifier used by the target system). If the request does not refer to a specific named entity, the value MUST be null. Always verify the exact name with the available tools when the user implies a specific resource without naming it. Search for the required resource with the available tools to confirm against system data, and search for related data as well.
   - permission: The access level the user is REQUESTING — not what they already have, and not a label chosen because it appears among existing bindings on a resource. Derive the canonical name from the user's wording and documentation snippets. If they ask to push or write code, output WRITE (or the doc-backed equivalent) — not ADMIN unless they explicitly request admin access. Tool data showing bindings on a resource describes current assignments only; it is not the catalog of grantable permission levels.
 
 Documentation snippets semantically matched to the user's latest message:
@@ -62,11 +61,11 @@ PERMISSION_DETECTOR_TASK_TEMPLATE = """Original user request:
 {user_request}
 \"\"\"
 {feedback_block}
-Determine domain, resource, and permission together. Use lookup tools as needed to verify real information.
-When you are confident, emit structured output with all three fields and justifications.
+Determine resource and permission together. Use lookup tools as needed to verify real information.
+When you are confident, emit structured output with both fields and justifications.
 
 Tool and user-context data reflect the user's current access state. That state is accurate for what exists now,
-but is not an exhaustive list of valid domains, resources, or permission levels. When tools return permission
+but is not an exhaustive list of valid resources or permission levels. When tools return permission
 bindings on a resource, that shows who currently has what — not the complete set of grantable levels.
 Prefer the user request and documentation snippets for valid choices; use tools to verify current facts.
 Do not infer policies that are not explicitly stated.
@@ -80,10 +79,10 @@ Validator feedback:
 {feedback}
 """
 
-VALIDATOR_PROMPT = """You validate three field results (`domain`, `resource`, `permission`) against the original user request.
+VALIDATOR_PROMPT = """You validate two field results (`resource`, `permission`) against the original user request.
 
 Return a `ValidationVerdict` only (no extra text). Field descriptions on that schema define acceptance criteria and
-feedback rules. Only mark `passed` true when all three fields are correct together; wrong fields get non-null
+feedback rules. Only mark `passed` true when both fields are correct together; wrong fields get non-null
 feedback, correct fields stay null.
 
 For `permission`: reject ADMIN (or equivalent admin labels) when the user asked for a narrower capability such as
@@ -129,7 +128,6 @@ Original user request:
 \"\"\"
 
 Detected permission request:
-  - domain: {domain}
   - resource: {resource}
   - permission: {permission_level}
 
@@ -180,7 +178,6 @@ Original user request:
 \"\"\"
 
 Approved permission to grant:
-  - domain: {domain}
   - resource: {resource}
   - permission: {permission_level}
 

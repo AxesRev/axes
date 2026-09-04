@@ -36,11 +36,10 @@ def _seed_grant_message(state: State) -> HumanMessage:
     )
     permission = cast(Permission, state.permission)
     evaluation = cast(AccessRequestEvaluation, state.access_evaluation)
-    resource_display = permission.resource if permission.resource else "(none — domain-level access)"
+    resource_display = permission.resource if permission.resource else "(none — no specific resource)"
     return HumanMessage(
         content=ACCESS_GRANT_EXECUTION_TASK_TEMPLATE.format(
             user_request=user_request,
-            domain=permission.domain,
             resource=resource_display,
             permission_level=permission.permission,
             evaluation_justification=evaluation.justification,
@@ -53,8 +52,7 @@ async def seed_grant(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
     permission = cast(Permission, state.permission)
     evaluation = cast(AccessRequestEvaluation, state.access_evaluation)
     logger.info(
-        "seed_grant: domain=%r resource=%r permission=%r should_grant=%s",
-        permission.domain,
+        "seed_grant: resource=%r permission=%r should_grant=%s",
         permission.resource,
         permission.permission,
         evaluation.should_grant,

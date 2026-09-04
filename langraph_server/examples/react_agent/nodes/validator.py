@@ -1,6 +1,6 @@
 """Validator node for the permission detection subgraph.
 
-Reads the original user request and the three per-field results, then asks an
+Reads the original user request and the two per-field results, then asks an
 LLM to produce a structured verdict that says either "all good" or which
 fields need to be re-derived (with feedback).
 """
@@ -37,26 +37,24 @@ def _serialize_field(result: FieldResult | None) -> dict[str, Any]:
 
 
 async def validate_results(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
-    """Validate the three per-field results and return per-field feedback (or pass).
+    """Validate the two per-field results and return per-field feedback (or pass).
 
-    Always returns updates for `domain_feedback`, `resource_feedback`,
-    `permission_feedback`, and `revision_count` so stale feedback from a
-    previous round is cleared on every validator turn.
+    Always returns updates for `resource_feedback`, `permission_feedback`,
+    and `revision_count` so stale feedback from a previous round is cleared
+    on every validator turn.
     """
     user_request = _extract_user_request(state)
     payload = {
         "user_request": user_request,
         "results": {
-            "domain": _serialize_field(state.domain_result),
             "resource": _serialize_field(state.resource_result),
             "permission": _serialize_field(state.permission_result),
         },
     }
 
     logger.info(
-        "Node validator: starting (revision=%d) domain=%r resource=%r permission=%r",
+        "Node validator: starting (revision=%d) resource=%r permission=%r",
         state.revision_count,
-        state.domain_result.value if state.domain_result else None,
         state.resource_result.value if state.resource_result else None,
         state.permission_result.value if state.permission_result else None,
     )
@@ -73,22 +71,19 @@ async def validate_results(state: State, runtime: Runtime[Context]) -> dict[str,
     )
 
     if verdict.passed:
-        logger.info("Node validator: passed — all three fields accepted")
+        logger.info("Node validator: passed — both fields accepted")
         return {
-            "domain_feedback": None,
             "resource_feedback": None,
             "permission_feedback": None,
             "revision_count": state.revision_count + 1,
         }
 
     logger.info(
-        "Node validator: failed — domain_fb=%s resource_fb=%s permission_fb=%s",
-        bool(verdict.domain_feedback),
+        "Node validator: failed — resource_fb=%s permission_fb=%s",
         bool(verdict.resource_feedback),
         bool(verdict.permission_feedback),
     )
     return {
-        "domain_feedback": verdict.domain_feedback,
         "resource_feedback": verdict.resource_feedback,
         "permission_feedback": verdict.permission_feedback,
         "revision_count": state.revision_count + 1,
