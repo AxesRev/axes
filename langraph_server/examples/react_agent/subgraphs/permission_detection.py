@@ -75,8 +75,6 @@ def _extra_detector_context(state: State) -> str:
 
 def _feedback_block(state: State) -> str:
     lines: list[str] = []
-    if state.domain_feedback:
-        lines.append(f"- domain: {state.domain_feedback}")
     if state.resource_feedback:
         lines.append(f"- resource: {state.resource_feedback}")
     if state.permission_feedback:
@@ -132,13 +130,11 @@ async def apply_structured_response(state: State, runtime: Runtime[Context]) -> 
         logger.warning("apply_structured_response: missing structured_response")
         return {}
     logger.info(
-        "apply_structured_response: domain=%r resource=%r permission=%r",
-        detected.domain_result.value,
+        "apply_structured_response: resource=%r permission=%r",
         detected.resource_result.value,
         detected.permission_result.value,
     )
     return {
-        "domain_result": detected.domain_result,
         "resource_result": detected.resource_result,
         "permission_result": detected.permission_result,
     }
@@ -154,7 +150,7 @@ def route_validator(state: State) -> Literal["inject_feedback", "finalize"]:
         logger.warning("route_validator: revision cap (%d) — forcing finalize", state.revision_count)
         return "finalize"
 
-    if state.domain_feedback or state.resource_feedback or state.permission_feedback:
+    if state.resource_feedback or state.permission_feedback:
         logger.info("route_validator: feedback present — re-running detector")
         return "inject_feedback"
 
@@ -163,12 +159,11 @@ def route_validator(state: State) -> Literal["inject_feedback", "finalize"]:
 
 
 async def finalize(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
-    domain_value = state.domain_result.value if state.domain_result else None
     permission_value = state.permission_result.value if state.permission_result else None
     resource_value = state.resource_result.value if state.resource_result else None
 
-    if not domain_value or not permission_value:
-        logger.warning("finalize: missing required field(s) — domain=%r permission=%r", domain_value, permission_value)
+    if not permission_value:
+        logger.warning("finalize: missing required field(s) — permission=%r", permission_value)
         return {
             "messages": [
                 AIMessage(
@@ -177,10 +172,8 @@ async def finalize(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
             ]
         }
 
-    permission = Permission(domain=domain_value, resource=resource_value, permission=permission_value)
-    logger.info(
-        "finalize: domain=%r resource=%r permission=%r", permission.domain, permission.resource, permission.permission
-    )
+    permission = Permission(resource=resource_value, permission=permission_value)
+    logger.info("finalize: resource=%r permission=%r", permission.resource, permission.permission)
     return {
         "permission": permission,
         "messages": [AIMessage(content=permission.model_dump_json())],

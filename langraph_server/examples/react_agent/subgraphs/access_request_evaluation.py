@@ -32,11 +32,10 @@ def _seed_evaluation_message(state: State) -> HumanMessage:
         (get_message_text(message) for message in state.messages if isinstance(message, HumanMessage)), ""
     )
     permission = cast(Permission, state.permission)
-    resource_display = permission.resource if permission.resource else "(none — domain-level access)"
+    resource_display = permission.resource if permission.resource else "(none — no specific resource)"
     return HumanMessage(
         content=ACCESS_EVALUATION_TASK_TEMPLATE.format(
             user_request=user_request,
-            domain=permission.domain,
             resource=resource_display,
             permission_level=permission.permission,
         )
@@ -47,8 +46,7 @@ async def seed_evaluation(state: State, runtime: Runtime[Context]) -> dict[str, 
     """Seed the evaluation task from the detected permission and original user request."""
     permission = cast(Permission, state.permission)
     logger.info(
-        "seed_evaluation: domain=%r resource=%r permission=%r",
-        permission.domain,
+        "seed_evaluation: resource=%r permission=%r",
         permission.resource,
         permission.permission,
     )

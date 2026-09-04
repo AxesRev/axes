@@ -7,8 +7,8 @@ In the ``access_grant_execution`` subgraph, tool calls are shown with ``url``,
 ``payload``, and ``response`` only. Other subgraphs omit tool traffic.
 
 Writes UTF-8 text under ``.scratch/`` (gitignored) by default. Includes per-field
-LLM ``justification`` strings (``domain_result`` / ``resource_result`` /
-``permission_result``) and validator feedback when present in checkpoint state.
+LLM ``justification`` strings (``resource_result`` / ``permission_result``)
+and validator feedback when present in checkpoint state.
 
 Run from repo root::
 
@@ -45,10 +45,8 @@ _TEXT_SOFT_LIMIT: int = 4000
 _GRANT_EXECUTION_NS_PREFIX: str = "access_grant_execution"
 
 _JUSTIFICATION_KEYS_ORDER: tuple[str, ...] = (
-    "domain_result",
     "resource_result",
     "permission_result",
-    "domain_feedback",
     "resource_feedback",
     "permission_feedback",
 )
@@ -80,13 +78,13 @@ def _normalize_field_result_snap(raw: Any) -> dict[str, Any] | None:
 
 def _justification_slice(channel_values: dict[str, Any]) -> dict[str, Any]:
     out: dict[str, Any] = {}
-    for key in ("domain_result", "resource_result", "permission_result"):
+    for key in ("resource_result", "permission_result"):
         if key not in channel_values:
             continue
         norm = _normalize_field_result_snap(channel_values[key])
         if norm is not None:
             out[key] = norm
-    for key in ("domain_feedback", "resource_feedback", "permission_feedback"):
+    for key in ("resource_feedback", "permission_feedback"):
         if key not in channel_values:
             continue
         v = channel_values[key]
@@ -161,12 +159,12 @@ def _format_final_field_justifications(checkpoints: list[Any]) -> str:
         return ""
     last_cv = _channel_values_dict(checkpoints[-1].checkpoint)
     snap = _justification_slice(last_cv)
-    field_keys = ("domain_result", "resource_result", "permission_result")
+    field_keys = ("resource_result", "permission_result")
     if not any(k in snap for k in field_keys):
         return ""
     lines: list[str] = [
         "=" * 72,
-        "FINAL FIELD JUSTIFICATIONS (last checkpoint; domain / resource / permission)",
+        "FINAL FIELD JUSTIFICATIONS (last checkpoint; resource / permission)",
         "=" * 72,
         "",
     ]

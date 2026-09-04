@@ -13,7 +13,7 @@ from examples.react_agent.user_context_models import UserContextData, UserContex
 async def test_access_request_evaluation_receives_permission_from_parent_state() -> None:
     state = State(
         messages=[HumanMessage(content="Give me admin on our test repo")],
-        permission=Permission(domain="github_repository", resource="AxesRev/Test_repo", permission="ADMIN"),
+        permission=Permission(resource="AxesRev/Test_repo", permission="ADMIN"),
         user_contexts=[
             UserContextData(
                 app="github",

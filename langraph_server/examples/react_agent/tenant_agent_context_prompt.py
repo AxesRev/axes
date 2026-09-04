@@ -8,4 +8,4 @@ def build_tenant_agent_context_block(content: str) -> str:
     stripped = content.strip()
     if not stripped:
         return ""
-    return f"Tenant-specific policy and instructions from the organisation admin:\n{stripped}\n\n"
+    return f"Organisation guidelines (free-text, not RBAC rules):\n{stripped}\n\n"

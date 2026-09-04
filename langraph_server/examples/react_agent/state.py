@@ -15,8 +15,15 @@ from examples.react_agent.user_context_models import UserContextData
 
 
 class Permission(BaseModel):
-    domain: Annotated[str, Field(description="The type of resource to gain access to")]
-    resource: Annotated[str | None, Field(description="The name or identifier of the specific resource")] = None
+    resource: Annotated[
+        str | None,
+        Field(
+            description=(
+                "Exact name or identifier of the specific resource, verified against tools (external data sources), "
+                "documentation, or graph/user-context data. Null only when the request names no specific resource."
+            ),
+        ),
+    ] = None
     permission: Annotated[str, Field(description="The name or type of the permission being requested.")]
 
 
@@ -28,7 +35,8 @@ class FieldResult(BaseModel):
         Field(
             description=(
                 "Canonical value for this field. For `resource`, use null only when the request truly does not "
-                "name a specific resource; otherwise use an exact identifier from the target system."
+                "name a specific resource; otherwise use the exact identifier verified against lookup-tool results "
+                "(external data sources), documentation snippets, or graph/user-context data."
             ),
         ),
     ] = None
@@ -44,9 +52,8 @@ class FieldResult(BaseModel):
 
 
 class DetectedPermission(BaseModel):
-    """Structured detector output: domain, resource, and permission field results."""
+    """Structured detector output: resource and permission field results."""
 
-    domain_result: FieldResult
     resource_result: FieldResult
     permission_result: FieldResult
 
@@ -63,8 +70,10 @@ class AccessRequestEvaluation(BaseModel):
         Field(
             description=(
                 "Past-tense explanation of why should_grant is true or false — an audit record of the decision, "
-                "not instructions to a human or LLM. Ground in policy and the requesting user's own access/membership. "
-                "Do not name or describe other users' permissions, roles, or personal data."
+                "not instructions to a human or LLM. Ground in eligibility and free-text guidelines (organisation "
+                "notes, documentation, graph/tool data about who should have access) — not in whether the user "
+                "already has the permission, and not in RBAC exact-match rules. Do not name or describe other "
+                "users' permissions, roles, or personal data."
             ),
         ),
     ]
@@ -77,26 +86,18 @@ class ValidationVerdict(BaseModel):
         bool,
         Field(
             description=(
-                "True only if domain, resource, and permission together correctly satisfy the user request. "
+                "True only if resource and permission together correctly satisfy the user request. "
                 "Accept: tool-backed or context-aligned justifications that are logically sound. "
                 "Reject: guesswork, mismatch with user context, irrelevance, or justification contradicting value."
             ),
         ),
     ]
-    domain_feedback: Annotated[
-        str | None,
-        Field(
-            description=(
-                "If `passed` is false and `domain` is wrong: short note on what was wrong and how to improve "
-                "(WHAT, not full how-to). Otherwise null."
-            )
-        ),
-    ] = None
     resource_feedback: Annotated[
         str | None,
         Field(
             description=(
-                "If `passed` is false and `resource` is wrong: same convention as domain_feedback. Otherwise null."
+                "If `passed` is false and `resource` is wrong: short note on what was wrong and how to improve "
+                "(WHAT, not full how-to). Otherwise null."
             )
         ),
     ] = None
@@ -104,7 +105,7 @@ class ValidationVerdict(BaseModel):
         str | None,
         Field(
             description=(
-                "If `passed` is false and `permission` is wrong: same convention as domain_feedback. Otherwise null."
+                "If `passed` is false and `permission` is wrong: same convention as resource_feedback. Otherwise null."
             )
         ),
     ] = None
@@ -113,16 +114,11 @@ class ValidationVerdict(BaseModel):
     def _feedback_consistent_with_passed(self) -> ValidationVerdict:
         """Enforce invariants that prompts used to spell out; `with_structured_output` still returns this type."""
         if self.passed:
-            if (
-                self.domain_feedback is not None
-                or self.resource_feedback is not None
-                or self.permission_feedback is not None
-            ):
-                msg = "When passed is true, domain_feedback, resource_feedback, and permission_feedback must be null."
+            if self.resource_feedback is not None or self.permission_feedback is not None:
+                msg = "When passed is true, resource_feedback and permission_feedback must be null."
                 raise ValueError(msg)
             return self
         feedback_strips = (
-            (self.domain_feedback or "").strip(),
             (self.resource_feedback or "").strip(),
             (self.permission_feedback or "").strip(),
         )
@@ -184,9 +180,6 @@ class State(InputState):
     user_contexts: list[UserContextData] = field(default_factory=list)
     """Per-app user, group, and permission context loaded from the graph via Neo4j MCP."""
 
-    domain_result: FieldResult | None = field(default=None)
-    """Result produced by the domain detector."""
-
     resource_result: FieldResult | None = field(default=None)
     """Result produced by the resource detector."""
 
@@ -195,9 +188,6 @@ class State(InputState):
 
     structured_response: DetectedPermission | None = field(default=None)
     """Structured output from the detector agent. Copied into the per-field results."""
-
-    domain_feedback: str | None = field(default=None)
-    """Feedback from the validator when the domain result must be re-derived."""
 
     resource_feedback: str | None = field(default=None)
     """Feedback from the validator when the resource result must be re-derived."""

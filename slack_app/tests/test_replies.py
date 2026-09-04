@@ -6,19 +6,17 @@ from slack_app.replies import slack_replies_from_updates
 def test_slack_replies_from_permission_detection_update() -> None:
     data = {
         "permission_detection": {
-            "permission": {"domain": "github_organization", "resource": "AxesRev", "permission": "admin"},
+            "permission": {"resource": "AxesRev", "permission": "admin"},
             "messages": [
                 {
                     "type": "ai",
-                    "content": '{"domain":"github_organization","resource":"AxesRev","permission":"admin"}',
+                    "content": '{"resource":"AxesRev","permission":"admin"}',
                 }
             ],
         }
     }
 
-    assert slack_replies_from_updates(data) == [
-        '{"domain":"github_organization","resource":"AxesRev","permission":"admin"}'
-    ]
+    assert slack_replies_from_updates(data) == ['{"resource":"AxesRev","permission":"admin"}']
 
 
 def test_slack_replies_from_evaluation_update_posts_every_ai_message() -> None:
@@ -43,14 +41,10 @@ def test_slack_replies_ignore_unlisted_nodes() -> None:
         "load_user_context": {
             "user_context": {"app": "github", "user_id": "1", "user_name": "alice", "groups": [], "permissions": []}
         },
-        "permission_detection": {
-            "messages": [
-                {"type": "ai", "content": '{"domain":"github_repository","resource":null,"permission":"read"}'}
-            ]
-        },
+        "permission_detection": {"messages": [{"type": "ai", "content": '{"resource":null,"permission":"read"}'}]},
     }
 
-    assert slack_replies_from_updates(data) == ['{"domain":"github_repository","resource":null,"permission":"read"}']
+    assert slack_replies_from_updates(data) == ['{"resource":null,"permission":"read"}']
 
 
 def test_slack_replies_from_grant_execution_posts_every_ai_turn() -> None:

@@ -49,7 +49,7 @@ class UserContextData(BaseModel):
             f"{permission_lines}\n\n"
             'Always use this identity when the user refers to "me", "my access", "my resources", etc.\n'
             "This block reflects current user data. It is reliable for present state, but does not enumerate "
-            "every valid domain, resource, or permission level."
+            "every valid resource or permission level."
         )
 
     @staticmethod

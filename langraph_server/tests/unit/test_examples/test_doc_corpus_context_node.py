@@ -36,7 +36,6 @@ def test_resolve_doc_corpus_search_phrase_uses_explicit_phrase() -> None:
 def test_grant_execution_doc_corpus_search_phrase_uses_permission_fields() -> None:
     state = State(
         permission=Permission(
-            domain="github_repository",
             resource="org/repo",
             permission="admin",
         ),
@@ -44,12 +43,12 @@ def test_grant_execution_doc_corpus_search_phrase_uses_permission_fields() -> No
 
     phrase = grant_execution_doc_corpus_search_phrase(state)
 
-    assert phrase == "How to grant admin for github_repository"
+    assert phrase == "How to grant admin on org/repo"
 
 
 async def test_load_doc_corpus_context_with_phrase_uses_resolver() -> None:
     state = State(
-        permission=Permission(domain="github_team", resource="team-a", permission="maintainer"),
+        permission=Permission(resource="team-a", permission="maintainer"),
     )
     runtime = Runtime(context=Context())
 
@@ -66,7 +65,7 @@ async def test_load_doc_corpus_context_with_phrase_uses_resolver() -> None:
     assert result == {"doc_corpus_context": "doc block"}
     mock_retrieve.assert_awaited_once_with(
         collection_key="default",
-        query="How to grant maintainer for github_team",
+        query="How to grant maintainer on team-a",
         limit=6,
         applications=None,
     )

@@ -12,7 +12,7 @@ def test_passed_true_requires_null_feedback() -> None:
     ValidationVerdict(passed=True)
 
     with pytest.raises(ValueError, match="passed is true"):
-        ValidationVerdict(passed=True, domain_feedback="fix domain")
+        ValidationVerdict(passed=True, resource_feedback="fix resource")
 
 
 def test_passed_false_requires_non_empty_feedback() -> None:
@@ -21,7 +21,7 @@ def test_passed_false_requires_non_empty_feedback() -> None:
         ValidationVerdict(passed=False)
 
     with pytest.raises(ValueError, match="at least one feedback"):
-        ValidationVerdict(passed=False, domain_feedback="   ", resource_feedback=None)
+        ValidationVerdict(passed=False, resource_feedback="   ", permission_feedback=None)
 
-    verdict = ValidationVerdict(passed=False, domain_feedback=" adjust domain ")
-    assert verdict.domain_feedback == " adjust domain "
+    verdict = ValidationVerdict(passed=False, resource_feedback=" adjust resource ")
+    assert verdict.resource_feedback == " adjust resource "
