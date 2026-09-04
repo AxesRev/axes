@@ -189,7 +189,21 @@ class DocEmbeddingChunk(Base):
     embedding: Mapped[list[float]] = mapped_column(AsyncPgVector(1536), nullable=False)
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=text("now()"))
 
-    __table_args__ = (Index("idx_doc_embedding_chunks_app_collection", "application", "collection_key"),)
+    __table_args__ = (
+        Index("idx_doc_embedding_chunks_app_collection", "application", "collection_key"),
+        Index(
+            "idx_doc_embedding_chunks_content_trgm",
+            "content",
+            postgresql_using="gin",
+            postgresql_ops={"content": "gin_trgm_ops"},
+        ),
+        Index(
+            "idx_doc_embedding_chunks_page_title_trgm",
+            "page_title",
+            postgresql_using="gin",
+            postgresql_ops={"page_title": "gin_trgm_ops"},
+        ),
+    )
 
 
 # ---------------------------------------------------------------------------

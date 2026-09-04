@@ -13,7 +13,7 @@ from collections.abc import Sequence
 
 import structlog
 from openai import APIConnectionError, AsyncOpenAI, InternalServerError, OpenAIError, RateLimitError
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from tqdm import tqdm
@@ -166,6 +166,40 @@ async def search_doc_chunks(
             )
         )
     return hits
+
+
+async def search_doc_chunks_by_string(
+    session: AsyncSession,
+    *,
+    collection_key: str,
+    query: str,
+    limit: int,
+    applications: Sequence[str] | None = None,
+) -> list[DocCorpusSearchHit]:
+    """Case-insensitive substring search over ``content`` and ``page_title``."""
+    stmt = select(
+        DocEmbeddingChunk.application,
+        DocEmbeddingChunk.page_title,
+        DocEmbeddingChunk.content,
+    ).where(DocEmbeddingChunk.collection_key == collection_key)
+    if applications:
+        stmt = stmt.where(DocEmbeddingChunk.application.in_(tuple(applications)))
+    stmt = stmt.where(
+        or_(
+            DocEmbeddingChunk.content.icontains(query, autoescape=True),
+            DocEmbeddingChunk.page_title.icontains(query, autoescape=True),
+        )
+    ).limit(limit)
+    rows = list((await session.execute(stmt)).all())
+    return [
+        DocCorpusSearchHit(
+            application=row.application,
+            page_title=row.page_title,
+            content=row.content,
+            score=1.0,
+        )
+        for row in rows
+    ]
 
 
 def format_doc_corpus_hits_for_prompt(hits: list[DocCorpusSearchHit]) -> str:

@@ -39,6 +39,7 @@ class PermissionDetectorState(AgentState):
 
     user_contexts: NotRequired[list[UserContextData]]
     doc_corpus_context: NotRequired[str]
+    selected_apps: NotRequired[list[str]]
 
 
 def _extra_detector_context(state: State) -> str:
