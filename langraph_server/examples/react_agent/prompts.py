@@ -193,7 +193,7 @@ Known data about the user (current state only):
 {user_context}
 System time: {system_time}"""
 
-ACCESS_GRANT_EXECUTION_TASK_TEMPLATE = """Execute the approved access grant using the available tools and knowledge.
+ACCESS_GRANT_EXECUTION_TASK_TEMPLATE = """Execute the approved access grant using the API tools you have at your disposal.
 
 Original user request:
 \"\"\"
@@ -207,6 +207,9 @@ Approved permission to grant:
 Evaluation justification:
 {evaluation_justification}
 
-Use the available tools and documentation to apply this grant.
+Use the available tools to apply this permission grant, use the tools available to you and the documentation to understand how it needs to be done.
+If you create or modified a resource via the API tools, verify with the API tools that the change applied if it ispossible.
+You must follow the relevant documentation to find the correct way to apply the grant.
+Do not use the graph tools to modify data.
 When done, reply with a brief plain-language result report for the requester (no technical details, no follow-up offers).
 """
