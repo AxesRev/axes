@@ -15,7 +15,15 @@ from examples.react_agent.user_context_models import UserContextData
 
 
 class Permission(BaseModel):
-    resource: Annotated[str | None, Field(description="The name or identifier of the specific resource")] = None
+    resource: Annotated[
+        str | None,
+        Field(
+            description=(
+                "Exact name or identifier of the specific resource, verified against tools (external data sources), "
+                "documentation, or graph/user-context data. Null only when the request names no specific resource."
+            ),
+        ),
+    ] = None
     permission: Annotated[str, Field(description="The name or type of the permission being requested.")]
 
 
@@ -27,7 +35,8 @@ class FieldResult(BaseModel):
         Field(
             description=(
                 "Canonical value for this field. For `resource`, use null only when the request truly does not "
-                "name a specific resource; otherwise use an exact identifier from the target system."
+                "name a specific resource; otherwise use the exact identifier verified against lookup-tool results "
+                "(external data sources), documentation snippets, or graph/user-context data."
             ),
         ),
     ] = None
