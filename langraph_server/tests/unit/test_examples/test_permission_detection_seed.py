@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 from langchain_core.messages import HumanMessage
 
 from examples.react_agent.state import DetectedPermission, FieldResult, State
 from examples.react_agent.subgraphs.permission_detection import (
+    _BindDetectorRuntime,
     _extra_detector_context,
     _seed,
     apply_structured_response,
@@ -124,3 +128,60 @@ def test_route_validator_reruns_detector_when_feedback_present() -> None:
 
 def test_route_validator_finalizes_when_passed() -> None:
     assert route_validator(State()) == "finalize"
+
+
+@pytest.mark.asyncio
+async def test_bind_detector_runtime_adds_inspect_tools_to_model_request() -> None:
+    inspect_tool = MagicMock()
+    inspect_tool.name = "salesforce_inspect"
+    graph_tool = MagicMock()
+    graph_tool.name = "read_neo4j_cypher"
+    request = MagicMock()
+    request.tools = [graph_tool]
+    request.state = {"selected_apps": ["salesforce"]}
+    request.runtime.context.model = "test-model"
+    request.runtime.context.thinking_budget_tokens = 0
+    request.runtime.context.reasoning_effort = ""
+    overridden = MagicMock()
+    request.override.return_value = overridden
+    handler = AsyncMock(return_value="ok")
+
+    with (
+        patch(
+            "examples.react_agent.subgraphs.permission_detection.load_detection_lookup_tools",
+            new=AsyncMock(return_value=[inspect_tool]),
+        ),
+        patch(
+            "examples.react_agent.subgraphs.permission_detection.load_chat_model",
+            return_value="bound-model",
+        ),
+    ):
+        result = await _BindDetectorRuntime().awrap_model_call(request, handler)
+
+    assert result == "ok"
+    request.override.assert_called_once()
+    assert request.override.call_args.kwargs["tools"] == [graph_tool, inspect_tool]
+    handler.assert_awaited_once_with(overridden)
+
+
+@pytest.mark.asyncio
+async def test_bind_detector_runtime_executes_unregistered_inspect_tool() -> None:
+    inspect_tool = MagicMock()
+    inspect_tool.name = "salesforce_inspect"
+    request = MagicMock()
+    request.tool = None
+    request.tool_call = {"name": "salesforce_inspect", "args": {}, "id": "call-1"}
+    request.state = {"selected_apps": ["salesforce"]}
+    overridden = MagicMock()
+    request.override.return_value = overridden
+    handler = AsyncMock(return_value="executed")
+
+    with patch(
+        "examples.react_agent.subgraphs.permission_detection.load_detection_lookup_tools",
+        new=AsyncMock(return_value=[inspect_tool]),
+    ):
+        result = await _BindDetectorRuntime().awrap_tool_call(request, handler)
+
+    assert result == "executed"
+    request.override.assert_called_once_with(tool=inspect_tool)
+    handler.assert_awaited_once_with(overridden)

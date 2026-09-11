@@ -9,10 +9,11 @@ from datetime import UTC, datetime
 from typing import Annotated, Any, Literal, NotRequired
 
 from langchain.agents import AgentState, create_agent
-from langchain.agents.middleware import ModelRequest, dynamic_prompt, wrap_model_call
+from langchain.agents.middleware import AgentMiddleware, ModelRequest, dynamic_prompt
 from langchain.agents.structured_output import ToolStrategy
 from langchain_core.messages import AIMessage, AnyMessage, HumanMessage
 from langgraph.graph import StateGraph, add_messages
+from langgraph.prebuilt.tool_node import ToolCallRequest
 from langgraph.runtime import Runtime
 
 from examples.react_agent.app_api_tools import load_detection_lookup_tools
@@ -133,26 +134,47 @@ def _detector_system_prompt(request: ModelRequest) -> str:
     )
 
 
-@wrap_model_call
-async def _bind_configured_model(request: ModelRequest, handler):
-    context = request.runtime.context
-    selected_apps = list(request.state.get("selected_apps") or [])
-    inspect_tools = await load_detection_lookup_tools(
-        runtime=request.runtime,
-        selected_apps=selected_apps,
+def _selected_apps(state: Any) -> list[str]:
+    if isinstance(state, dict):
+        return list(state.get("selected_apps") or [])
+    return list(getattr(state, "selected_apps", None) or [])
+
+
+async def _inspect_tools_by_name(*, runtime: Any, state: Any) -> dict[str, Any]:
+    tools = await load_detection_lookup_tools(
+        runtime=runtime,
+        selected_apps=_selected_apps(state),
     )
-    existing_names = {getattr(tool, "name", None) for tool in request.tools}
-    extra_tools = [tool for tool in inspect_tools if getattr(tool, "name", None) not in existing_names]
-    return await handler(
-        request.override(
-            model=load_chat_model(
-                context.model,
-                thinking_budget_tokens=context.thinking_budget_tokens,
-                reasoning_effort=context.reasoning_effort,
-            ),
-            tools=[*request.tools, *extra_tools],
+    return {tool.name: tool for tool in tools if getattr(tool, "name", None)}
+
+
+class _BindDetectorRuntime(AgentMiddleware):
+    """Attach inspect-only app API tools at request time and execute them."""
+
+    async def awrap_model_call(self, request: ModelRequest, handler):
+        context = request.runtime.context
+        inspect_by_name = await _inspect_tools_by_name(runtime=request.runtime, state=request.state)
+        existing_names = {getattr(tool, "name", None) for tool in request.tools}
+        extra_tools = [tool for name, tool in inspect_by_name.items() if name not in existing_names]
+        return await handler(
+            request.override(
+                model=load_chat_model(
+                    context.model,
+                    thinking_budget_tokens=context.thinking_budget_tokens,
+                    reasoning_effort=context.reasoning_effort,
+                ),
+                tools=[*request.tools, *extra_tools],
+            )
         )
-    )
+
+    async def awrap_tool_call(self, request: ToolCallRequest, handler):
+        if request.tool is not None:
+            return await handler(request)
+        inspect_by_name = await _inspect_tools_by_name(runtime=request.runtime, state=request.state)
+        tool = inspect_by_name.get(request.tool_call.get("name"))
+        if tool is None:
+            return await handler(request)
+        return await handler(request.override(tool=tool))
 
 
 async def seed_detection(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
@@ -220,7 +242,7 @@ async def make_permission_detection_graph():
         model=load_chat_model(Context().model),
         tools=tools,
         system_prompt=PERMISSION_DETECTOR_BASE_PROMPT,
-        middleware=[_detector_system_prompt, _bind_configured_model],
+        middleware=[_detector_system_prompt, _BindDetectorRuntime()],
         response_format=ToolStrategy(DetectedPermission),
         state_schema=PermissionDetectorState,
         context_schema=Context,
