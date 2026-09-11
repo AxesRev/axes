@@ -1,4 +1,4 @@
-"""Grant-execution tool loading (inspect + mutate app APIs)."""
+"""Grant-execution tool loading (app APIs with write access)."""
 
 from examples.react_agent import app_api_tools
 

@@ -1,4 +1,4 @@
-"""Tests for Salesforce REST inspect/mutate tools."""
+"""Tests for the Salesforce REST API tool."""
 
 from __future__ import annotations
 
@@ -10,11 +10,11 @@ from simple_salesforce.exceptions import SalesforceGeneralError
 
 from examples.react_agent.context import Context
 from examples.react_agent.nodes.salesforce_rest_tools import (
-    SalesforceInspectInput,
-    _inspect_salesforce,
-    _mutate_salesforce,
+    SalesforceApiCall,
+    SalesforceApiReadCall,
     _normalize_rest_path,
     _run_salesforce_rest,
+    _salesforce_api_call,
     build_salesforce_rest_tools,
     resolve_salesforce_integration_username,
 )
@@ -23,6 +23,55 @@ from examples.react_agent.nodes.salesforce_rest_tools import (
 def test_normalize_rest_path_strips_services_prefix() -> None:
     assert _normalize_rest_path("/services/data/v67.0/query?q=SELECT+Id+FROM+User") == "query?q=SELECT+Id+FROM+User"
     assert _normalize_rest_path("sobjects/Account/describe") == "sobjects/Account/describe"
+
+
+def test_api_call_joins_segments_and_skips_blanks() -> None:
+    describe = SalesforceApiCall(
+        method="GET",
+        root="sobjects",
+        sobject="PermissionSet",
+        identifier="describe",
+    )
+    create = SalesforceApiCall(
+        method="POST",
+        root="sobjects",
+        sobject="PermissionSetAssignment",
+        body={"AssigneeId": "005", "PermissionSetId": "0PS"},
+    )
+    row = SalesforceApiCall(
+        method="PATCH",
+        root="sobjects",
+        sobject="User",
+        identifier="005gL00000JQRHlQAP",
+        body={"UserPermissionsMarketingUser": True},
+    )
+
+    assert describe.rest_path() == "sobjects/PermissionSet/describe"
+    assert create.rest_path() == "sobjects/PermissionSetAssignment"
+    assert row.rest_path() == "sobjects/User/005gL00000JQRHlQAP"
+
+
+def test_api_call_schema_rejects_slashes_in_segments() -> None:
+    with pytest.raises(ValidationError):
+        SalesforceApiCall(method="GET", root="sobjects", sobject="objects/PermissionSet")
+    with pytest.raises(ValidationError):
+        SalesforceApiCall(
+            method="GET",
+            root="sobjects",
+            sobject="PermissionSet",
+            identifier="describe/foo",
+        )
+
+
+def test_api_call_query_puts_soql_in_q_param() -> None:
+    payload = SalesforceApiCall(method="GET", root="query", q="SELECT Id FROM PermissionSet")
+    assert payload.rest_path() == "query"
+    assert payload.query_params() == {"q": "SELECT Id FROM PermissionSet"}
+
+
+def test_read_schema_rejects_non_get() -> None:
+    with pytest.raises(ValidationError):
+        SalesforceApiReadCall(method="POST", root="sobjects", sobject="Account", body={"Name": "x"})
 
 
 def test_run_salesforce_rest_formats_success_json() -> None:
@@ -60,27 +109,26 @@ def test_run_salesforce_rest_formats_salesforce_error() -> None:
     assert "Malformed request" in output
 
 
-def test_inspect_salesforce_runs_soql_as_query() -> None:
+def test_salesforce_api_call_runs_soql_and_describe() -> None:
     sf = MagicMock()
     sf.restful.return_value = {"totalSize": 0, "records": []}
-
-    _inspect_salesforce(sf, soql="SELECT Id FROM PermissionSet", path=None, query_params=None)
-
-    sf.restful.assert_called_once_with(
+    _salesforce_api_call(
+        sf,
+        SalesforceApiCall(method="GET", root="query", q="SELECT Id FROM PermissionSet"),
+    )
+    sf.restful.assert_called_with(
         "query",
         method="GET",
         params={"q": "SELECT Id FROM PermissionSet"},
         json=None,
     )
 
-
-def test_inspect_salesforce_gets_describe_path() -> None:
-    sf = MagicMock()
     sf.restful.return_value = {"name": "PermissionSet"}
-
-    _inspect_salesforce(sf, soql=None, path="sobjects/PermissionSet/describe", query_params=None)
-
-    sf.restful.assert_called_once_with(
+    _salesforce_api_call(
+        sf,
+        SalesforceApiCall(method="GET", root="sobjects", sobject="PermissionSet", identifier="describe"),
+    )
+    sf.restful.assert_called_with(
         "sobjects/PermissionSet/describe",
         method="GET",
         params=None,
@@ -88,30 +136,26 @@ def test_inspect_salesforce_gets_describe_path() -> None:
     )
 
 
-def test_inspect_input_requires_exactly_one_of_soql_or_path() -> None:
-    with pytest.raises(ValidationError):
-        SalesforceInspectInput()
-    with pytest.raises(ValidationError):
-        SalesforceInspectInput(soql="SELECT Id FROM User", path="sobjects/User/describe")
-
-
-def test_mutate_salesforce_create_posts() -> None:
+def test_salesforce_api_call_create_posts() -> None:
     sf = MagicMock()
     sf.restful.return_value = {"id": "0Pa", "success": True}
+    body = {"AssigneeId": "005", "PermissionSetId": "0PS"}
 
-    _mutate_salesforce(
+    _salesforce_api_call(
         sf,
-        operation="create",
-        path="sobjects/PermissionSetAssignment",
-        json_body={"AssigneeId": "005", "PermissionSetId": "0PS"},
-        query_params=None,
+        SalesforceApiCall(
+            method="POST",
+            root="sobjects",
+            sobject="PermissionSetAssignment",
+            body=body,
+        ),
     )
 
     sf.restful.assert_called_once_with(
         "sobjects/PermissionSetAssignment",
         method="POST",
         params=None,
-        json={"AssigneeId": "005", "PermissionSetId": "0PS"},
+        json=body,
     )
 
 
@@ -166,7 +210,7 @@ def _patch_salesforce_client(monkeypatch: pytest.MonkeyPatch, fake_sf: MagicMock
 
 
 @pytest.mark.asyncio
-async def test_build_salesforce_rest_tools_returns_inspect_and_mutate(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_build_salesforce_rest_tools_returns_one_api_tool(monkeypatch: pytest.MonkeyPatch) -> None:
     runtime = MagicMock()
     runtime.context = Context(tenant_id="tenant-1")
     fake_sf = MagicMock()
@@ -175,8 +219,8 @@ async def test_build_salesforce_rest_tools_returns_inspect_and_mutate(monkeypatc
 
     tools = await build_salesforce_rest_tools(runtime)
 
-    assert [tool.name for tool in tools] == ["salesforce_inspect", "salesforce_mutate"]
-    output = tools[0].invoke({"soql": "SELECT Id FROM User LIMIT 1"})
+    assert [tool.name for tool in tools] == ["salesforce_api"]
+    output = tools[0].invoke({"method": "GET", "root": "query", "q": "SELECT Id FROM User LIMIT 1"})
     assert output.startswith("HTTP 200")
     fake_sf.restful.assert_called_with(
         "query",
@@ -187,11 +231,22 @@ async def test_build_salesforce_rest_tools_returns_inspect_and_mutate(monkeypatc
 
 
 @pytest.mark.asyncio
-async def test_build_salesforce_rest_tools_can_omit_mutate(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_build_salesforce_rest_tools_read_only_rejects_writes(monkeypatch: pytest.MonkeyPatch) -> None:
     runtime = MagicMock()
     runtime.context = Context(tenant_id="tenant-1")
-    _patch_salesforce_client(monkeypatch, MagicMock())
+    fake_sf = MagicMock()
+    _patch_salesforce_client(monkeypatch, fake_sf)
 
     tools = await build_salesforce_rest_tools(runtime, include_read=True, include_write=False)
 
-    assert [tool.name for tool in tools] == ["salesforce_inspect"]
+    assert [tool.name for tool in tools] == ["salesforce_api"]
+    with pytest.raises(ValidationError):
+        tools[0].invoke(
+            {
+                "method": "POST",
+                "root": "sobjects",
+                "sobject": "Account",
+                "body": {"Name": "x"},
+            }
+        )
+    fake_sf.restful.assert_not_called()

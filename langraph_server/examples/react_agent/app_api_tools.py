@@ -1,4 +1,4 @@
-"""Per-app GitHub/Salesforce API tools, split into inspect (read) and mutate (write)."""
+"""Per-app GitHub/Salesforce API tools, with read-only vs write access."""
 
 from __future__ import annotations
 
@@ -114,7 +114,7 @@ async def load_app_api_tools(
 
 
 async def load_grant_execution_tools(*, runtime: Runtime[Context], selected_apps: list[str]) -> list[Any]:
-    """Inspect + mutate app API tools, plus graph tools."""
+    """App API tools with write access, plus graph tools."""
     return await load_app_api_tools(
         runtime=runtime,
         selected_apps=selected_apps,
@@ -124,7 +124,7 @@ async def load_grant_execution_tools(*, runtime: Runtime[Context], selected_apps
 
 
 async def load_detection_lookup_tools(*, runtime: Runtime[Context], selected_apps: list[str]) -> list[Any]:
-    """Inspect-only app API tools (no graph tools; those stay on the detector already)."""
+    """Read-only app API tools (no graph tools; those stay on the detector already)."""
     return await load_app_api_tools(
         runtime=runtime,
         selected_apps=selected_apps,

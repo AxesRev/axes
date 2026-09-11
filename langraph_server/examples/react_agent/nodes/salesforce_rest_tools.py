@@ -1,4 +1,4 @@
-"""Salesforce REST tools: inspect (read) and mutate (write)."""
+"""Salesforce REST tool: join Pydantic fields into /services/data/vXX.X/{root}/..."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from typing import Any, Literal
 
 from langchain_core.tools import StructuredTool
 from langgraph.runtime import Runtime
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field
 from simple_salesforce import Salesforce
 from simple_salesforce.exceptions import SalesforceError
 from sqlalchemy import select
@@ -24,63 +24,62 @@ logger = logging.getLogger(__name__)
 
 _ALLOWED_METHODS: frozenset[str] = frozenset({"GET", "POST", "PUT", "PATCH", "DELETE"})
 _SERVICES_PREFIX_RE = re.compile(r"^/?services/data/v[\d.]+/?", re.IGNORECASE)
-_MUTATE_METHODS: dict[str, str] = {
-    "create": "POST",
-    "update": "PATCH",
-    "upsert": "PUT",
-    "delete": "DELETE",
-}
+_SEGMENT_PATTERN = r"^[^/?#\s]+$"
+_SOBJECT_PATTERN = r"^[A-Za-z][A-Za-z0-9_]*$"
+
+SalesforceHttpMethod = Literal["GET", "POST", "PATCH", "PUT", "DELETE"]
+SalesforceRoot = Literal["sobjects", "query", "queryAll", "search", "limits"]
 
 
-class SalesforceInspectInput(BaseModel):
-    """Read-only inspection of Salesforce org state."""
+class SalesforceApiCall(BaseModel):
+    """One REST call. Path is root/sobject/identifier/extra, skipping blanks."""
 
-    soql: str | None = Field(
+    method: SalesforceHttpMethod = Field(description="HTTP method.")
+    root: SalesforceRoot = Field(
+        description="First path segment under /services/data/vXX.X/.",
+    )
+    sobject: str | None = Field(
         default=None,
-        description="SOQL SELECT to run, for example 'SELECT Id, Name FROM PermissionSet LIMIT 20'.",
+        pattern=_SOBJECT_PATTERN,
+        description="sObject API name, for example PermissionSet or PermissionSetAssignment.",
     )
-    path: str | None = Field(
+    identifier: str | None = Field(
         default=None,
-        description=(
-            "REST path to retrieve or describe, relative to /services/data/vXX.X/, "
-            "for example 'sobjects/PermissionSet/describe' or 'sobjects/User/005...'."
-        ),
+        pattern=_SEGMENT_PATTERN,
+        description="Next segment: describe, updated, deleted, a record id, or an external-id field name.",
     )
-    query_params: dict[str, str] | None = Field(
+    extra: str | None = Field(
         default=None,
-        description="Optional query-string parameters when using path.",
+        pattern=_SEGMENT_PATTERN,
+        description="Final segment when needed: blob field name or external-id value.",
+    )
+    q: str | None = Field(
+        default=None,
+        description="SOQL for query/queryAll, or SOSL for search.",
+    )
+    body: dict[str, Any] | None = Field(
+        default=None,
+        description="JSON body for POST, PATCH, or PUT.",
+    )
+    params: dict[str, str] | None = Field(
+        default=None,
+        description="Extra query-string parameters, for example start/end on updated.",
     )
 
-    @model_validator(mode="after")
-    def require_soql_or_path(self) -> SalesforceInspectInput:
-        soql = (self.soql or "").strip()
-        path = (self.path or "").strip()
-        if bool(soql) == bool(path):
-            msg = "Provide exactly one of soql or path"
-            raise ValueError(msg)
-        return self
+    def rest_path(self) -> str:
+        return "/".join(part for part in (self.root, self.sobject, self.identifier, self.extra) if part)
+
+    def query_params(self) -> dict[str, str] | None:
+        params = dict(self.params or {})
+        if self.q:
+            params["q"] = self.q
+        return params or None
 
 
-class SalesforceMutateInput(BaseModel):
-    """Create, update, or delete Salesforce records."""
+class SalesforceApiReadCall(SalesforceApiCall):
+    """Same call shape, GET only."""
 
-    operation: Literal["create", "update", "upsert", "delete"] = Field(
-        description="create a record, update fields, upsert, or delete.",
-    )
-    path: str = Field(
-        description=(
-            "REST path relative to /services/data/vXX.X/, for example "
-            "'sobjects/PermissionSetAssignment' or 'sobjects/PermissionSetAssignment/{id}'."
-        ),
-    )
-    json_body: dict[str, Any] | None = Field(
-        default=None,
-        description="JSON body for create, update, or upsert.",
-    )
-    query_params: dict[str, str] | None = Field(
-        default=None,
-        description="Optional query-string parameters.",
-    )
+    method: Literal["GET"] = "GET"
 
 
 def _normalize_rest_path(path: str) -> str:
@@ -177,39 +176,13 @@ def _run_salesforce_rest(
     return _format_success_payload(result)
 
 
-def _inspect_salesforce(
-    sf: Salesforce,
-    *,
-    soql: str | None,
-    path: str | None,
-    query_params: dict[str, str] | None,
-) -> str:
-    query = (soql or "").strip()
-    if query:
-        return _run_salesforce_rest(sf, method="GET", path="query", query_params={"q": query})
+def _salesforce_api_call(sf: Salesforce, payload: SalesforceApiCall) -> str:
     return _run_salesforce_rest(
         sf,
-        method="GET",
-        path=path or "",
-        query_params=query_params,
-    )
-
-
-def _mutate_salesforce(
-    sf: Salesforce,
-    *,
-    operation: str,
-    path: str,
-    json_body: dict[str, Any] | None,
-    query_params: dict[str, str] | None,
-) -> str:
-    method = _MUTATE_METHODS[operation]
-    return _run_salesforce_rest(
-        sf,
-        method=method,
-        path=path,
-        query_params=query_params,
-        json_body=json_body,
+        method=payload.method,
+        path=payload.rest_path(),
+        query_params=payload.query_params(),
+        json_body=payload.body,
     )
 
 
@@ -218,71 +191,45 @@ async def _salesforce_client(runtime: Runtime[Context]) -> Salesforce:
     return make_salesforce_client(username=integration_username)
 
 
+def _args_schema(*, allow_write: bool) -> type[SalesforceApiCall]:
+    return SalesforceApiCall if allow_write else SalesforceApiReadCall
+
+
 async def build_salesforce_rest_tools(
     runtime: Runtime[Context],
     *,
     include_read: bool = True,
     include_write: bool = True,
 ) -> list[StructuredTool]:
-    """Build Salesforce inspect and/or mutate tools for the connected org."""
+    """Build the Salesforce REST tool for the connected org."""
+    if not include_read and not include_write:
+        return []
+
     sf = await _salesforce_client(runtime)
-    tools: list[StructuredTool] = []
+    schema = _args_schema(allow_write=include_write)
 
-    if include_read:
+    def salesforce_api(**kwargs: Any) -> str:
+        return _salesforce_api_call(sf, schema.model_validate(kwargs))
 
-        def salesforce_inspect(
-            soql: str | None = None,
-            path: str | None = None,
-            query_params: dict[str, str] | None = None,
-        ) -> str:
-            return _inspect_salesforce(sf, soql=soql, path=path, query_params=query_params)
-
-        tools.append(
-            StructuredTool.from_function(
-                func=salesforce_inspect,
-                name="salesforce_inspect",
-                description=(
-                    "Inspect Salesforce org state without changing it. "
-                    "Run SOQL or GET a resource (describe, retrieve, list). "
-                    "Cannot create, update, or delete records."
-                ),
-                args_schema=SalesforceInspectInput,
-            )
-        )
-
-    if include_write:
-
-        def salesforce_mutate(
-            operation: Literal["create", "update", "upsert", "delete"],
-            path: str,
-            json_body: dict[str, Any] | None = None,
-            query_params: dict[str, str] | None = None,
-        ) -> str:
-            return _mutate_salesforce(
-                sf,
-                operation=operation,
-                path=path,
-                json_body=json_body,
-                query_params=query_params,
-            )
-
-        tools.append(
-            StructuredTool.from_function(
-                func=salesforce_mutate,
-                name="salesforce_mutate",
-                description=(
-                    "Change Salesforce org data: create, update, upsert, or delete records "
-                    "(for example assign a permission set). Use salesforce_inspect to look up IDs first."
-                ),
-                args_schema=SalesforceMutateInput,
-            )
-        )
+    description = (
+        "Call Salesforce REST API. Path is root/sobject/identifier/extra. "
+        "GET query with q for SOQL. POST sobjects/{sobject} to create, "
+        "PATCH/DELETE sobjects/{sobject}/{id} to update or delete."
+    )
+    if not include_write:
+        description = "Read Salesforce org state. Path is root/sobject/identifier/extra. GET query with q for SOQL."
 
     logger.info(
-        "salesforce_rest_tools: tenant_id=%s include_read=%s include_write=%s tool_count=%d",
+        "salesforce_rest_tools: tenant_id=%s include_read=%s include_write=%s tool_count=1",
         runtime.context.tenant_id.strip(),
         include_read,
         include_write,
-        len(tools),
     )
-    return tools
+    return [
+        StructuredTool.from_function(
+            func=salesforce_api,
+            name="salesforce_api",
+            description=description,
+            args_schema=schema,
+        )
+    ]
