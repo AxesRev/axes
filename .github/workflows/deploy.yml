@@ -4,6 +4,11 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      fetch_graph:
+        description: After apply-apps, create a one-shot Job from CronJob fetch-graph and wait for it
+        type: boolean
+        default: false
 
 permissions:
   id-token: write
@@ -688,3 +693,46 @@ jobs:
           --filter './integrations'
           --filter './webapp-env'
           -- apply
+
+  fetch-graph:
+    needs: apply-apps
+    if: github.event_name == 'workflow_dispatch' && inputs.fetch_graph
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      EKS_CLUSTER: axes-dev
+      FETCH_GRAPH_NAMESPACE: langraph-server
+      FETCH_GRAPH_CRONJOB: fetch-graph
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::042993547532:role/github-actions-deploy
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Update kubeconfig
+        run: aws eks update-kubeconfig --name "$EKS_CLUSTER" --region "$AWS_REGION"
+
+      - name: Run fetch-graph Job
+        env:
+          JOB_NAME: fetch-graph-${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+          cleanup() {
+            kubectl delete job "$JOB_NAME" \
+              --namespace="$FETCH_GRAPH_NAMESPACE" \
+              --wait=true \
+              --ignore-not-found
+          }
+          trap cleanup EXIT
+          kubectl create job "$JOB_NAME" \
+            --from="cronjob/$FETCH_GRAPH_CRONJOB" \
+            --namespace="$FETCH_GRAPH_NAMESPACE"
+          if ! kubectl wait --for=condition=complete "job/$JOB_NAME" \
+            --namespace="$FETCH_GRAPH_NAMESPACE" \
+            --timeout=110m; then
+            kubectl logs "job/$JOB_NAME" --namespace="$FETCH_GRAPH_NAMESPACE" --tail=200 || true
+            kubectl describe "job/$JOB_NAME" --namespace="$FETCH_GRAPH_NAMESPACE" || true
+            exit 1
+          fi
+          kubectl logs "job/$JOB_NAME" --namespace="$FETCH_GRAPH_NAMESPACE" --tail=50 || true
