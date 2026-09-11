@@ -42,7 +42,10 @@ async def test_detect_relevant_apps_stores_supported_selection() -> None:
     with patch("examples.react_agent.nodes.detect_relevant_apps.load_chat_model", return_value=mock_model):
         result = await detect_relevant_apps(state, runtime)
 
-    assert result == {"selected_apps": ["salesforce"]}
+    assert result == {
+        "selected_apps": ["salesforce"],
+        "user_request": "Give me Salesforce prompt template access",
+    }
 
 
 async def test_detect_relevant_apps_clears_invalid_selection() -> None:
@@ -57,7 +60,7 @@ async def test_detect_relevant_apps_clears_invalid_selection() -> None:
     with patch("examples.react_agent.nodes.detect_relevant_apps.load_chat_model", return_value=mock_model):
         result = await detect_relevant_apps(state, runtime)
 
-    assert result == {"selected_apps": []}
+    assert result == {"selected_apps": [], "user_request": "Need access in Jira"}
 
 
 def test_route_after_detect_relevant_apps_routes_to_unsupported_when_empty() -> None:

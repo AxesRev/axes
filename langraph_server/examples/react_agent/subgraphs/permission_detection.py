@@ -3,14 +3,16 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Sequence
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Any, Literal, NotRequired
+from typing import Annotated, Any, Literal, NotRequired
 
 from langchain.agents import AgentState, create_agent
 from langchain.agents.middleware import ModelRequest, dynamic_prompt, wrap_model_call
 from langchain.agents.structured_output import ToolStrategy
-from langchain_core.messages import AIMessage, HumanMessage
-from langgraph.graph import StateGraph
+from langchain_core.messages import AIMessage, AnyMessage, HumanMessage
+from langgraph.graph import StateGraph, add_messages
 from langgraph.runtime import Runtime
 
 from examples.react_agent.context import Context
@@ -21,7 +23,7 @@ from examples.react_agent.prompts import (
     PERMISSION_DETECTOR_FEEDBACK_TEMPLATE,
     PERMISSION_DETECTOR_TASK_TEMPLATE,
 )
-from examples.react_agent.state import DetectedPermission, InputState, Permission, State
+from examples.react_agent.state import DetectedPermission, Permission, State
 from examples.react_agent.user_context_models import UserContextData
 from examples.react_agent.user_context_prompt import build_user_context_block
 from examples.react_agent.utils import get_message_text, load_chat_model
@@ -32,6 +34,24 @@ MAX_REVISIONS: int = 3
 
 _RESOURCE_DETECTOR_GROUP_LIMIT: int = 20
 _RESOURCE_DETECTOR_PERMISSION_LIMIT: int = 50
+
+
+@dataclass
+class PermissionDetectionInput:
+    """Parent channels this subgraph may read. Transcript stays private."""
+
+    user_request: str = field(default="")
+    user_contexts: list[UserContextData] = field(default_factory=list)
+    selected_apps: list[str] = field(default_factory=list)
+    doc_corpus_context: str = field(default="")
+
+
+@dataclass
+class PermissionDetectionOutput:
+    """Typed result plus internal messages for the parent wrapper to filter."""
+
+    permission: Permission | None = field(default=None)
+    messages: Annotated[Sequence[AnyMessage], add_messages] = field(default_factory=list)
 
 
 class PermissionDetectorState(AgentState):
@@ -86,11 +106,8 @@ def _feedback_block(state: State) -> str:
 
 
 def _seed(state: State) -> HumanMessage:
-    user_request = next(
-        (get_message_text(message) for message in state.messages if isinstance(message, HumanMessage)), ""
-    )
     base_content = PERMISSION_DETECTOR_TASK_TEMPLATE.format(
-        user_request=user_request,
+        user_request=state.user_request,
         feedback_block=_feedback_block(state),
     )
     return HumanMessage(content=base_content + _extra_detector_context(state))
@@ -175,10 +192,7 @@ async def finalize(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
 
     permission = Permission(resource=resource_value, permission=permission_value)
     logger.info("finalize: resource=%r permission=%r", permission.resource, permission.permission)
-    return {
-        "permission": permission,
-        "messages": [AIMessage(content=permission.model_dump_json())],
-    }
+    return {"permission": permission}
 
 
 async def make_permission_detection_graph():
@@ -195,7 +209,12 @@ async def make_permission_detection_graph():
         name="detector",
     )
 
-    builder = StateGraph(State, input_schema=InputState, context_schema=Context)
+    builder = StateGraph(
+        State,
+        input_schema=PermissionDetectionInput,
+        output_schema=PermissionDetectionOutput,
+        context_schema=Context,
+    )
     builder.add_node("seed_detection", seed_detection)
     builder.add_node("detector", detector)
     builder.add_node("apply_structured_response", apply_structured_response)
@@ -214,3 +233,20 @@ async def make_permission_detection_graph():
     builder.add_edge("inject_feedback", "detector")
     builder.add_edge("finalize", "__end__")
     return builder.compile(name="Required Permission Agent")
+
+
+def make_permission_detection_node(compiled):
+    """Wrap the detector so only ``permission`` (or a failure reply) reaches the parent."""
+
+    async def run_permission_detection(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
+        result = await compiled.ainvoke(state, context=runtime.context)
+        permission = result.get("permission")
+        if permission is not None:
+            return {"permission": permission}
+        messages = result.get("messages") or []
+        last = messages[-1] if messages else None
+        if not isinstance(last, AIMessage) or not get_message_text(last).strip():
+            return {}
+        return {"messages": [last]}
+
+    return run_permission_detection

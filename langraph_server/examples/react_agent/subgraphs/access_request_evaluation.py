@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import dataclasses
 import logging
+from dataclasses import dataclass, field
 from typing import Any, cast
 
 from langchain_core.messages import AIMessage, HumanMessage
@@ -21,16 +22,33 @@ from examples.react_agent.prompts import (
     ACCESS_EVALUATION_TASK_TEMPLATE,
 )
 from examples.react_agent.state import AccessRequestEvaluation, Permission, State
-from examples.react_agent.utils import get_message_text, load_chat_model
+from examples.react_agent.user_context_models import UserContextData
+from examples.react_agent.utils import load_chat_model
 
 logger = logging.getLogger(__name__)
 
 
+@dataclass
+class AccessEvaluationInput:
+    """Parent channels this subgraph may read. Transcript stays private."""
+
+    user_request: str = field(default="")
+    permission: Permission | None = field(default=None)
+    user_contexts: list[UserContextData] = field(default_factory=list)
+    selected_apps: list[str] = field(default_factory=list)
+    doc_corpus_context: str = field(default="")
+
+
+@dataclass
+class AccessEvaluationOutput:
+    """Typed decision only. Denial text is added by the parent wrapper."""
+
+    access_evaluation: AccessRequestEvaluation | None = field(default=None)
+
+
 def _seed_evaluation_message(state: State) -> HumanMessage:
     """Build the task message from the detected permission and original user request."""
-    user_request = next(
-        (get_message_text(message) for message in state.messages if isinstance(message, HumanMessage)), ""
-    )
+    user_request = state.user_request
     permission = cast(Permission, state.permission)
     resource_display = permission.resource if permission.resource else "(none — no specific resource)"
     return HumanMessage(
@@ -70,13 +88,15 @@ async def extract_evaluation(state: State, runtime: Runtime[Context]) -> dict[st
         ),
     )
     logger.info("extract_evaluation: should_grant=%s", evaluation.should_grant)
-    return {
-        "access_evaluation": evaluation,
-        "messages": [AIMessage(content=evaluation.model_dump_json())],
-    }
+    return {"access_evaluation": evaluation}
 
 
-builder = StateGraph(State, context_schema=Context)
+builder = StateGraph(
+    State,
+    input_schema=AccessEvaluationInput,
+    output_schema=AccessEvaluationOutput,
+    context_schema=Context,
+)
 
 builder.add_node("load_tenant_agent_context", load_tenant_agent_context)
 builder.add_node("seed_evaluation", seed_evaluation)
@@ -96,3 +116,15 @@ builder.add_edge("tools", "call_model")
 builder.add_edge("extract_evaluation", "__end__")
 
 access_request_evaluation_graph = builder.compile(name="Access Request Evaluation")
+
+
+async def run_access_request_evaluation(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
+    """Run evaluation privately; copy a denial justification onto the parent thread."""
+    result = await access_request_evaluation_graph.ainvoke(state, context=runtime.context)
+    evaluation = result.get("access_evaluation")
+    if evaluation is None:
+        return {}
+    update: dict[str, Any] = {"access_evaluation": evaluation}
+    if not evaluation.should_grant:
+        update["messages"] = [AIMessage(content=evaluation.justification)]
+    return update

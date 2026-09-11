@@ -180,6 +180,9 @@ class State(InputState):
     user_contexts: list[UserContextData] = field(default_factory=list)
     """Per-app user, group, and permission context loaded from the graph via Neo4j MCP."""
 
+    user_request: str = field(default="")
+    """Original Slack request text. Subgraphs seed from this instead of inheriting parent messages."""
+
     resource_result: FieldResult | None = field(default=None)
     """Result produced by the resource detector."""
 

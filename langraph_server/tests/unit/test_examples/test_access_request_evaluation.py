@@ -1,14 +1,12 @@
 """Tests for access_request_evaluation seeded task messages."""
 
-from langchain_core.messages import HumanMessage
-
 from examples.react_agent.state import Permission, State
 from examples.react_agent.subgraphs.access_request_evaluation import _seed_evaluation_message
 
 
 def test_seed_evaluation_message_includes_permission_fields() -> None:
     state = State(
-        messages=[HumanMessage(content="Give me admin on AxesRev org")],
+        user_request="Give me admin on AxesRev org",
         permission=Permission(resource="AxesRev", permission="admin"),
     )
 
@@ -23,7 +21,7 @@ def test_seed_evaluation_message_includes_permission_fields() -> None:
 
 def test_seed_evaluation_message_uses_placeholder_for_missing_resource() -> None:
     state = State(
-        messages=[HumanMessage(content="I need org-wide admin")],
+        user_request="I need org-wide admin",
         permission=Permission(resource=None, permission="admin"),
     )
 

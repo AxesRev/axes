@@ -57,7 +57,7 @@ def test_extra_detector_context_includes_groups_and_resource_permissions() -> No
 
 def test_seed_includes_user_request_and_resource_context() -> None:
     state = State(
-        messages=[HumanMessage(content="I want to become the admin in our test repo.")],
+        user_request="I want to become the admin in our test repo.",
         user_contexts=[_sample_user_context()],
     )
     text = _seed(state).content if isinstance(_seed(state).content, str) else ""
@@ -69,7 +69,7 @@ def test_seed_includes_user_request_and_resource_context() -> None:
 
 def test_seed_includes_validator_feedback() -> None:
     state = State(
-        messages=[HumanMessage(content="repo access")],
+        user_request="repo access",
         resource_feedback="Use the exact repo name.",
     )
     text = _seed(state).content if isinstance(_seed(state).content, str) else ""

@@ -11,23 +11,21 @@ import json
 import logging
 from typing import Any, cast
 
-from langchain_core.messages import HumanMessage
 from langgraph.runtime import Runtime
 
 from examples.react_agent.context import Context
 from examples.react_agent.prompts import VALIDATOR_PROMPT
 from examples.react_agent.state import FieldResult, State, ValidationVerdict
-from examples.react_agent.utils import get_message_text, load_chat_model
+from examples.react_agent.utils import load_chat_model
 
 logger = logging.getLogger(__name__)
 
 
 def _extract_user_request(state: State) -> str:
-    """Return the text of the first HumanMessage in state.messages."""
-    for message in state.messages:
-        if isinstance(message, HumanMessage):
-            return get_message_text(message)
-    raise ValueError("validator: no HumanMessage found in state.messages")
+    user_request = state.user_request.strip()
+    if not user_request:
+        raise ValueError("validator: user_request is empty")
+    return user_request
 
 
 def _serialize_field(result: FieldResult | None) -> dict[str, Any]:

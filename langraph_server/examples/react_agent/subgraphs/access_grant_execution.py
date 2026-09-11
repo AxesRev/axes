@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import dataclasses
 import logging
-from typing import Any, cast
+from collections.abc import Sequence
+from dataclasses import dataclass, field
+from typing import Annotated, Any, cast
 
-from langchain_core.messages import HumanMessage
-from langgraph.graph import StateGraph
+from langchain_core.messages import AIMessage, AnyMessage, HumanMessage
+from langgraph.graph import StateGraph, add_messages
 from langgraph.runtime import Runtime
 
 from examples.react_agent.context import Context
@@ -24,11 +26,30 @@ from examples.react_agent.prompts import (
     ACCESS_GRANT_EXECUTION_TASK_TEMPLATE,
 )
 from examples.react_agent.state import AccessRequestEvaluation, Permission, State
+from examples.react_agent.user_context_models import UserContextData
 from examples.react_agent.utils import get_message_text
 
 logger = logging.getLogger(__name__)
 
 GRANT_EXECUTION_MODEL = "openai/gpt-4.1-mini"
+
+
+@dataclass
+class AccessGrantInput:
+    """Parent channels this subgraph may read. Transcript stays private."""
+
+    user_request: str = field(default="")
+    permission: Permission | None = field(default=None)
+    access_evaluation: AccessRequestEvaluation | None = field(default=None)
+    user_contexts: list[UserContextData] = field(default_factory=list)
+    selected_apps: list[str] = field(default_factory=list)
+
+
+@dataclass
+class AccessGrantOutput:
+    """Internal grant transcript. The parent wrapper copies only the final reply."""
+
+    messages: Annotated[Sequence[AnyMessage], add_messages] = field(default_factory=list)
 
 
 def _grant_runtime(runtime: Runtime[Context]) -> Runtime[Context]:
@@ -43,9 +64,7 @@ def _grant_runtime(runtime: Runtime[Context]) -> Runtime[Context]:
 
 def _seed_grant_message(state: State) -> HumanMessage:
     """Build the grant-execution task from approved permission and evaluation."""
-    user_request = next(
-        (get_message_text(message) for message in state.messages if isinstance(message, HumanMessage)), ""
-    )
+    user_request = state.user_request
     permission = cast(Permission, state.permission)
     evaluation = cast(AccessRequestEvaluation, state.access_evaluation)
     resource_display = permission.resource if permission.resource else "(none — no specific resource)"
@@ -86,7 +105,12 @@ async def run_grant_tools(state: State, runtime: Runtime[Context]) -> dict[str, 
     return await execute_tools(state, grant_runtime, tools=grant_tools)
 
 
-builder = StateGraph(State, context_schema=Context)
+builder = StateGraph(
+    State,
+    input_schema=AccessGrantInput,
+    output_schema=AccessGrantOutput,
+    context_schema=Context,
+)
 
 load_grant_doc_corpus_context = make_load_doc_corpus_context(
     search_phrase_resolver=grant_execution_doc_corpus_search_phrase,
@@ -108,3 +132,13 @@ builder.add_conditional_edges(
 builder.add_edge("tools", "call_model")
 
 access_grant_execution_graph = builder.compile(name="Access Grant Execution")
+
+
+async def run_access_grant_execution(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
+    """Run grant privately and copy only the final reply to the parent."""
+    result = await access_grant_execution_graph.ainvoke(state, context=runtime.context)
+    messages = result.get("messages") or []
+    last = messages[-1] if messages else None
+    if not isinstance(last, AIMessage) or not get_message_text(last).strip():
+        return {}
+    return {"messages": [last]}

@@ -8,9 +8,12 @@ from examples.react_agent.nodes.doc_corpus_context import load_doc_corpus_contex
 from examples.react_agent.nodes.unsupported_app_response import respond_unsupported_app
 from examples.react_agent.nodes.user_context import load_user_context
 from examples.react_agent.state import InputState, State
-from examples.react_agent.subgraphs.access_grant_execution import access_grant_execution_graph
-from examples.react_agent.subgraphs.access_request_evaluation import access_request_evaluation_graph
-from examples.react_agent.subgraphs.permission_detection import make_permission_detection_graph
+from examples.react_agent.subgraphs.access_grant_execution import run_access_grant_execution
+from examples.react_agent.subgraphs.access_request_evaluation import run_access_request_evaluation
+from examples.react_agent.subgraphs.permission_detection import (
+    make_permission_detection_graph,
+    make_permission_detection_node,
+)
 
 
 def route_after_detect_relevant_apps(state: State) -> Literal["load_user_context", "respond_unsupported_app"]:
@@ -39,9 +42,9 @@ async def graph():
     builder.add_node(load_user_context)
     builder.add_node(load_doc_corpus_context)
     builder.add_node("respond_unsupported_app", respond_unsupported_app)
-    builder.add_node("permission_detection", permission_detection_graph)
-    builder.add_node("access_request_evaluation", access_request_evaluation_graph)
-    builder.add_node("access_grant_execution", access_grant_execution_graph)
+    builder.add_node("permission_detection", make_permission_detection_node(permission_detection_graph))
+    builder.add_node("access_request_evaluation", run_access_request_evaluation)
+    builder.add_node("access_grant_execution", run_access_grant_execution)
 
     builder.add_edge("__start__", "detect_relevant_apps")
     builder.add_conditional_edges(
