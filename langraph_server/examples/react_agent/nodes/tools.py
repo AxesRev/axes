@@ -21,9 +21,7 @@ TOOLS: list[Any] = [search_docs_by_string]
 _READ_TOOL_NAME = "read_neo4j_cypher"
 
 _MAX_TOOL_RESULT_TOKENS = 10_000
-_TOO_LARGE_MESSAGE = (
-    "Tool call result was too large (exceeded {token_count:,} tokens). Narrow down your search and try again."
-)
+_TOO_LARGE_MESSAGE = "Result was too large, use the tool with more narrow filters"
 
 
 def _get_encoder(model: str) -> tiktoken.Encoding:
@@ -34,21 +32,32 @@ def _get_encoder(model: str) -> tiktoken.Encoding:
         return tiktoken.encoding_for_model("gpt-4o")
 
 
-def _truncate_if_oversized(message: ToolMessage, encoder: tiktoken.Encoding) -> ToolMessage:
-    content_str = message.content if isinstance(message.content, str) else str(message.content)
-    token_count = len(encoder.encode(content_str))
+def truncate_tool_text(content: str, *, encoder: tiktoken.Encoding | None = None) -> str:
+    """Drop oversized tool output and tell the model to retry with narrower filters."""
+    enc = encoder or _get_encoder("gpt-4o")
+    token_count = len(enc.encode(content))
     if token_count <= _MAX_TOOL_RESULT_TOKENS:
-        return message
+        return content
     logger.warning(
-        "Node tools: tool result for call_id=%s is %d tokens — replacing with truncation notice",
-        message.tool_call_id,
-        token_count,
+        "tool result exceeded %d tokens (%d) — returning too-large error", _MAX_TOOL_RESULT_TOKENS, token_count
     )
+    return _TOO_LARGE_MESSAGE
+
+
+def truncate_tool_message(message: ToolMessage, *, encoder: tiktoken.Encoding | None = None) -> ToolMessage:
+    content_str = message.content if isinstance(message.content, str) else str(message.content)
+    truncated = truncate_tool_text(content_str, encoder=encoder)
+    if truncated is content_str:
+        return message
     return ToolMessage(
-        content=_TOO_LARGE_MESSAGE.format(token_count=token_count),
+        content=truncated,
         tool_call_id=message.tool_call_id,
         name=message.name,
     )
+
+
+def _truncate_if_oversized(message: ToolMessage, encoder: tiktoken.Encoding) -> ToolMessage:
+    return truncate_tool_message(message, encoder=encoder)
 
 
 async def execute_tools(

@@ -17,6 +17,7 @@ from sqlalchemy import select
 from aegra_api.core.orm import get_metadata_session_maker
 from common.models import AppIntegration
 from examples.react_agent.context import Context
+from examples.react_agent.nodes.tools import truncate_tool_text
 from examples.react_agent.salesforce_client import make_salesforce_client
 
 logger = logging.getLogger(__name__)
@@ -90,8 +91,10 @@ def _normalize_rest_path(path: str) -> str:
 def _format_tool_output(*, status_code: int, body: str) -> str:
     normalized = body.strip()
     if normalized:
-        return f"HTTP {status_code}\n\n{normalized}"
-    return f"HTTP {status_code}\n\n(empty body)"
+        text = f"HTTP {status_code}\n\n{normalized}"
+    else:
+        text = f"HTTP {status_code}\n\n(empty body)"
+    return truncate_tool_text(text)
 
 
 def _format_success_payload(payload: Any) -> str:

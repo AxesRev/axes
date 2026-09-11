@@ -5,7 +5,7 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, ToolMessage
 
 from examples.react_agent.state import DetectedPermission, FieldResult, State
 from examples.react_agent.subgraphs.permission_detection import (
@@ -185,3 +185,23 @@ async def test_bind_detector_runtime_executes_unregistered_inspect_tool() -> Non
     assert result == "executed"
     request.override.assert_called_once_with(tool=inspect_tool)
     handler.assert_awaited_once_with(overridden)
+
+
+@pytest.mark.asyncio
+async def test_bind_detector_runtime_truncates_oversized_tool_message(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("examples.react_agent.nodes.tools._MAX_TOOL_RESULT_TOKENS", 20)
+    request = MagicMock()
+    request.tool = MagicMock()
+    request.tool.name = "salesforce_inspect"
+    request.tool_call = {"name": "salesforce_inspect", "args": {}, "id": "call-1"}
+    request.state = {"selected_apps": ["salesforce"]}
+    huge = ToolMessage(content="field " * 400, tool_call_id="call-1", name="salesforce_inspect")
+    handler = AsyncMock(return_value=huge)
+
+    result = await _BindDetectorRuntime().awrap_tool_call(request, handler)
+
+    assert isinstance(result, ToolMessage)
+    assert "too large" in result.content
+    assert "narrow" in result.content
+    assert "field " not in result.content
+    assert result.tool_call_id == "call-1"

@@ -11,14 +11,14 @@ from typing import Annotated, Any, Literal, NotRequired
 from langchain.agents import AgentState, create_agent
 from langchain.agents.middleware import AgentMiddleware, ModelRequest, dynamic_prompt
 from langchain.agents.structured_output import ToolStrategy
-from langchain_core.messages import AIMessage, AnyMessage, HumanMessage
+from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, ToolMessage
 from langgraph.graph import StateGraph, add_messages
 from langgraph.prebuilt.tool_node import ToolCallRequest
 from langgraph.runtime import Runtime
 
 from examples.react_agent.app_api_tools import load_detection_lookup_tools
 from examples.react_agent.context import Context
-from examples.react_agent.nodes.tools import _get_all_tools
+from examples.react_agent.nodes.tools import _get_all_tools, truncate_tool_message
 from examples.react_agent.nodes.validator import validate_results
 from examples.react_agent.prompts import (
     PERMISSION_DETECTOR_BASE_PROMPT,
@@ -168,13 +168,15 @@ class _BindDetectorRuntime(AgentMiddleware):
         )
 
     async def awrap_tool_call(self, request: ToolCallRequest, handler):
-        if request.tool is not None:
-            return await handler(request)
-        inspect_by_name = await _inspect_tools_by_name(runtime=request.runtime, state=request.state)
-        tool = inspect_by_name.get(request.tool_call.get("name"))
-        if tool is None:
-            return await handler(request)
-        return await handler(request.override(tool=tool))
+        if request.tool is None:
+            inspect_by_name = await _inspect_tools_by_name(runtime=request.runtime, state=request.state)
+            tool = inspect_by_name.get(request.tool_call.get("name"))
+            if tool is not None:
+                request = request.override(tool=tool)
+        result = await handler(request)
+        if isinstance(result, ToolMessage):
+            return truncate_tool_message(result)
+        return result
 
 
 async def seed_detection(state: State, runtime: Runtime[Context]) -> dict[str, Any]:

@@ -115,6 +115,18 @@ def test_mutate_salesforce_create_posts() -> None:
     )
 
 
+def test_run_salesforce_rest_replaces_oversized_payload(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("examples.react_agent.nodes.tools._MAX_TOOL_RESULT_TOKENS", 20)
+    sf = MagicMock()
+    sf.restful.return_value = {"fields": ["name"] * 400}
+
+    output = _run_salesforce_rest(sf, method="GET", path="sobjects/Account/describe")
+
+    assert "too large" in output
+    assert "narrow" in output
+    assert '"fields"' not in output
+
+
 @pytest.mark.asyncio
 async def test_resolve_salesforce_integration_username_reads_tenant_config() -> None:
     integration = MagicMock()
