@@ -9,12 +9,11 @@ from langgraph.runtime import Runtime
 
 from examples.react_agent.context import Context
 from examples.react_agent.nodes.doc_corpus_context import (
-    grant_execution_doc_corpus_search_phrase,
     load_doc_corpus_context_with_phrase,
     make_load_doc_corpus_context,
     resolve_doc_corpus_search_phrase,
 )
-from examples.react_agent.state import Permission, State
+from examples.react_agent.state import State
 
 
 def test_resolve_doc_corpus_search_phrase_uses_latest_human_message_by_default() -> None:
@@ -33,23 +32,8 @@ def test_resolve_doc_corpus_search_phrase_uses_explicit_phrase() -> None:
     assert phrase == "custom query"
 
 
-def test_grant_execution_doc_corpus_search_phrase_uses_permission_fields() -> None:
-    state = State(
-        permission=Permission(
-            resource="org/repo",
-            permission="admin",
-        ),
-    )
-
-    phrase = grant_execution_doc_corpus_search_phrase(state)
-
-    assert phrase == "How to grant admin on org/repo"
-
-
 async def test_load_doc_corpus_context_with_phrase_uses_resolver() -> None:
-    state = State(
-        permission=Permission(resource="team-a", permission="maintainer"),
-    )
+    state = State()
     runtime = Runtime(context=Context())
 
     with patch(
@@ -59,7 +43,7 @@ async def test_load_doc_corpus_context_with_phrase_uses_resolver() -> None:
         result = await load_doc_corpus_context_with_phrase(
             state,
             runtime,
-            search_phrase_resolver=grant_execution_doc_corpus_search_phrase,
+            search_phrase_resolver=lambda _state: "How to grant maintainer on team-a",
         )
 
     assert result == {"doc_corpus_context": "doc block"}

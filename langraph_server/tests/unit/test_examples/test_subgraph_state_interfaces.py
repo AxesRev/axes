@@ -59,10 +59,12 @@ def test_user_contexts_persist_and_parent_messages_stay_isolated() -> None:
     def detect(state: State) -> dict[str, object]:
         assert state.user_contexts == [user_context]
         assert state.user_request == original.content
+        assert state.doc_corpus_context == "Campaign object docs"
         return {"permission": Permission(resource="GenAiPromptTemplate", permission="edit")}
 
     def evaluate(state: State) -> dict[str, object]:
         assert state.user_contexts == [user_context]
+        assert state.doc_corpus_context == "Campaign object docs"
         return {
             "access_evaluation": AccessRequestEvaluation(
                 should_grant=True,
@@ -73,6 +75,7 @@ def test_user_contexts_persist_and_parent_messages_stay_isolated() -> None:
     def grant(state: State) -> dict[str, object]:
         assert state.user_contexts == [user_context]
         assert state.selected_apps == ["salesforce"]
+        assert state.doc_corpus_context == "Campaign object docs"
         return {"messages": [AIMessage(content="Granted Prompt Builder access.")]}
 
     detection = StateGraph(
@@ -98,6 +101,7 @@ def test_user_contexts_persist_and_parent_messages_stay_isolated() -> None:
             "user_contexts": [user_context],
             "selected_apps": ["salesforce"],
             "user_request": original.content,
+            "doc_corpus_context": "Campaign object docs",
         }
 
     parent.add_node("load_user_context", load_context)
@@ -173,6 +177,7 @@ def _assert_private_transcript_interface(compiled: object, *, expect_output_mess
     assert "user_contexts" in input_properties
     assert "selected_apps" in input_properties
     assert "user_request" in input_properties
+    assert "doc_corpus_context" in input_properties
     assert "messages" not in input_properties
     assert "user_contexts" not in output_properties
     assert "selected_apps" not in output_properties

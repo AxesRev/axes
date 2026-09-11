@@ -4,14 +4,14 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Awaitable, Callable
-from typing import Any, cast
+from typing import Any
 
 from langchain_core.messages import HumanMessage
 from langgraph.runtime import Runtime
 
 from aegra_api.services.doc_corpus_service import retrieve_doc_corpus_prompt_block
 from examples.react_agent.context import Context
-from examples.react_agent.state import Permission, State
+from examples.react_agent.state import State
 from examples.react_agent.utils import get_message_text
 
 logger = logging.getLogger(__name__)
@@ -40,14 +40,6 @@ def resolve_doc_corpus_search_phrase(
     if search_phrase_resolver is not None:
         return search_phrase_resolver(state).strip()
     return _latest_human_query(state)
-
-
-def grant_execution_doc_corpus_search_phrase(state: State) -> str:
-    """Build a grant-focused doc search phrase from the detected permission."""
-    permission = cast(Permission, state.permission)
-    if permission.resource:
-        return f"How to grant {permission.permission} on {permission.resource}"
-    return f"How to grant {permission.permission}"
 
 
 async def load_doc_corpus_context_with_phrase(
