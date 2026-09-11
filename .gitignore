@@ -18,6 +18,9 @@ wheels/
 # VSCode
 .vscode/
 
+# Cursor local rules
+.cursor/rules/
+
 # Testing
 .coverage
 coverage.xml

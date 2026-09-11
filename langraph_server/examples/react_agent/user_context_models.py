@@ -39,7 +39,7 @@ class UserContextData(BaseModel):
         group_lines = "\n".join(f"  {group.format_for_context()}" for group in self.groups)
         permission_lines = "\n".join(self._format_permission_line(perm) for perm in self.permissions)
         return (
-            "The CURRENT USER you are assisting:\n"
+            "The requesting user is already identified. This identity is given — do not replace it.\n"
             f"  - App: {self.app}\n"
             f"  - User ID: {self.user_id}\n"
             f"  - Username: {self.user_name}\n\n"

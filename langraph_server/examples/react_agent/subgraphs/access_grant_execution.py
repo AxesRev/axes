@@ -28,6 +28,18 @@ from examples.react_agent.utils import get_message_text
 
 logger = logging.getLogger(__name__)
 
+GRANT_EXECUTION_MODEL = "openai/gpt-4.1-mini"
+
+
+def _grant_runtime(runtime: Runtime[Context]) -> Runtime[Context]:
+    return Runtime(
+        context=dataclasses.replace(
+            runtime.context,
+            system_prompt=ACCESS_GRANT_EXECUTION_BASE_PROMPT,
+            model=GRANT_EXECUTION_MODEL,
+        ),
+    )
+
 
 def _seed_grant_message(state: State) -> HumanMessage:
     """Build the grant-execution task from approved permission and evaluation."""
@@ -62,17 +74,16 @@ async def seed_grant(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
 
 async def call_grant_model(state: State, runtime: Runtime[Context]) -> dict[str, list[Any]]:
     """Call the LLM with grant-execution tools for the selected apps."""
-    grant_runtime = Runtime(
-        context=dataclasses.replace(runtime.context, system_prompt=ACCESS_GRANT_EXECUTION_BASE_PROMPT),
-    )
+    grant_runtime = _grant_runtime(runtime)
     grant_tools = await load_grant_execution_tools(runtime=grant_runtime, selected_apps=state.selected_apps)
     return await call_model(state, grant_runtime, tools=grant_tools)
 
 
 async def run_grant_tools(state: State, runtime: Runtime[Context]) -> dict[str, list[Any]]:
     """Execute grant-execution tools for the selected apps."""
-    grant_tools = await load_grant_execution_tools(runtime=runtime, selected_apps=state.selected_apps)
-    return await execute_tools(state, runtime, tools=grant_tools)
+    grant_runtime = _grant_runtime(runtime)
+    grant_tools = await load_grant_execution_tools(runtime=grant_runtime, selected_apps=state.selected_apps)
+    return await execute_tools(state, grant_runtime, tools=grant_tools)
 
 
 builder = StateGraph(State, context_schema=Context)
