@@ -52,10 +52,11 @@ async def load_user_context(state: State, runtime: Runtime[Context]) -> dict[str
 
         contexts.append(user_context)
         logger.info(
-            "load_user_context: loaded app=%s user=%s groups=%d permissions=%d",
+            "load_user_context: loaded app=%s user=%s groups=%d profiles=%d permissions=%d",
             user_context.app,
             user_context.user_name,
             len(user_context.groups),
+            len(user_context.profiles),
             len(user_context.permissions),
         )
 

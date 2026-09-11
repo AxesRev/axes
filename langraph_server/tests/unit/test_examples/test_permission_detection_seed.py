@@ -11,7 +11,12 @@ from examples.react_agent.subgraphs.permission_detection import (
     apply_structured_response,
     route_validator,
 )
-from examples.react_agent.user_context_models import UserContextData, UserContextGroup, UserContextPermission
+from examples.react_agent.user_context_models import (
+    UserContextData,
+    UserContextGroup,
+    UserContextPermission,
+    UserContextProfile,
+)
 
 
 def _sample_user_context() -> UserContextData:
@@ -53,6 +58,31 @@ def test_extra_detector_context_includes_groups_and_resource_permissions() -> No
     assert "AxesRev - Main org" in block
     assert "Groups this user currently belongs to" in block
     assert "Resources this user currently has access to" in block
+
+
+def test_extra_detector_context_includes_assigned_profiles() -> None:
+    state = State(
+        messages=[HumanMessage(content="create prompt templates")],
+        user_contexts=[
+            UserContextData(
+                app="salesforce",
+                user_id="005",
+                user_name="Kirill",
+                profiles=[
+                    UserContextProfile(
+                        external_id="0PS1",
+                        name="EinsteinGPTPromptTemplateUser",
+                        kind="permission_set",
+                    )
+                ],
+            )
+        ],
+    )
+
+    block = _extra_detector_context(state)
+
+    assert "EinsteinGPTPromptTemplateUser (permission set)" in block
+    assert "Profiles and permission sets assigned to this user (salesforce)" in block
 
 
 def test_seed_includes_user_request_and_resource_context() -> None:

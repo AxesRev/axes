@@ -6,9 +6,11 @@ from examples.react_agent.user_context_models import (
     UserContextData,
     UserContextGroup,
     UserContextPermission,
+    UserContextProfile,
     build_user_context,
     parse_group_rows,
     parse_permission_rows,
+    parse_profile_rows,
 )
 from examples.react_agent.user_context_service import fetch_user_context
 
@@ -22,6 +24,40 @@ def test_parse_group_rows_skips_incomplete_entries() -> None:
     )
 
     assert groups == [UserContextGroup(external_id="team-1", name="admins", description="Admin team")]
+
+
+def test_parse_profile_rows_skips_incomplete_and_reads_kind() -> None:
+    profiles = parse_profile_rows(
+        [
+            {
+                "external_id": "0PS1",
+                "name": "EinsteinGPTPromptTemplateUser",
+                "description": "Run prompt templates",
+                "extra": '{"kind": "permission_set"}',
+            },
+            {
+                "external_id": "00e1",
+                "name": "Standard User",
+                "extra": {"kind": "profile"},
+            },
+            {"external_id": None, "name": "ignored"},
+            {"external_id": "0PS2", "name": None},
+        ]
+    )
+
+    assert profiles == [
+        UserContextProfile(
+            external_id="0PS1",
+            name="EinsteinGPTPromptTemplateUser",
+            description="Run prompt templates",
+            kind="permission_set",
+        ),
+        UserContextProfile(
+            external_id="00e1",
+            name="Standard User",
+            kind="profile",
+        ),
+    ]
 
 
 def test_parse_permission_rows_includes_resource_owner() -> None:
@@ -93,12 +129,20 @@ def test_build_user_context_from_record() -> None:
             "user_id": "123",
             "user_name": "alice",
             "groups": [{"external_id": "g1", "name": "team-a", "description": None}],
+            "profiles": [
+                {
+                    "external_id": "00e1",
+                    "name": "Standard User",
+                    "extra": '{"kind": "profile"}',
+                }
+            ],
             "permissions": [],
         }
     )
 
     assert user_context.user_name == "alice"
     assert user_context.groups[0].name == "team-a"
+    assert user_context.profiles == [UserContextProfile(external_id="00e1", name="Standard User", kind="profile")]
 
 
 async def test_fetch_user_context_queries_mcp_and_parses_rows() -> None:
@@ -173,3 +217,24 @@ def test_format_for_prompt_includes_group_descriptions() -> None:
     assert "The requesting user is already identified" in prompt
     assert "User ID: 123" in prompt
     assert "If a tool returns a different person or AppIdentity, ignore it." in prompt
+
+
+def test_format_for_prompt_includes_assigned_profiles() -> None:
+    user_context = UserContextData(
+        app="salesforce",
+        user_id="005",
+        user_name="Kirill",
+        profiles=[
+            UserContextProfile(
+                external_id="0PS1",
+                name="EinsteinGPTPromptTemplateUser",
+                description="Run prompt templates",
+                kind="permission_set",
+            )
+        ],
+    )
+
+    prompt = user_context.format_for_prompt()
+
+    assert "EinsteinGPTPromptTemplateUser (permission set) - Run prompt templates" in prompt
+    assert "Profiles and permission sets assigned to this user" in prompt

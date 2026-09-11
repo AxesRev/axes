@@ -33,6 +33,7 @@ logger = logging.getLogger(__name__)
 MAX_REVISIONS: int = 3
 
 _RESOURCE_DETECTOR_GROUP_LIMIT: int = 20
+_RESOURCE_DETECTOR_PROFILE_LIMIT: int = 20
 _RESOURCE_DETECTOR_PERMISSION_LIMIT: int = 50
 
 
@@ -63,7 +64,7 @@ class PermissionDetectorState(AgentState):
 
 
 def _extra_detector_context(state: State) -> str:
-    """Add the user's current group and resource-access data."""
+    """Add the user's current group, profile, and resource-access data."""
     if not state.user_contexts:
         return ""
 
@@ -74,6 +75,14 @@ def _extra_detector_context(state: State) -> str:
                 group.format_for_context() for group in user_context.groups[:_RESOURCE_DETECTOR_GROUP_LIMIT]
             )
             sections.append(f"Groups this user currently belongs to ({user_context.app}):\n{group_lines}")
+
+        if user_context.profiles:
+            profile_lines = "\n".join(
+                profile.format_for_context() for profile in user_context.profiles[:_RESOURCE_DETECTOR_PROFILE_LIMIT]
+            )
+            sections.append(
+                f"Profiles and permission sets assigned to this user ({user_context.app}):\n{profile_lines}"
+            )
 
         resource_permissions = [
             permission for permission in user_context.permissions if permission.target_kind == "resource"
