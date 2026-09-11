@@ -1,4 +1,4 @@
-"""GitHub REST OpenAPIToolkit factory for the access-grant subgraph."""
+"""GitHub REST OpenAPI tools: spec inspect plus HTTP read/write."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import json
 import logging
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import aiohttp
 import httpx
@@ -79,7 +79,53 @@ def _load_openapi_dict(*, spec_path: str, spec_url: str) -> dict[str, Any]:
     return loaded
 
 
-def build_openapi_toolkit(runtime: Runtime[Context]) -> OpenAPIToolkit:
+def github_tool_access(name: str) -> Literal["read", "write"]:
+    """Classify a GitHub OpenAPI toolkit tool as inspect (read) or mutate (write)."""
+    normalized = name.strip().lower()
+    if normalized.startswith("json_") or normalized == "json_explorer":
+        return "read"
+    if normalized == "requests_get" or normalized.endswith("_get"):
+        return "read"
+    return "write"
+
+
+def select_github_tools(
+    tools: list[Any],
+    *,
+    include_read: bool,
+    include_write: bool,
+) -> list[Any]:
+    """Keep GitHub toolkit tools that match the requested access."""
+    selected: list[Any] = []
+    for tool in tools:
+        access = github_tool_access(getattr(tool, "name", "") or "")
+        if (access == "read" and include_read) or (access == "write" and include_write):
+            selected.append(tool)
+    return selected
+
+
+def build_github_api_tools(
+    runtime: Runtime[Context],
+    *,
+    include_read: bool = True,
+    include_write: bool = True,
+) -> list[Any]:
+    """GitHub inspect tools, mutate tools, or both."""
+    if not include_read and not include_write:
+        return []
+    toolkit = build_openapi_toolkit(runtime, allow_dangerous_requests=include_write)
+    return select_github_tools(
+        toolkit.get_tools(),
+        include_read=include_read,
+        include_write=include_write,
+    )
+
+
+def build_openapi_toolkit(
+    runtime: Runtime[Context],
+    *,
+    allow_dangerous_requests: bool | None = None,
+) -> OpenAPIToolkit:
     """Build (or return cached) OpenAPIToolkit for GitHub REST API calls."""
     ctx = runtime.context
     installation_id = ctx.github_installation_id.strip()
@@ -89,7 +135,10 @@ def build_openapi_toolkit(runtime: Runtime[Context]) -> OpenAPIToolkit:
 
     spec_path = os.environ.get("GITHUB_OPENAPI_SPEC_PATH", "").strip()
     api_version = os.environ.get("GITHUB_API_VERSION", "2022-11-28").strip()
-    allow_dangerous = _env_bool("GITHUB_OPENAPI_ALLOW_DANGEROUS_REQUESTS", True)
+    if allow_dangerous_requests is None:
+        allow_dangerous = _env_bool("GITHUB_OPENAPI_ALLOW_DANGEROUS_REQUESTS", True)
+    else:
+        allow_dangerous = allow_dangerous_requests
     json_agent_max_iterations = int(os.environ.get("GITHUB_OPENAPI_JSON_AGENT_MAX_ITERATIONS", "15"))
     json_spec_max_value_length = int(os.environ.get("GITHUB_OPENAPI_JSON_SPEC_MAX_VALUE_LENGTH", "200"))
     verbose = _env_bool("GITHUB_OPENAPI_VERBOSE", False)

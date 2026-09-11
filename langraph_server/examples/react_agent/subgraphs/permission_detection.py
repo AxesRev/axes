@@ -15,6 +15,7 @@ from langchain_core.messages import AIMessage, AnyMessage, HumanMessage
 from langgraph.graph import StateGraph, add_messages
 from langgraph.runtime import Runtime
 
+from examples.react_agent.app_api_tools import load_detection_lookup_tools
 from examples.react_agent.context import Context
 from examples.react_agent.nodes.tools import _get_all_tools
 from examples.react_agent.nodes.validator import validate_results
@@ -135,13 +136,21 @@ def _detector_system_prompt(request: ModelRequest) -> str:
 @wrap_model_call
 async def _bind_configured_model(request: ModelRequest, handler):
     context = request.runtime.context
+    selected_apps = list(request.state.get("selected_apps") or [])
+    inspect_tools = await load_detection_lookup_tools(
+        runtime=request.runtime,
+        selected_apps=selected_apps,
+    )
+    existing_names = {getattr(tool, "name", None) for tool in request.tools}
+    extra_tools = [tool for tool in inspect_tools if getattr(tool, "name", None) not in existing_names]
     return await handler(
         request.override(
             model=load_chat_model(
                 context.model,
                 thinking_budget_tokens=context.thinking_budget_tokens,
                 reasoning_effort=context.reasoning_effort,
-            )
+            ),
+            tools=[*request.tools, *extra_tools],
         )
     )
 

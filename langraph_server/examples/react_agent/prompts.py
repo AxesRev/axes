@@ -38,6 +38,7 @@ Your job:
   - Determine resource and permission together, using shared evidence from tools.
   - The requester is the identity in the user-context block. Do not search for a different user.
   - Use lookup tools for the resource/permission and for additional facts about that identity's environment.
+  - App inspect tools (when present) query the live system read-only to verify identifiers. They cannot grant access.
   - When you are confident, stop calling lookup tools and emit structured output with both fields and justifications.
   - Never finish with a plain-text answer. Complete the task by emitting structured output.
 
