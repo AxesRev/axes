@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 TOOLS: list[Any] = [search_docs_by_string]
 _READ_TOOL_NAME = "read_neo4j_cypher"
 
-_MAX_TOOL_RESULT_TOKENS = 10_000
+_MAX_TOOL_RESULT_TOKENS = 30_000
 _TOO_LARGE_MESSAGE = "Result was too large, use the tool with more narrow filters"
 
 
