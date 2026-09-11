@@ -19,9 +19,12 @@ class Permission(BaseModel):
         str | None,
         Field(
             description=(
-                "Concrete name or identifier of the specific resource, as it appears in tools (external data sources), "
-                "documentation, or graph/user-context data. An identifier is not required when the source gives a "
-                "concrete name. Null only when the request names no specific resource."
+                "Concrete name or identifier of the entity the request is about, as it appears in tools "
+                "(external data sources), documentation, or graph/user-context data. Prefer that entity's "
+                "identifier when the request is about a specific resource or named permission object and the "
+                "source has one. If the request is a kind of permission not tied to a particular instance, "
+                "use the object/type they mean — not a related record's identifier. Null when there is no "
+                "such entity."
             ),
         ),
     ] = None
@@ -35,9 +38,11 @@ class FieldResult(BaseModel):
         str | None,
         Field(
             description=(
-                "Canonical value for this field. For `resource`, use null only when the request truly does not "
-                "name a specific resource; otherwise use the concrete name or identifier as it appears in "
-                "lookup-tool results (external data sources), documentation snippets, or graph/user-context data."
+                "Canonical value for this field. For `resource`: if the request is about a specific resource "
+                "or named permission object, prefer that entity's identifier from lookup-tool results when "
+                "one exists; otherwise the concrete name from the source. If the request is a kind of "
+                "permission not tied to a particular instance, use the object/type they mean (or null) — "
+                "not an identifier of a related record or neighboring resource."
             ),
         ),
     ] = None
@@ -62,10 +67,11 @@ class DetectedPermission(BaseModel):
         Field(
             min_length=1,
             description=(
-                "Proof of why `resource_result.value` is the correct resource. Name the external data source "
-                "used to pick it: a lookup tool (tool name and the name or identifier it returned), an injected "
-                "documentation snippet that uses that name, or graph/user-context data that lists it. "
-                "The original user request is not a source. Do not write that the name matches what the user asked."
+                "Proof of why `resource_result.value` is the correct resource (or why it is null). Name the "
+                "external data source used: a lookup tool (tool name and the name or identifier it returned), "
+                "an injected documentation snippet, or graph/user-context data. The original user request is "
+                "not a source. If the request was not about a specific instance, explain why this value is "
+                "the permission/object they meant rather than a related record's identifier."
             ),
         ),
     ]
@@ -100,10 +106,12 @@ class ValidationVerdict(BaseModel):
         Field(
             description=(
                 "True only if resource and permission together correctly satisfy the user request AND "
-                "the detector justification names an external source that proves the resource "
-                "(a concrete name or identifier). Accept: a justification that cites a lookup tool, "
-                "documentation snippet, or graph/user-context record using that same name or identifier. "
-                "Do not fail a source-backed concrete name solely because it is not an identifier. "
+                "the detector justification names an external source that proves that choice. "
+                "If the request was about a specific resource or named permission object, prefer that "
+                "entity's identifier when tools had one. If the request was a kind of permission not tied "
+                "to a particular instance, reject a related record/neighbor identifier. "
+                "Accept: a justification that cites a lookup tool, documentation snippet, or graph/user-context "
+                "record using that same name or identifier. "
                 "Reject: guesswork, mismatch with user context, irrelevance, justification contradicting value, "
                 "or a justification that only restates the user request."
             ),
@@ -113,9 +121,10 @@ class ValidationVerdict(BaseModel):
         str | None,
         Field(
             description=(
-                "If `passed` is false and `resource` is wrong, or the justification does not cite an external "
-                "source proving that name or identifier: short note on what was wrong and how to improve "
-                "(WHAT, not full how-to). Otherwise null."
+                "If `passed` is false and `resource` is wrong (including: missing identifier for a specific "
+                "entity when tools had one, or a related-record identifier when they asked for a kind of "
+                "permission), or the justification does not cite an external source proving that choice: "
+                "short note on what was wrong and how to improve (WHAT, not full how-to). Otherwise null."
             )
         ),
     ] = None

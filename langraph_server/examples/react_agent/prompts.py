@@ -43,9 +43,9 @@ Your job:
   - Never finish with a plain-text answer. Complete the task by emitting structured output.
 
 Field meanings:
-  - resource: The concrete name or identifier of the specific named entity, as it appears in an external source (lookup-tool results, documentation snippets, or graph/user-context data). An identifier is fine when the source provides one; a concrete resource name from the source is equally valid. Do not paraphrase, guess, or invent a name. If the request does not refer to a specific named entity, the value MUST be null. When the user implies a resource without using the name the source uses, look it up and emit the name or identifier from that source.
-  - permission: The access level the user is REQUESTING — not what they already have, and not a label chosen because it appears among existing bindings on a resource. Derive the canonical name from the user's wording and documentation snippets. If they ask to push or write code, output WRITE (or the doc-backed equivalent) — not ADMIN unless they explicitly request admin access. Tool data showing bindings on a resource describes current assignments only; it is not the catalog of grantable permission levels.
-  - justification: Proof of why `resource` is that name or identifier. Name the data source you used to pick it: which lookup tool (and the name or identifier it returned), which injected documentation snippet, or which graph/user-context record. The user request is not a source.
+  - resource: The concrete name or identifier of the entity the user wants access on, as it appears in an external source (lookup-tool results, documentation snippets, or graph/user-context data). If they asked about a specific resource or a named permission object, look it up even when they used informal wording, and prefer that entity's identifier when the source has one. If they asked for a kind of permission that is not tied to a particular instance, do not fill this with an identifier of a related record or neighboring resource — use the object/type or permission they mean, or null if there is no such entity. Do not paraphrase, guess, or invent a name.
+  - permission: The access level the user is REQUESTING — not what they already have, and not a label chosen because it appears among existing bindings on a resource. Derive the canonical name from the user's wording and documentation snippets. If they ask to push or write code, output WRITE (or the doc-backed equivalent) — not ADMIN unless they explicitly request admin access. Tool data showing bindings on a resource describes current assignments only; it is not the catalog of grantable permission levels. When the request is not about a specific instance, identify the exact permission they mean rather than a related resource.
+  - justification: Proof of why `resource` is that name or identifier (or why it is null). Name the data source you used: which lookup tool (and the name or identifier it returned), which injected documentation snippet, or which graph/user-context record. The user request is not a source.
 
 Documentation snippets semantically matched to the user's latest message:
 {doc_corpus_context}
@@ -54,8 +54,9 @@ Requesting user (given identity — current state only, not an exhaustive list o
 {user_context}
 
 When filling `resource`:
-  - Output the concrete name or identifier as it appears in tools, documentation snippets, or graph/user-context data.
-  - Prefer an identifier when the cited source includes one; otherwise use the concrete name the source uses.
+  - First decide: did the user ask for access on a specific resource / named permission object, or for a kind of permission not tied to one instance?
+  - Specific entity: look it up; prefer that entity's identifier when the source has one, even if the user did not use the exact name or id. Otherwise use the concrete name the source uses.
+  - Not a specific instance: emit the object/type or leave resource null. Do not substitute an identifier of a related record or neighboring resource that merely shares the topic.
   - Do not copy informal wording from the user request unless that same string appears in one of those sources.
 
 When filling `justification`:
@@ -65,6 +66,7 @@ When filling `justification`:
 
 When filling `permission`:
   - Output the access level the user is REQUESTING, using canonical vocabulary from their wording and documentation.
+  - If the request is not about a specific instance, identify that permission; do not pick it because a related resource happened to have an identifier.
   - Do NOT output ADMIN unless the user explicitly asked for admin/administrator access.
   - Do NOT pick a permission label because it is the only non-read binding on a resource in tool results or user data.
   - Bindings you see (e.g. READ, ADMIN on a repo) describe current assignments — not the complete set of grantable levels.
@@ -78,10 +80,13 @@ PERMISSION_DETECTOR_TASK_TEMPLATE = """Original user request:
 Determine resource and permission together. Use lookup tools as needed to verify real information.
 When you are confident, emit structured output with both fields and a justification.
 
-For `resource`, the value must be a concrete name or identifier taken from tools (external data sources),
-documentation snippets, or graph/user-context data — not a guessed or paraphrased name.
+For `resource`, first decide whether the request targets a specific entity or a kind of permission.
+If it is a specific resource or named permission object, look it up and prefer that entity's identifier when
+tools provide one — even if the user did not use the exact name or id.
+If it is not a specific instance, emit the object/type they mean (or null) — not an identifier of a related
+record or neighboring resource.
 
-For `justification`, name the data source that proved that resource: tool call (tool name + returned name or identifier),
+For `justification`, name the data source that proved that choice: tool call (tool name + returned name or identifier),
 documentation snippet, or graph/user-context record. Do not treat the user request as that source.
 
 Tool and user-context data reflect the user's current access state. That state is accurate for what exists now,
@@ -109,8 +114,13 @@ resource; wrong fields get non-null feedback, correct fields stay null.
 
 For `resource`: reject values that are not a concrete name or identifier backed by lookup-tool results
 (external data sources), documentation snippets, or graph/user-context data. Reject paraphrases, nicknames,
-and guessed names even when they match the user's informal wording. Accept a source-backed concrete name;
-do not reject it solely because it is not an identifier.
+and guessed names even when they match the user's informal wording.
+If the user asked about a specific resource or named permission object and tools returned that entity's identifier,
+reject a display name or informal wording when the identifier was available.
+If the user asked for a kind of permission not tied to a particular instance, reject an identifier of a related
+record or neighboring resource; the value must be the object/type or permission they meant, or null.
+Accept a source-backed concrete name for a type/object when that is what they asked for; do not reject it
+solely because it is not an instance id.
 
 For `justification`: this is the proof that `resource` is the correct name or identifier. Reject when it does not name
 an external data source — a lookup-tool result, documentation snippet, or graph/user-context record — that
