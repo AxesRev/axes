@@ -197,6 +197,7 @@ async def apply_structured_response(state: State, runtime: Runtime[Context]) -> 
     return {
         "resource_result": detected.resource_result,
         "permission_result": detected.permission_result,
+        "justification": detected.justification,
     }
 
 

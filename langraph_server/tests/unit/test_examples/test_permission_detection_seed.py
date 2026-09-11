@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from langchain_core.messages import HumanMessage, ToolMessage
 
-from examples.react_agent.state import DetectedPermission, FieldResult, State
+from examples.react_agent.nodes.validator import validate_results
+from examples.react_agent.state import DetectedPermission, FieldResult, State, ValidationVerdict
 from examples.react_agent.subgraphs.permission_detection import (
     _BindDetectorRuntime,
     _extra_detector_context,
@@ -114,11 +116,43 @@ async def test_apply_structured_response_copies_field_results() -> None:
     detected = DetectedPermission(
         resource_result=FieldResult(value="AxesRev/Test_repo", justification="Matched the named test repo."),
         permission_result=FieldResult(value="write", justification="User asked to push code."),
+        justification="read_neo4j_cypher returned a Resource named AxesRev/Test_repo.",
     )
     state = State(structured_response=detected)
     update = await apply_structured_response(state, runtime=None)  # type: ignore[arg-type]
     assert update["resource_result"].value == "AxesRev/Test_repo"
     assert update["permission_result"].value == "write"
+    assert "read_neo4j_cypher" in update["justification"]
+
+
+@pytest.mark.asyncio
+async def test_validate_results_sends_justification_and_returns_resource_feedback() -> None:
+    state = State(
+        user_request="I need Prompt Builder access",
+        resource_result=FieldResult(value="GenAI Prompt Templates", justification="Matches the request."),
+        permission_result=FieldResult(value="WRITE", justification="User asked to create."),
+        justification="The resource matches what the user asked for.",
+    )
+    runtime = MagicMock()
+    runtime.context.model = "test-model"
+    structured = MagicMock()
+    structured.ainvoke = AsyncMock(
+        return_value=ValidationVerdict(
+            passed=False,
+            resource_feedback="Cite a lookup tool or doc that returned this identifier.",
+        )
+    )
+    model = MagicMock()
+    model.with_structured_output.return_value = structured
+
+    with patch("examples.react_agent.nodes.validator.load_chat_model", return_value=model):
+        update = await validate_results(state, runtime)
+
+    user_payload = json.loads(structured.ainvoke.await_args.args[0][1]["content"])
+    assert user_payload["results"]["justification"] == "The resource matches what the user asked for."
+    assert update["resource_feedback"] == "Cite a lookup tool or doc that returned this identifier."
+    assert update["permission_feedback"] is None
+    assert route_validator(State(resource_feedback=update["resource_feedback"])) == "inject_feedback"
 
 
 def test_route_validator_reruns_detector_when_feedback_present() -> None:

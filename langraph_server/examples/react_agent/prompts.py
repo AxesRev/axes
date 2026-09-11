@@ -38,13 +38,14 @@ Your job:
   - Determine resource and permission together, using shared evidence from tools.
   - The requester is the identity in the user-context block. Do not search for a different user.
   - Use lookup tools for the resource/permission and for additional facts about that identity's environment.
-  - App inspect tools (when present) query the live system read-only to verify identifiers. They cannot grant access.
-  - When you are confident, stop calling lookup tools and emit structured output with both fields and justifications.
+  - App inspect tools (when present) query the live system read-only to verify names and identifiers. They cannot grant access.
+  - When you are confident, stop calling lookup tools and emit structured output with both fields and a justification.
   - Never finish with a plain-text answer. Complete the task by emitting structured output.
 
 Field meanings:
-  - resource: The exact name or identifier of the specific named entity, as it appears in the target system. The value MUST match an identifier verified against lookup-tool results (external data sources), documentation snippets, or graph/user-context data. Do not paraphrase, guess, or invent a display name. If the request does not refer to a specific named entity, the value MUST be null. When the user implies a resource without using the canonical identifier, look it up with the available tools and emit the verified identifier.
+  - resource: The concrete name or identifier of the specific named entity, as it appears in an external source (lookup-tool results, documentation snippets, or graph/user-context data). An identifier is fine when the source provides one; a concrete resource name from the source is equally valid. Do not paraphrase, guess, or invent a name. If the request does not refer to a specific named entity, the value MUST be null. When the user implies a resource without using the name the source uses, look it up and emit the name or identifier from that source.
   - permission: The access level the user is REQUESTING — not what they already have, and not a label chosen because it appears among existing bindings on a resource. Derive the canonical name from the user's wording and documentation snippets. If they ask to push or write code, output WRITE (or the doc-backed equivalent) — not ADMIN unless they explicitly request admin access. Tool data showing bindings on a resource describes current assignments only; it is not the catalog of grantable permission levels.
+  - justification: Proof of why `resource` is that name or identifier. Name the data source you used to pick it: which lookup tool (and the name or identifier it returned), which injected documentation snippet, or which graph/user-context record. The user request is not a source.
 
 Documentation snippets semantically matched to the user's latest message:
 {doc_corpus_context}
@@ -53,8 +54,14 @@ Requesting user (given identity — current state only, not an exhaustive list o
 {user_context}
 
 When filling `resource`:
-  - Output the exact name/identifier from tools, documentation snippets, or graph/user-context data.
-  - Do not copy informal wording from the user request unless that same string was verified in one of those sources.
+  - Output the concrete name or identifier as it appears in tools, documentation snippets, or graph/user-context data.
+  - Prefer an identifier when the cited source includes one; otherwise use the concrete name the source uses.
+  - Do not copy informal wording from the user request unless that same string appears in one of those sources.
+
+When filling `justification`:
+  - State which tool call, documentation snippet, or graph/user-context record proved that resource.
+  - Quote or name what that source returned (the name or identifier).
+  - Do not justify the resource by restating the user's wording.
 
 When filling `permission`:
   - Output the access level the user is REQUESTING, using canonical vocabulary from their wording and documentation.
@@ -69,16 +76,19 @@ PERMISSION_DETECTOR_TASK_TEMPLATE = """Original user request:
 \"\"\"
 {feedback_block}
 Determine resource and permission together. Use lookup tools as needed to verify real information.
-When you are confident, emit structured output with both fields and justifications.
+When you are confident, emit structured output with both fields and a justification.
 
-For `resource`, the value must be the exact identifier verified against tools (external data sources),
+For `resource`, the value must be a concrete name or identifier taken from tools (external data sources),
 documentation snippets, or graph/user-context data — not a guessed or paraphrased name.
+
+For `justification`, name the data source that proved that resource: tool call (tool name + returned name or identifier),
+documentation snippet, or graph/user-context record. Do not treat the user request as that source.
 
 Tool and user-context data reflect the user's current access state. That state is accurate for what exists now,
 but is not an exhaustive list of valid resources or permission levels. When tools return permission
 bindings on a resource, that shows who currently has what — not the complete set of grantable levels.
 Prefer the user request and documentation snippets for valid permission levels; use tools to verify current facts
-and the exact resource identifier.
+and the resource name or identifier.
 Do not infer policies that are not explicitly stated.
 Do NOT treat the permission labels present on a resource as the only valid options.
 """
@@ -90,15 +100,23 @@ Validator feedback:
 {feedback}
 """
 
-VALIDATOR_PROMPT = """You validate two field results (`resource`, `permission`) against the original user request.
+VALIDATOR_PROMPT = """You validate two field results (`resource`, `permission`) and the detector `justification`
+against the original user request.
 
 Return a `ValidationVerdict` only (no extra text). Field descriptions on that schema define acceptance criteria and
-feedback rules. Only mark `passed` true when both fields are correct together; wrong fields get non-null
-feedback, correct fields stay null.
+feedback rules. Only mark `passed` true when both fields are correct together and the justification proves the
+resource; wrong fields get non-null feedback, correct fields stay null.
 
-For `resource`: reject values that are not the exact name/identifier verified against lookup-tool results
+For `resource`: reject values that are not a concrete name or identifier backed by lookup-tool results
 (external data sources), documentation snippets, or graph/user-context data. Reject paraphrases, nicknames,
-and guessed names even when they match the user's informal wording.
+and guessed names even when they match the user's informal wording. Accept a source-backed concrete name;
+do not reject it solely because it is not an identifier.
+
+For `justification`: this is the proof that `resource` is the correct name or identifier. Reject when it does not name
+an external data source — a lookup-tool result, documentation snippet, or graph/user-context record — that
+uses that same name or identifier. The original user request is not an external source. Restating the user's wording
+("the user asked for X", "this matches the request") is not proof. Put that failure in `resource_feedback`.
+When `resource` is null because the request named no specific entity, a source citation is not required.
 
 For `permission`: reject ADMIN (or equivalent admin labels) when the user asked for a narrower capability such as
 push, write, or contributor access and did not explicitly request admin/administrator access. Reject any permission

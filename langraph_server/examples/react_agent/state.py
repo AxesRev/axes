@@ -19,8 +19,9 @@ class Permission(BaseModel):
         str | None,
         Field(
             description=(
-                "Exact name or identifier of the specific resource, verified against tools (external data sources), "
-                "documentation, or graph/user-context data. Null only when the request names no specific resource."
+                "Concrete name or identifier of the specific resource, as it appears in tools (external data sources), "
+                "documentation, or graph/user-context data. An identifier is not required when the source gives a "
+                "concrete name. Null only when the request names no specific resource."
             ),
         ),
     ] = None
@@ -35,8 +36,8 @@ class FieldResult(BaseModel):
         Field(
             description=(
                 "Canonical value for this field. For `resource`, use null only when the request truly does not "
-                "name a specific resource; otherwise use the exact identifier verified against lookup-tool results "
-                "(external data sources), documentation snippets, or graph/user-context data."
+                "name a specific resource; otherwise use the concrete name or identifier as it appears in "
+                "lookup-tool results (external data sources), documentation snippets, or graph/user-context data."
             ),
         ),
     ] = None
@@ -52,10 +53,22 @@ class FieldResult(BaseModel):
 
 
 class DetectedPermission(BaseModel):
-    """Structured detector output: resource and permission field results."""
+    """Structured detector output: resource, permission, and proof of the resource."""
 
     resource_result: FieldResult
     permission_result: FieldResult
+    justification: Annotated[
+        str,
+        Field(
+            min_length=1,
+            description=(
+                "Proof of why `resource_result.value` is the correct resource. Name the external data source "
+                "used to pick it: a lookup tool (tool name and the name or identifier it returned), an injected "
+                "documentation snippet that uses that name, or graph/user-context data that lists it. "
+                "The original user request is not a source. Do not write that the name matches what the user asked."
+            ),
+        ),
+    ]
 
 
 class AccessRequestEvaluation(BaseModel):
@@ -86,9 +99,13 @@ class ValidationVerdict(BaseModel):
         bool,
         Field(
             description=(
-                "True only if resource and permission together correctly satisfy the user request. "
-                "Accept: tool-backed or context-aligned justifications that are logically sound. "
-                "Reject: guesswork, mismatch with user context, irrelevance, or justification contradicting value."
+                "True only if resource and permission together correctly satisfy the user request AND "
+                "the detector justification names an external source that proves the resource "
+                "(a concrete name or identifier). Accept: a justification that cites a lookup tool, "
+                "documentation snippet, or graph/user-context record using that same name or identifier. "
+                "Do not fail a source-backed concrete name solely because it is not an identifier. "
+                "Reject: guesswork, mismatch with user context, irrelevance, justification contradicting value, "
+                "or a justification that only restates the user request."
             ),
         ),
     ]
@@ -96,7 +113,8 @@ class ValidationVerdict(BaseModel):
         str | None,
         Field(
             description=(
-                "If `passed` is false and `resource` is wrong: short note on what was wrong and how to improve "
+                "If `passed` is false and `resource` is wrong, or the justification does not cite an external "
+                "source proving that name or identifier: short note on what was wrong and how to improve "
                 "(WHAT, not full how-to). Otherwise null."
             )
         ),
@@ -188,6 +206,9 @@ class State(InputState):
 
     permission_result: FieldResult | None = field(default=None)
     """Result produced by the permission detector."""
+
+    justification: str = field(default="")
+    """Detector proof of which external source established the resource name or identifier."""
 
     structured_response: DetectedPermission | None = field(default=None)
     """Structured output from the detector agent. Copied into the per-field results."""

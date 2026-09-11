@@ -1,8 +1,8 @@
 """Validator node for the permission detection subgraph.
 
-Reads the original user request and the two per-field results, then asks an
-LLM to produce a structured verdict that says either "all good" or which
-fields need to be re-derived (with feedback).
+Reads the original user request, the two per-field results, and the detector
+justification, then asks an LLM to produce a structured verdict that says
+either "all good" or which fields need to be re-derived (with feedback).
 """
 
 from __future__ import annotations
@@ -47,6 +47,7 @@ async def validate_results(state: State, runtime: Runtime[Context]) -> dict[str,
         "results": {
             "resource": _serialize_field(state.resource_result),
             "permission": _serialize_field(state.permission_result),
+            "justification": state.justification,
         },
     }
 
