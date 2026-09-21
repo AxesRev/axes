@@ -24,6 +24,7 @@ from examples.react_agent.subgraphs.permission_detection import (
     PermissionDetectionInput,
     PermissionDetectionOutput,
     make_permission_detection_graph,
+    make_permission_detection_node,
 )
 from examples.react_agent.user_context_models import UserContextData, UserContextGroup, UserContextPermission
 
@@ -140,8 +141,8 @@ def test_evaluation_and_grant_graphs_use_private_transcripts() -> None:
     _assert_private_transcript_interface(access_grant_execution_graph, expect_output_messages=True)
 
 
-async def test_run_access_request_evaluation_posts_denial_justification() -> None:
-    evaluation = AccessRequestEvaluation(should_grant=False, justification="Not a member of the org.")
+async def test_run_access_request_evaluation_posts_result_json() -> None:
+    evaluation = AccessRequestEvaluation(should_grant=True, justification="Requester is on the owning team.")
     with patch.object(
         access_request_evaluation_graph,
         "ainvoke",
@@ -149,8 +150,32 @@ async def test_run_access_request_evaluation_posts_denial_justification() -> Non
     ):
         result = await run_access_request_evaluation(State(), Runtime(context=Context()))
 
-    assert result["access_evaluation"].should_grant is False
-    assert result["messages"][0].content == "Not a member of the org."
+    assert result["access_evaluation"] == evaluation
+    assert result["messages"][0].content == evaluation.model_dump_json()
+
+
+async def test_run_permission_detection_posts_result_json() -> None:
+    permission = Permission(resource="AxesRev", permission="admin")
+    compiled = AsyncMock()
+    compiled.ainvoke = AsyncMock(return_value={"permission": permission})
+    run_permission_detection = make_permission_detection_node(compiled)
+
+    result = await run_permission_detection(State(), Runtime(context=Context()))
+
+    assert result["permission"] == permission
+    assert result["messages"][0].content == permission.model_dump_json()
+
+
+async def test_run_permission_detection_posts_failure_reply() -> None:
+    failure = AIMessage(content="Could not determine a permission.")
+    compiled = AsyncMock()
+    compiled.ainvoke = AsyncMock(return_value={"permission": None, "messages": [failure]})
+    run_permission_detection = make_permission_detection_node(compiled)
+
+    result = await run_permission_detection(State(), Runtime(context=Context()))
+
+    assert "permission" not in result
+    assert result["messages"][0].content == failure.content
 
 
 async def test_run_access_grant_execution_copies_only_final_reply() -> None:

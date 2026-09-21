@@ -119,12 +119,12 @@ access_request_evaluation_graph = builder.compile(name="Access Request Evaluatio
 
 
 async def run_access_request_evaluation(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
-    """Run evaluation privately; copy a denial justification onto the parent thread."""
+    """Run evaluation privately and copy its JSON result onto the parent thread."""
     result = await access_request_evaluation_graph.ainvoke(state, context=runtime.context)
     evaluation = result.get("access_evaluation")
     if evaluation is None:
         return {}
-    update: dict[str, Any] = {"access_evaluation": evaluation}
-    if not evaluation.should_grant:
-        update["messages"] = [AIMessage(content=evaluation.justification)]
-    return update
+    return {
+        "access_evaluation": evaluation,
+        "messages": [AIMessage(content=evaluation.model_dump_json())],
+    }

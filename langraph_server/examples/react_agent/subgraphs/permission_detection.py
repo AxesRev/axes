@@ -279,13 +279,13 @@ async def make_permission_detection_graph():
 
 
 def make_permission_detection_node(compiled):
-    """Wrap the detector so only ``permission`` (or a failure reply) reaches the parent."""
+    """Wrap the detector so the parent gets the permission and its JSON in chat."""
 
     async def run_permission_detection(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
         result = await compiled.ainvoke(state, context=runtime.context)
         permission = result.get("permission")
         if permission is not None:
-            return {"permission": permission}
+            return {"permission": permission, "messages": [AIMessage(content=permission.model_dump_json())]}
         messages = result.get("messages") or []
         last = messages[-1] if messages else None
         if not isinstance(last, AIMessage) or not get_message_text(last).strip():
