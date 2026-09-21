@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, model_validator
 
 PERMISSION_READ = "read"
 PERMISSION_CREATE = "create"
@@ -100,11 +100,17 @@ class SalesforceGroupExtra(BaseModel):
     kind: Literal["public_group", "role_group"]
 
 
+class SalesforceUserPermissionFlag(BaseModel):
+    label: str
+    enabled: bool
+
+
 class SalesforceAppIdentityExtra(BaseModel):
     """Optional shape stored on AppIdentity.extra for Salesforce users."""
 
     role_id: str | None = None
     role_name: str | None = None
+    user_permissions: dict[str, SalesforceUserPermissionFlag] = Field(default_factory=dict)
 
 
 class SalesforceProfileExtra(BaseModel):

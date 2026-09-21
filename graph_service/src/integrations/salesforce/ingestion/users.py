@@ -15,18 +15,14 @@ from integrations.salesforce.ingestion.shared import (
     ConnectionRef,
     merge_app_identities,
 )
-from integrations.salesforce.models import SalesforceAppIdentityExtra
-from integrations.salesforce.soql import build_user_by_ids_soql
+from integrations.salesforce.models import SalesforceAppIdentityExtra, SalesforceUserPermissionFlag
+from integrations.salesforce.share_objects import validate_field_name
+from integrations.salesforce.soql import build_active_users_soql, build_user_by_ids_soql
 
 logger = logging.getLogger(__name__)
 
-_USER_SOQL = """
-SELECT Id, Username, Name, Email, ProfileId, UserRoleId, ManagerId, IsActive
-FROM User
-WHERE IsActive = true
-"""
-
 _ROLE_SOQL = "SELECT Id, Name, DeveloperName FROM UserRole"
+_USER_PERMISSION_PREFIX = "UserPermissions"
 
 
 def _role_name_by_id(roles: list[dict[str, Any]]) -> dict[str, str]:
@@ -43,17 +39,63 @@ def email_from_user(user: dict[str, Any]) -> str | None:
     return None
 
 
+def select_user_permission_fields(fields: list[dict[str, Any]]) -> list[tuple[str, str]]:
+    selected: list[tuple[str, str]] = []
+    for field in fields:
+        name = field.get("name")
+        if not isinstance(name, str) or not name.startswith(_USER_PERMISSION_PREFIX):
+            continue
+        if field.get("type") != "boolean":
+            continue
+        try:
+            validate_field_name(name)
+        except ValueError:
+            continue
+        label = field.get("label")
+        selected.append((name, label.strip() if isinstance(label, str) and label.strip() else name))
+    selected.sort(key=lambda item: item[0])
+    return selected
+
+
+def load_user_permission_fields(sf: Salesforce) -> list[tuple[str, str]]:
+    try:
+        payload = sf.User.describe()
+    except Exception as exc:
+        logger.warning("user_permission_describe_failed error=%s", exc)
+        return []
+    if not isinstance(payload, dict):
+        return []
+    fields = payload.get("fields")
+    if not isinstance(fields, list):
+        return []
+    return select_user_permission_fields([field for field in fields if isinstance(field, dict)])
+
+
+def user_permissions_from_record(
+    user: dict[str, Any],
+    permission_fields: list[tuple[str, str]],
+) -> dict[str, SalesforceUserPermissionFlag]:
+    flags: dict[str, SalesforceUserPermissionFlag] = {}
+    for name, label in permission_fields:
+        value = user.get(name)
+        if isinstance(value, bool):
+            flags[name] = SalesforceUserPermissionFlag(label=label, enabled=value)
+    return flags
+
+
 def identity_row_from_user(
     user: dict[str, Any],
     *,
     connection: ConnectionRef,
     role_name_by_id: dict[str, str],
+    permission_fields: list[tuple[str, str]] | None = None,
 ) -> AppIdentityRow:
     role_id = user.get("UserRoleId")
     role_id_str = str(role_id) if role_id else None
     extra = SalesforceAppIdentityExtra(
         role_id=role_id_str,
         role_name=role_name_by_id.get(role_id_str) if role_id_str else None,
+        user_permissions=user_permissions_from_record(user, permission_fields or []),
     )
     return AppIdentityRow(
         app=SALESFORCE_APP,
@@ -87,10 +129,19 @@ async def ingest_users(
     *,
     connection: ConnectionRef,
 ) -> dict[str, str]:
-    users = query_all(sf, _USER_SOQL)
+    permission_fields = load_user_permission_fields(sf)
+    users = query_all(sf, build_active_users_soql(name for name, _label in permission_fields))
     roles = query_all(sf, _ROLE_SOQL)
     role_name_by_id = _role_name_by_id(roles)
-    rows = [identity_row_from_user(user, connection=connection, role_name_by_id=role_name_by_id) for user in users]
+    rows = [
+        identity_row_from_user(
+            user,
+            connection=connection,
+            role_name_by_id=role_name_by_id,
+            permission_fields=permission_fields,
+        )
+        for user in users
+    ]
     await merge_app_identities(rows)
     await _correlate_users(users)
     identity_external_ids = {row["external_id"]: row["external_id"] for row in rows}
@@ -109,10 +160,19 @@ async def ensure_identities_for_ids(
     if not missing:
         return
 
-    users = query_all(sf, build_user_by_ids_soql(missing))
+    permission_fields = load_user_permission_fields(sf)
+    users = query_all(sf, build_user_by_ids_soql(missing, (name for name, _label in permission_fields)))
     roles = query_all(sf, _ROLE_SOQL)
     role_name_by_id = _role_name_by_id(roles)
-    rows = [identity_row_from_user(user, connection=connection, role_name_by_id=role_name_by_id) for user in users]
+    rows = [
+        identity_row_from_user(
+            user,
+            connection=connection,
+            role_name_by_id=role_name_by_id,
+            permission_fields=permission_fields,
+        )
+        for user in users
+    ]
     if rows:
         await merge_app_identities(rows)
         await _correlate_users(users)

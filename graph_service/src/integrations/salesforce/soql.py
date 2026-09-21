@@ -10,17 +10,42 @@ from integrations.salesforce.share_objects import (
     validate_share_object_api_name,
 )
 
+_USER_BASE_FIELDS = (
+    "Id",
+    "Username",
+    "Name",
+    "Email",
+    "ProfileId",
+    "UserRoleId",
+    "ManagerId",
+    "IsActive",
+)
+
 
 def format_id_in_clause(ids: Iterable[str]) -> str:
     validated_ids = [validate_salesforce_id(sf_id) for sf_id in ids]
     return ", ".join(f"'{sf_id}'" for sf_id in validated_ids)
 
 
-def build_user_by_ids_soql(ids: Iterable[str]) -> str:
+def user_select_clause(permission_fields: Iterable[str] = ()) -> str:
+    fields = list(_USER_BASE_FIELDS)
+    for name in permission_fields:
+        validated = validate_field_name(name)
+        if not validated.startswith("UserPermissions"):
+            msg = f"not a user permission field: {name!r}"
+            raise ValueError(msg)
+        fields.append(validated)
+    return ", ".join(fields)
+
+
+def build_active_users_soql(permission_fields: Iterable[str] = ()) -> str:
+    return "SELECT " + user_select_clause(permission_fields) + " FROM User WHERE IsActive = true"  # nosec B608
+
+
+def build_user_by_ids_soql(ids: Iterable[str], permission_fields: Iterable[str] = ()) -> str:
     id_clause = format_id_in_clause(ids)
     return (
-        "SELECT Id, Username, Name, Email, ProfileId, UserRoleId, ManagerId, IsActive "
-        "FROM User WHERE Id IN (" + id_clause + ")"  # nosec B608
+        "SELECT " + user_select_clause(permission_fields) + " FROM User WHERE Id IN (" + id_clause + ")"  # nosec B608
     )
 
 

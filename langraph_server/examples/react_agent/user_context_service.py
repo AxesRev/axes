@@ -18,6 +18,7 @@ OPTIONAL MATCH (u)-[:ASSIGNED_PROFILE]->(pr:Profile)
 RETURN u.app AS app,
        u.external_id AS user_id,
        u.name AS user_name,
+       u.extra AS extra,
        collect(DISTINCT {
            external_id: g.external_id,
            name: g.name,
