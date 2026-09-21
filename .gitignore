@@ -18,8 +18,9 @@ wheels/
 # VSCode
 .vscode/
 
-# Cursor local rules
+# Cursor local rules and skills
 .cursor/rules/
+.cursor/skills/
 
 # Testing
 .coverage
