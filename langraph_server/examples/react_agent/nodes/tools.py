@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 
 TOOLS: list[Any] = [search_docs_by_string]
 _READ_TOOL_NAME = "read_neo4j_cypher"
+_SCHEMA_TOOL_NAME = "get_neo4j_schema"
 
 _MAX_TOOL_RESULT_TOKENS = 30_000
 _TOO_LARGE_MESSAGE = "Result was too large, use the tool with more narrow filters"
@@ -119,7 +120,7 @@ def _extract_tool_text(result: Any) -> str:
     return str(content)
 
 
-async def _get_read_neo4j_tool() -> BaseTool | None:
+async def _get_mcp_tool(name: str) -> BaseTool | None:
     servers = _mcp_servers()
     if not servers:
         return None
@@ -127,10 +128,24 @@ async def _get_read_neo4j_tool() -> BaseTool | None:
     client = MultiServerMCPClient(servers)
     tools = await client.get_tools()
     for tool in tools:
-        if tool.name == _READ_TOOL_NAME:
+        if tool.name == name:
             return tool
-    logger.warning("%s tool not found on Neo4j MCP server", _READ_TOOL_NAME)
+    logger.warning("%s tool not found on Neo4j MCP server", name)
     return None
+
+
+async def _get_read_neo4j_tool() -> BaseTool | None:
+    return await _get_mcp_tool(_READ_TOOL_NAME)
+
+
+async def fetch_neo4j_schema() -> str:
+    """Return the Neo4j schema text from MCP, or empty when the tool is unavailable."""
+    schema_tool = await _get_mcp_tool(_SCHEMA_TOOL_NAME)
+    if schema_tool is None:
+        return ""
+
+    result = await schema_tool.ainvoke({})
+    return _extract_tool_text(result).strip()
 
 
 async def read_neo4j_cypher(query: str, params: dict[str, Any] | None = None) -> list[dict[str, Any]]:

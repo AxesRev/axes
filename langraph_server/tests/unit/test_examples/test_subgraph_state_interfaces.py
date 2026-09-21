@@ -203,6 +203,7 @@ def _assert_private_transcript_interface(compiled: object, *, expect_output_mess
     assert "selected_apps" in input_properties
     assert "user_request" in input_properties
     assert "doc_corpus_context" in input_properties
+    assert "neo4j_schema" in input_properties
     assert "messages" not in input_properties
     assert "user_contexts" not in output_properties
     assert "selected_apps" not in output_properties

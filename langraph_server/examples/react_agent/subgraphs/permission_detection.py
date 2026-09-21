@@ -18,6 +18,7 @@ from langgraph.runtime import Runtime
 
 from examples.react_agent.app_api_tools import load_detection_lookup_tools
 from examples.react_agent.context import Context
+from examples.react_agent.neo4j_schema_prompt import build_neo4j_schema_block
 from examples.react_agent.nodes.tools import _get_all_tools, truncate_tool_message
 from examples.react_agent.nodes.validator import validate_results
 from examples.react_agent.prompts import (
@@ -47,6 +48,7 @@ class PermissionDetectionInput:
     user_contexts: list[UserContextData] = field(default_factory=list)
     selected_apps: list[str] = field(default_factory=list)
     doc_corpus_context: str = field(default="")
+    neo4j_schema: str = field(default="")
 
 
 @dataclass
@@ -62,6 +64,7 @@ class PermissionDetectorState(AgentState):
 
     user_contexts: NotRequired[list[UserContextData]]
     doc_corpus_context: NotRequired[str]
+    neo4j_schema: NotRequired[str]
     selected_apps: NotRequired[list[str]]
 
 
@@ -131,6 +134,7 @@ def _detector_system_prompt(request: ModelRequest) -> str:
         system_time=datetime.now(tz=UTC).isoformat(),
         user_context=build_user_context_block(state.get("user_contexts") or []),
         doc_corpus_context=(state.get("doc_corpus_context") or "").strip(),
+        neo4j_schema=build_neo4j_schema_block(state.get("neo4j_schema") or ""),
     )
 
 

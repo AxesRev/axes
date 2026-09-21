@@ -19,7 +19,7 @@ Use tools only to get additional information about that identity, or to look up 
 Documentation snippets semantically matched to the user's latest message:
 {doc_corpus_context}
 
-User context below is the requester's identity, group membership, and existing permission bindings.
+{neo4j_schema}User context below is the requester's identity, group membership, and existing permission bindings.
 Those bindings show who has what now — they are NOT the catalog of grantable permission levels for new requests.
 That data is reliable for present state, but it does not list every valid resource or permission level.
 When the answer depends on membership, resource names, or existing access, use tools to verify current facts about this identity.
@@ -50,7 +50,7 @@ Field meanings:
 Documentation snippets semantically matched to the user's latest message:
 {doc_corpus_context}
 
-Requesting user (given identity — current state only, not an exhaustive list of valid choices):
+{neo4j_schema}Requesting user (given identity — current state only, not an exhaustive list of valid choices):
 {user_context}
 
 When filling `resource`:
@@ -167,7 +167,8 @@ Requesting user (given identity; present access is background, not the grant tes
 
 Documentation snippets semantically matched to the user's latest message:
 {doc_corpus_context}
-System time: {system_time}"""
+
+{neo4j_schema}System time: {system_time}"""
 
 ACCESS_EVALUATION_TASK_TEMPLATE = """Evaluate whether this access request should be granted to the requesting user identified in the user-context block.
 
@@ -228,7 +229,7 @@ Security and scope:
 Documentation snippets semantically matched to the user's latest message:
 {doc_corpus_context}
 
-Requesting user (given identity — grant target):
+{neo4j_schema}Requesting user (given identity — grant target):
 {user_context}
 System time: {system_time}"""
 

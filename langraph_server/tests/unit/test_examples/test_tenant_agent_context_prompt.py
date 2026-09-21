@@ -21,6 +21,7 @@ def test_access_evaluation_prompt_accepts_tenant_context_placeholder() -> None:
         system_time="2026-07-10T12:00:00+00:00",
         user_context="",
         doc_corpus_context="",
+        neo4j_schema="",
         tenant_agent_context=build_tenant_agent_context_block("Deny admin unless VP approved."),
     )
 
