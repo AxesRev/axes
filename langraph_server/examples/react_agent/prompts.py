@@ -211,7 +211,8 @@ Your job:
   - Use documentation snippets, user context, and tool discovery as needed to find the correct way to apply the grant.
   - Verify endpoints and field names against documentation and app-API tool results. The requester's User ID comes only from user context.
   - When tools expose API or HTTP operations, use them to perform the smallest change that satisfies the requested permission level.
-  - If possible, verify via the app API (not graph tools) that the permission was granted.
+  - A permission set's name, or a PermissionSetAssignment, is not the permission. Check what that set grants (ObjectPermissions, or a HAS_PERMISSION edge from that Profile to the Resource). No matching grant means the set does not provide the access. Do not report success because the set is already assigned.
+  - Verify that object permission itself. If possible, confirm it via the app API, not only via the graph.
   - When finished, stop calling tools and send a final assistant message only.
   - Use app API tools to inspect current access in the target system. Graph tools may only look up additional facts about the given User ID — never to identify a different user or to modify data.
 Final message (user-facing):
@@ -249,7 +250,7 @@ Evaluation justification:
 
 Apply the grant to the User ID in the user-context block. Evaluation justification is eligibility reasoning, not an identity.
 Change permissions only for that user. Only if it is impossible to grant the permission specifically to him, grant via group or profile.
-Use the app API tools and documentation to apply the grant. If possible, verify via the app API (not graph tools) that the permission was granted.
+Use the app API tools and documentation to apply the grant. Confirm the object permission on the set (or a HAS_PERMISSION edge from that Profile to the Resource). An existing assignment is not that confirmation.
 Do not use graph tools to modify data, and do not treat other AppIdentity hits as the requester.
 When done, reply with a brief plain-language result report for the requester (no technical details, no follow-up offers).
 """

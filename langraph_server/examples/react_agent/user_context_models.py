@@ -64,7 +64,7 @@ class UserContextData(BaseModel):
             "If a tool returns a different person or AppIdentity, ignore it.\n\n"
             "Groups this user belongs to (current membership):\n"
             f"{group_lines}\n\n"
-            "Profiles and permission sets assigned to this user (current assignments):\n"
+            "Profiles and permission sets assigned to this user (names only; a name or an assignment is not the access inside the set):\n"
             f"{profile_lines}\n\n"
             "Permissions this user currently has (present access — not all valid permission levels):\n"
             f"{permission_lines}\n\n"
