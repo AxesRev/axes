@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Annotated, Any, Literal, NotRequired
+from typing import Annotated, Any, Literal, NotRequired, cast
 
 from langchain.agents import AgentState, create_agent
 from langchain.agents.middleware import AgentMiddleware, ModelRequest, dynamic_prompt
@@ -26,7 +27,7 @@ from examples.react_agent.prompts import (
     PERMISSION_DETECTOR_FEEDBACK_TEMPLATE,
     PERMISSION_DETECTOR_TASK_TEMPLATE,
 )
-from examples.react_agent.state import DetectedPermission, Permission, State
+from examples.react_agent.state import DetectedPermissionList, Permission, State
 from examples.react_agent.user_context_models import UserContextData
 from examples.react_agent.user_context_prompt import build_user_context_block
 from examples.react_agent.utils import get_message_text, load_chat_model
@@ -56,7 +57,7 @@ class PermissionDetectionInput:
 class PermissionDetectionOutput:
     """Typed result plus internal messages for the parent wrapper to filter."""
 
-    permission: Permission | None = field(default=None)
+    permissions: list[Permission] = field(default_factory=list)
     messages: Annotated[Sequence[AnyMessage], add_messages] = field(default_factory=list)
 
 
@@ -195,15 +196,10 @@ async def apply_structured_response(state: State, runtime: Runtime[Context]) -> 
         logger.warning("apply_structured_response: missing structured_response")
         return {}
     logger.info(
-        "apply_structured_response: resource=%r permission=%r",
-        detected.resource_result.value,
-        detected.permission_result.value,
+        "apply_structured_response: %s",
+        [(item.resource_result.value, item.permission_result.value) for item in detected.permissions],
     )
-    return {
-        "resource_result": detected.resource_result,
-        "permission_result": detected.permission_result,
-        "justification": detected.justification,
-    }
+    return {"detected_permissions": detected.permissions}
 
 
 async def inject_feedback(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
@@ -225,11 +221,10 @@ def route_validator(state: State) -> Literal["inject_feedback", "finalize"]:
 
 
 async def finalize(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
-    permission_value = state.permission_result.value if state.permission_result else None
-    resource_value = state.resource_result.value if state.resource_result else None
-
-    if not permission_value:
-        logger.warning("finalize: missing required field(s) — permission=%r", permission_value)
+    detected = state.detected_permissions
+    permission_values = [item.permission_result.value for item in detected]
+    if not detected or any(not value for value in permission_values):
+        logger.warning("finalize: missing required permission in %r", permission_values)
         return {
             "messages": [
                 AIMessage(
@@ -238,9 +233,15 @@ async def finalize(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
             ]
         }
 
-    permission = Permission(resource=resource_value, permission=permission_value)
-    logger.info("finalize: resource=%r permission=%r", permission.resource, permission.permission)
-    return {"permission": permission}
+    permissions = [
+        Permission(resource=item.resource_result.value, permission=cast(str, item.permission_result.value))
+        for item in detected
+    ]
+    logger.info(
+        "finalize: %s",
+        [(permission.resource, permission.permission) for permission in permissions],
+    )
+    return {"permissions": permissions}
 
 
 async def make_permission_detection_graph():
@@ -256,7 +257,7 @@ async def make_permission_detection_graph():
         tools=tools,
         system_prompt=PERMISSION_DETECTOR_BASE_PROMPT,
         middleware=[_detector_system_prompt, _BindDetectorRuntime()],
-        response_format=ToolStrategy(DetectedPermission),
+        response_format=ToolStrategy(DetectedPermissionList),
         state_schema=PermissionDetectorState,
         context_schema=Context,
         name="detector",
@@ -293,9 +294,13 @@ def make_permission_detection_node(compiled):
 
     async def run_permission_detection(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
         result = await compiled.ainvoke(state, context=runtime.context)
-        permission = result.get("permission")
-        if permission is not None:
-            return {"permission": permission, "messages": [AIMessage(content=permission.model_dump_json())]}
+        permissions = result.get("permissions")
+        if permissions:
+            payload = json.dumps(
+                [permission.model_dump(mode="json") for permission in permissions],
+                separators=(",", ":"),
+            )
+            return {"permissions": permissions, "messages": [AIMessage(content=payload)]}
         messages = result.get("messages") or []
         last = messages[-1] if messages else None
         if not isinstance(last, AIMessage) or not get_message_text(last).strip():

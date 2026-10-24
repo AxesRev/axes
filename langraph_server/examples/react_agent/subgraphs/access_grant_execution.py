@@ -21,7 +21,7 @@ from examples.react_agent.prompts import (
     ACCESS_GRANT_EXECUTION_BASE_PROMPT,
     ACCESS_GRANT_EXECUTION_TASK_TEMPLATE,
 )
-from examples.react_agent.state import AccessRequestEvaluation, Permission, State
+from examples.react_agent.state import AccessRequestEvaluation, Permission, State, format_detected_permissions
 from examples.react_agent.user_context_models import UserContextData
 from examples.react_agent.utils import get_message_text
 
@@ -35,7 +35,7 @@ class AccessGrantInput:
     """Parent channels this subgraph may read. Transcript stays private."""
 
     user_request: str = field(default="")
-    permission: Permission | None = field(default=None)
+    permissions: list[Permission] = field(default_factory=list)
     access_evaluation: AccessRequestEvaluation | None = field(default=None)
     user_contexts: list[UserContextData] = field(default_factory=list)
     selected_apps: list[str] = field(default_factory=list)
@@ -61,29 +61,23 @@ def _grant_runtime(runtime: Runtime[Context]) -> Runtime[Context]:
 
 
 def _seed_grant_message(state: State) -> HumanMessage:
-    """Build the grant-execution task from approved permission and evaluation."""
-    user_request = state.user_request
-    permission = cast(Permission, state.permission)
+    """Build the grant-execution task from the approved permissions and evaluation."""
     evaluation = cast(AccessRequestEvaluation, state.access_evaluation)
-    resource_display = permission.resource if permission.resource else "(none — no specific resource)"
     return HumanMessage(
         content=ACCESS_GRANT_EXECUTION_TASK_TEMPLATE.format(
-            user_request=user_request,
-            resource=resource_display,
-            permission_level=permission.permission,
+            user_request=state.user_request,
+            permissions=format_detected_permissions(state.permissions),
             evaluation_justification=evaluation.justification,
         )
     )
 
 
 async def seed_grant(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
-    """Seed the grant execution task from the approved permission request."""
-    permission = cast(Permission, state.permission)
+    """Seed the grant execution task from the approved permission list."""
     evaluation = cast(AccessRequestEvaluation, state.access_evaluation)
     logger.info(
-        "seed_grant: resource=%r permission=%r should_grant=%s",
-        permission.resource,
-        permission.permission,
+        "seed_grant: %s should_grant=%s",
+        [(permission.resource, permission.permission) for permission in state.permissions],
         evaluation.should_grant,
     )
     return {"messages": [_seed_grant_message(state)]}

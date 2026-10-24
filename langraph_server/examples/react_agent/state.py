@@ -58,7 +58,7 @@ class FieldResult(BaseModel):
 
 
 class DetectedPermission(BaseModel):
-    """Structured detector output: resource, permission, and proof of the resource."""
+    """One permission object inside the detector's required-permission list."""
 
     resource_result: FieldResult
     permission_result: FieldResult
@@ -75,6 +75,32 @@ class DetectedPermission(BaseModel):
             ),
         ),
     ]
+
+
+class DetectedPermissionList(BaseModel):
+    """Structured detector output: every permission required together for the grant."""
+
+    permissions: Annotated[
+        list[DetectedPermission],
+        Field(
+            min_length=1,
+            description=(
+                "Permission objects for this grant. Include one object when a single permission is enough. "
+                "Include multiple objects only when every one of them is required for the grant: all must be "
+                "granted together, and none is an alternative. Do not list mutually exclusive options. Do not "
+                "collapse a required set into one broader permission."
+            ),
+        ),
+    ]
+
+
+def format_detected_permissions(permissions: list[Permission]) -> str:
+    """Render the detected permission list for downstream task prompts."""
+    lines: list[str] = []
+    for permission in permissions:
+        resource = permission.resource if permission.resource else "(none — no specific resource)"
+        lines.append(f"  - resource: {resource}\n    permission: {permission.permission}")
+    return "\n".join(lines)
 
 
 class AccessRequestEvaluation(BaseModel):
@@ -195,8 +221,8 @@ class State(InputState):
     It is set to 'True' when the step count reaches recursion_limit - 1.
     """
 
-    permission: Permission | None = field(default=None)
-    """The structured permission model extracted from the conversation."""
+    permissions: list[Permission] = field(default_factory=list)
+    """Permission objects required together for this grant."""
 
     access_evaluation: AccessRequestEvaluation | None = field(default=None)
     """Evaluation of whether the detected permission request should be granted."""
@@ -210,17 +236,11 @@ class State(InputState):
     user_request: str = field(default="")
     """Original Slack request text. Subgraphs seed from this instead of inheriting parent messages."""
 
-    resource_result: FieldResult | None = field(default=None)
-    """Result produced by the resource detector."""
+    detected_permissions: list[DetectedPermission] = field(default_factory=list)
+    """Detector items copied from structured output, before they become Permission objects."""
 
-    permission_result: FieldResult | None = field(default=None)
-    """Result produced by the permission detector."""
-
-    justification: str = field(default="")
-    """Detector proof of which external source established the resource name or identifier."""
-
-    structured_response: DetectedPermission | None = field(default=None)
-    """Structured output from the detector agent. Copied into the per-field results."""
+    structured_response: DetectedPermissionList | None = field(default=None)
+    """Structured output from the detector agent. Copied into detected_permissions."""
 
     resource_feedback: str | None = field(default=None)
     """Feedback from the validator when the resource result must be re-derived."""

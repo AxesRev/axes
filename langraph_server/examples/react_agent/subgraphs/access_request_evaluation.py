@@ -21,7 +21,7 @@ from examples.react_agent.prompts import (
     ACCESS_EVALUATION_EXTRACTOR_PROMPT,
     ACCESS_EVALUATION_TASK_TEMPLATE,
 )
-from examples.react_agent.state import AccessRequestEvaluation, Permission, State
+from examples.react_agent.state import AccessRequestEvaluation, Permission, State, format_detected_permissions
 from examples.react_agent.user_context_models import UserContextData
 from examples.react_agent.utils import load_chat_model
 
@@ -33,7 +33,7 @@ class AccessEvaluationInput:
     """Parent channels this subgraph may read. Transcript stays private."""
 
     user_request: str = field(default="")
-    permission: Permission | None = field(default=None)
+    permissions: list[Permission] = field(default_factory=list)
     user_contexts: list[UserContextData] = field(default_factory=list)
     selected_apps: list[str] = field(default_factory=list)
     doc_corpus_context: str = field(default="")
@@ -48,26 +48,20 @@ class AccessEvaluationOutput:
 
 
 def _seed_evaluation_message(state: State) -> HumanMessage:
-    """Build the task message from the detected permission and original user request."""
-    user_request = state.user_request
-    permission = cast(Permission, state.permission)
-    resource_display = permission.resource if permission.resource else "(none — no specific resource)"
+    """Build the task message from the detected permissions and original user request."""
     return HumanMessage(
         content=ACCESS_EVALUATION_TASK_TEMPLATE.format(
-            user_request=user_request,
-            resource=resource_display,
-            permission_level=permission.permission,
+            user_request=state.user_request,
+            permissions=format_detected_permissions(state.permissions),
         )
     )
 
 
 async def seed_evaluation(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
-    """Seed the evaluation task from the detected permission and original user request."""
-    permission = cast(Permission, state.permission)
+    """Seed the evaluation task from the detected permissions and original user request."""
     logger.info(
-        "seed_evaluation: resource=%r permission=%r",
-        permission.resource,
-        permission.permission,
+        "seed_evaluation: %s",
+        [(permission.resource, permission.permission) for permission in state.permissions],
     )
     return {"messages": [_seed_evaluation_message(state)]}
 

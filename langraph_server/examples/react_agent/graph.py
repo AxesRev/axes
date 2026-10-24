@@ -24,7 +24,7 @@ def route_after_detect_relevant_apps(state: State) -> Literal["load_user_context
 
 
 def route_after_permission_detection(state: State) -> Literal["access_request_evaluation", "__end__"]:
-    if state.permission is not None:
+    if state.permissions:
         return "access_request_evaluation"
     return "__end__"
 

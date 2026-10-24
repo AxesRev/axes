@@ -44,18 +44,20 @@ async def validate_results(state: State, runtime: Runtime[Context]) -> dict[str,
     user_request = _extract_user_request(state)
     payload = {
         "user_request": user_request,
-        "results": {
-            "resource": _serialize_field(state.resource_result),
-            "permission": _serialize_field(state.permission_result),
-            "justification": state.justification,
-        },
+        "permissions": [
+            {
+                "resource": _serialize_field(item.resource_result),
+                "permission": _serialize_field(item.permission_result),
+                "justification": item.justification,
+            }
+            for item in state.detected_permissions
+        ],
     }
 
     logger.info(
-        "Node validator: starting (revision=%d) resource=%r permission=%r",
+        "Node validator: starting (revision=%d) permissions=%s",
         state.revision_count,
-        state.resource_result.value if state.resource_result else None,
-        state.permission_result.value if state.permission_result else None,
+        [(item.resource_result.value, item.permission_result.value) for item in state.detected_permissions],
     )
 
     model = load_chat_model(
