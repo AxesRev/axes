@@ -81,7 +81,11 @@ async def call_evaluation_model(state: State, runtime: Runtime[Context]) -> dict
 
 
 async def extract_evaluation(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
-    model = load_chat_model(runtime.context.model).with_structured_output(AccessRequestEvaluation)
+    model = load_chat_model(
+        runtime.context.model,
+        thinking_budget_tokens=runtime.context.thinking_budget_tokens,
+        reasoning_effort=runtime.context.reasoning_effort,
+    ).with_structured_output(AccessRequestEvaluation)
     evaluation = cast(
         AccessRequestEvaluation,
         await model.ainvoke(

@@ -146,6 +146,8 @@ def build_openapi_toolkit(
 
     cache_key = (
         ctx.model,
+        ctx.reasoning_effort,
+        ctx.thinking_budget_tokens,
         installation_id,
         access_token,
         spec_path,

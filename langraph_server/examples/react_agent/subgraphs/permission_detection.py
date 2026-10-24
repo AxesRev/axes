@@ -34,6 +34,7 @@ from examples.react_agent.utils import get_message_text, load_chat_model
 logger = logging.getLogger(__name__)
 
 MAX_REVISIONS: int = 3
+DETECTOR_MODEL = "openai/gpt-5.4-nano"
 
 _RESOURCE_DETECTOR_GROUP_LIMIT: int = 20
 _RESOURCE_DETECTOR_PROFILE_LIMIT: int = 20
@@ -163,7 +164,7 @@ class _BindDetectorRuntime(AgentMiddleware):
         return await handler(
             request.override(
                 model=load_chat_model(
-                    context.model,
+                    DETECTOR_MODEL,
                     thinking_budget_tokens=context.thinking_budget_tokens,
                     reasoning_effort=context.reasoning_effort,
                 ),
@@ -245,8 +246,13 @@ async def finalize(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
 async def make_permission_detection_graph():
     tools = await _get_all_tools()
     logger.info("permission_detection: %d lookup tool(s): %s", len(tools), [tool.name for tool in tools])
+    context = Context()
     detector = create_agent(
-        model=load_chat_model(Context().model),
+        model=load_chat_model(
+            DETECTOR_MODEL,
+            thinking_budget_tokens=context.thinking_budget_tokens,
+            reasoning_effort=context.reasoning_effort,
+        ),
         tools=tools,
         system_prompt=PERMISSION_DETECTOR_BASE_PROMPT,
         middleware=[_detector_system_prompt, _BindDetectorRuntime()],

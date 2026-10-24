@@ -57,7 +57,10 @@ async def detect_relevant_apps(state: State, runtime: Runtime[Context]) -> dict[
         logger.info("detect_relevant_apps: empty user message")
         return {"selected_apps": [], "user_request": ""}
 
-    model = load_chat_model(APP_DETECTION_MODEL).with_structured_output(RelevantAppsSelection)
+    model = load_chat_model(
+        APP_DETECTION_MODEL,
+        reasoning_effort=runtime.context.reasoning_effort,
+    ).with_structured_output(RelevantAppsSelection)
     selection = await model.ainvoke(
         [
             {

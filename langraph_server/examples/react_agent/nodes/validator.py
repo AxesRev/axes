@@ -58,7 +58,11 @@ async def validate_results(state: State, runtime: Runtime[Context]) -> dict[str,
         state.permission_result.value if state.permission_result else None,
     )
 
-    model = load_chat_model(runtime.context.model).with_structured_output(ValidationVerdict)
+    model = load_chat_model(
+        runtime.context.model,
+        thinking_budget_tokens=runtime.context.thinking_budget_tokens,
+        reasoning_effort=runtime.context.reasoning_effort,
+    ).with_structured_output(ValidationVerdict)
     verdict = cast(
         ValidationVerdict,
         await model.ainvoke(

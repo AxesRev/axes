@@ -75,12 +75,13 @@ class Context:
     )
 
     reasoning_effort: str = field(
-        default="",
+        default="medium",
         metadata={
             "description": (
                 "Reasoning effort for OpenAI reasoning-capable models: 'low', 'medium', or 'high'. "
-                "Leave empty to disable (default). Applies to o-series models (openai/o3, openai/o4-mini) "
-                "and GPT-5-class models (openai/gpt-5.4-mini, etc.) via the Responses API."
+                "Default is medium. Leave empty to disable. Applies to o-series models "
+                "(openai/o3, openai/o4-mini) and GPT-5-class models (openai/gpt-5.4-mini, etc.) "
+                "via the Responses API."
             )
         },
     )

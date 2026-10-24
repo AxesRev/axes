@@ -27,7 +27,7 @@ from examples.react_agent.utils import get_message_text
 
 logger = logging.getLogger(__name__)
 
-GRANT_EXECUTION_MODEL = "openai/gpt-4.1-mini"
+GRANT_EXECUTION_MODEL = "openai/gpt-5.4-nano"
 
 
 @dataclass

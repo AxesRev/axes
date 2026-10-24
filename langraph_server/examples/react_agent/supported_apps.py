@@ -10,4 +10,4 @@ SUPPORTED_APPS: frozenset[str] = frozenset({"github", "salesforce"})
 
 UNSUPPORTED_APP_MESSAGE = "sorry this application is not supported yet"
 
-APP_DETECTION_MODEL = "openai/gpt-5.4-nano"
+APP_DETECTION_MODEL = "openai/gpt-4o-mini"

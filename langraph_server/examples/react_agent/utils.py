@@ -23,6 +23,12 @@ def get_message_text(msg: BaseMessage) -> str:
         return "".join(txts).strip()
 
 
+def _supports_openai_reasoning(model: str) -> bool:
+    """Return whether this OpenAI model accepts the reasoning.effort parameter."""
+    name = model.lower()
+    return name.startswith(("gpt-5", "o1", "o3", "o4"))
+
+
 def load_chat_model(
     fully_specified_name: str,
     *,
@@ -36,8 +42,9 @@ def load_chat_model(
         thinking_budget_tokens: Token budget for extended thinking.
             Applies to Anthropic (thinking blocks) and Google Gemini 2.5+
             (thinking_budget). Set to 0 to disable.
-        reasoning_effort: Reasoning effort level for OpenAI o-series models
-            ("low", "medium", "high"). Ignored for other providers.
+        reasoning_effort: Reasoning effort level for OpenAI o-series and GPT-5
+            models ("low", "medium", "high"). Ignored for other providers and
+            for OpenAI models that have no reasoning channel.
     """
     provider, model = fully_specified_name.split("/", maxsplit=1)
     kwargs: dict[str, Any] = {}
@@ -49,7 +56,7 @@ def load_chat_model(
     elif provider in ("google_genai", "google_vertexai", "google") and thinking_budget_tokens > 0:
         kwargs["thinking_budget"] = thinking_budget_tokens
 
-    elif provider in ("openai", "azure_openai") and reasoning_effort:
+    elif provider in ("openai", "azure_openai") and reasoning_effort and _supports_openai_reasoning(model):
         # Use the Responses API semantics (`/v1/responses`) so that reasoning +
         # function tools work together on GPT-5-class models.  Setting `reasoning`
         # instead of `reasoning_effort` causes langchain-openai to route the call
