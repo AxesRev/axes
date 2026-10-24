@@ -114,11 +114,13 @@ class AccessRequestEvaluation(BaseModel):
         str,
         Field(
             description=(
-                "Past-tense explanation of why should_grant is true or false — an audit record of the decision, "
-                "not instructions to a human or LLM. Ground in eligibility and free-text guidelines (organisation "
-                "notes, documentation, graph/tool data about who should have access) — not in whether the user "
-                "already has the permission, and not in RBAC exact-match rules. Do not name or describe other "
-                "users' permissions, roles, or personal data."
+                "Past-tense explanation of why this user should or should not receive the requested permissions. "
+                "An audit record of that decision, not instructions to a human or LLM. Name only the requested "
+                "permissions. Do not add permissions, licenses, features, or user settings, and do not judge "
+                "whether that list is enough, complete, or correct. Ground in eligibility and free-text guidelines "
+                "(organisation notes, documentation, graph/tool data about who should have these permissions) — "
+                "not in whether the user already has the permission, and not in RBAC exact-match rules. Do not "
+                "name or describe other users' permissions, roles, or personal data."
             ),
         ),
     ]
