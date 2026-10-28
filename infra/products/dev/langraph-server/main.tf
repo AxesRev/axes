@@ -68,6 +68,19 @@ resource "kubernetes_secret_v1" "openai" {
   type = "Opaque"
 }
 
+resource "kubernetes_secret_v1" "jev" {
+  metadata {
+    name      = "langraph-server-jev"
+    namespace = kubernetes_namespace_v1.this.metadata[0].name
+  }
+
+  data = sensitive({
+    JEV_API_KEY = local.secrets["JEV_API_KEY"]
+  })
+
+  type = "Opaque"
+}
+
 resource "kubernetes_secret_v1" "github" {
   metadata {
     name      = "langraph-server-github"
@@ -337,6 +350,16 @@ resource "kubernetes_deployment_v1" "this" {
               secret_key_ref {
                 name = kubernetes_secret_v1.openai.metadata[0].name
                 key  = "OPENAI_API_KEY"
+              }
+            }
+          }
+
+          env {
+            name = "JEV_API_KEY"
+            value_from {
+              secret_key_ref {
+                name = kubernetes_secret_v1.jev.metadata[0].name
+                key  = "JEV_API_KEY"
               }
             }
           }
