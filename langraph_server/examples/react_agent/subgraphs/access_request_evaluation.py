@@ -1,42 +1,37 @@
-"""Access request evaluation subgraph (Jev)."""
+"""Access request evaluation subgraph."""
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import logging
-import os
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.graph import StateGraph
 from langgraph.runtime import Runtime
 
 from examples.react_agent.context import Context
-from examples.react_agent.neo4j_schema_prompt import build_neo4j_schema_block
+from examples.react_agent.edges.end import route_model_output
+from examples.react_agent.nodes.llm_call import call_model
 from examples.react_agent.nodes.tenant_agent_context import load_tenant_agent_context
+from examples.react_agent.nodes.tools import execute_tools
+from examples.react_agent.prompts import (
+    ACCESS_EVALUATION_BASE_PROMPT,
+    ACCESS_EVALUATION_EXTRACTOR_PROMPT,
+    ACCESS_EVALUATION_TASK_TEMPLATE,
+)
 from examples.react_agent.state import AccessRequestEvaluation, Permission, State, format_detected_permissions
-from examples.react_agent.tenant_agent_context_prompt import build_tenant_agent_context_block
 from examples.react_agent.user_context_models import UserContextData
-from examples.react_agent.user_context_prompt import build_user_context_block
+from examples.react_agent.utils import load_chat_model
 
 logger = logging.getLogger(__name__)
-
-JEV_MODEL = "jev-latest"
-_NOUL_TRUE_THRESHOLD = 0.5
-_SHOULD_GRANT_INSTRUCTIONS = (
-    "Should the user be granted this permission to this resource/resource type? "
-    "If a specific resource instance is named, evaluate that instance; otherwise evaluate the resource type. "
-    "The requesting user is the identity in the user-context block. "
-    "Decide from organisation guidelines, documentation, role, and org context about who should have this access. "
-    "Do not deny because they currently lack the binding, group entitlement, or an RBAC-style rule that already confers it."
-)
 
 
 @dataclass
 class AccessEvaluationInput:
-    """Parent channels this subgraph may read."""
+    """Parent channels this subgraph may read. Transcript stays private."""
 
     user_request: str = field(default="")
     permissions: list[Permission] = field(default_factory=list)
@@ -58,58 +53,51 @@ class AccessEvaluationOutput:
     access_evaluation: AccessRequestEvaluation | None = field(default=None)
 
 
-def _jev_api_key() -> str:
-    return os.environ.get("JEV_API_KEY", "").strip() or os.environ.get("TYPESAFE_API_KEY", "").strip()
-
-
-def _grant_target(state: State) -> str:
-    if state.resource:
-        return f"resource {state.resource}"
-    if state.resource_type:
-        return f"resource type {state.resource_type}"
-    return "this resource/resource type"
-
-
-def build_jev_state(state: State) -> str:
-    target = _grant_target(state)
-    sections = [
-        "User access request:",
-        state.user_request.strip() or "(empty)",
-        "",
-        f"Selected apps: {', '.join(state.selected_apps) if state.selected_apps else '(none)'}",
-        "",
-        "Grant target:",
-        f"  resource type: {state.resource_type or '(none)'}",
-        f"  resource: {state.resource or '(none — evaluate the resource type)'}",
-        f"  evaluate: {target}",
-    ]
-    if state.permissions:
-        sections.extend(["", "Requested permissions:", format_detected_permissions(state.permissions)])
-    else:
-        sections.append("  permission: (from the user request)")
-    user_context = build_user_context_block(state.user_contexts).strip()
-    if user_context:
-        sections.extend(["", user_context])
-    tenant_context = build_tenant_agent_context_block(state.tenant_agent_context).strip()
-    if tenant_context:
-        sections.extend(["", tenant_context])
-    docs = state.doc_corpus_context.strip()
-    if docs:
-        sections.extend(["", "Documentation snippets:", docs])
-    schema = build_neo4j_schema_block(state.neo4j_schema).strip()
-    if schema:
-        sections.extend(["", schema])
-    sections.extend(["", f"System time: {datetime.now(tz=UTC).isoformat()}"])
-    return "\n".join(sections)
-
-
-async def evaluate_access_request(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
-    target = _grant_target(state)
-    evaluation = AccessRequestEvaluation(
-        should_grant=True,
-        justification=f"Mock evaluation always grants this permission to {target}.",
+def _seed_evaluation_message(state: State) -> HumanMessage:
+    """Build the task message from the detected target and original user request."""
+    return HumanMessage(
+        content=ACCESS_EVALUATION_TASK_TEMPLATE.format(
+            user_request=state.user_request,
+            resource_type=state.resource_type or "(none)",
+            resource=state.resource or "(none — evaluate the resource type)",
+            permissions=format_detected_permissions(state.permissions)
+            or "(none listed — evaluate the detected resource/resource type)",
+        )
     )
-    logger.info("evaluate_access_request: mocked should_grant=true target=%s", target)
+
+
+async def seed_evaluation(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
+    """Seed the evaluation task from the detected target and original user request."""
+    logger.info(
+        "seed_evaluation: type=%s resource=%s permissions=%s",
+        state.resource_type,
+        state.resource,
+        [(permission.resource, permission.permission) for permission in state.permissions],
+    )
+    return {"messages": [_seed_evaluation_message(state)]}
+
+
+async def call_evaluation_model(state: State, runtime: Runtime[Context]) -> dict[str, list[AIMessage]]:
+    """Call the LLM with the access-evaluation system prompt."""
+    evaluation_runtime = Runtime(
+        context=dataclasses.replace(runtime.context, system_prompt=ACCESS_EVALUATION_BASE_PROMPT),
+    )
+    return await call_model(state, evaluation_runtime)
+
+
+async def extract_evaluation(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
+    model = load_chat_model(
+        runtime.context.model,
+        thinking_budget_tokens=runtime.context.thinking_budget_tokens,
+        reasoning_effort=runtime.context.reasoning_effort,
+    ).with_structured_output(AccessRequestEvaluation)
+    evaluation = cast(
+        AccessRequestEvaluation,
+        await model.ainvoke(
+            [*state.messages, {"role": "user", "content": ACCESS_EVALUATION_EXTRACTOR_PROMPT}],
+        ),
+    )
+    logger.info("extract_evaluation: should_grant=%s", evaluation.should_grant)
     return {"access_evaluation": evaluation}
 
 
@@ -121,10 +109,21 @@ builder = StateGraph(
 )
 
 builder.add_node("load_tenant_agent_context", load_tenant_agent_context)
-builder.add_node("evaluate_access_request", evaluate_access_request)
+builder.add_node("seed_evaluation", seed_evaluation)
+builder.add_node("call_model", call_evaluation_model)
+builder.add_node("tools", execute_tools)
+builder.add_node("extract_evaluation", extract_evaluation)
+
 builder.add_edge("__start__", "load_tenant_agent_context")
-builder.add_edge("load_tenant_agent_context", "evaluate_access_request")
-builder.add_edge("evaluate_access_request", "__end__")
+builder.add_edge("load_tenant_agent_context", "seed_evaluation")
+builder.add_edge("seed_evaluation", "call_model")
+builder.add_conditional_edges(
+    "call_model",
+    route_model_output,
+    {"tools": "tools", "__end__": "extract_evaluation"},
+)
+builder.add_edge("tools", "call_model")
+builder.add_edge("extract_evaluation", "__end__")
 
 access_request_evaluation_graph = builder.compile(name="Access Request Evaluation")
 
