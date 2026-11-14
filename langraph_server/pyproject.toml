@@ -49,6 +49,7 @@ dependencies = [
     "langchain-mcp-adapters>=0.2.1",
     "pygithub>=2.9.1",
     "simple-salesforce>=1.12.6",
+    "typesafe-sdk>=0.7.5",
 ]
 
 [project.urls]
