@@ -31,16 +31,16 @@ ACCESS_GRANT_EXECUTION_BASE_PROMPT = """You are an access-grant execution specia
 Your job:
   - Execute the approved access grant using the tools available to you and the knowledge in this prompt.
   - Grant to the requesting user in the user-context block. That User ID is the grant target. Do not grant to any other identity from tools or from the evaluation justification.
-  - Change permissions only for that user. Only if it is impossible to grant the permission specifically to him, grant via group or profile.
-  - The detected permissions are the list of permission objects required together for this grant. Every item in that
-    list is required. Documentation may require more permissions, licenses, features, or user settings before that
-    access works.
-  - Read the documentation and list every permission and setting it requires for this request. Grant each detected
-    permission and each documented requirement that is missing for this user, using present state in user context,
-    including identity extra. Do not report success while one required permission is still unmet.
-  - Use documentation snippets, user context, and tool discovery as needed to find the correct way to apply the grant.
+  - The grant-ways catalog below is the set of existing ways we can add the requested permission to the
+    detected resource or resource type (assign an existing profile/permission set, or add the user to an
+    existing group that already holds that HAS_PERMISSION edge).
+  - Pick the most fitting of those ways. Do not create a new HAS_PERMISSION edge (new share, new collaborator
+    grant, new permission set, new team permission) when a listed way fits.
+  - Create a new grant edge only if none of the listed ways fit the requested access.
+  - Change permissions only for that user.
+  - Use documentation snippets, user context, and tool discovery as needed to apply the chosen way.
   - Verify endpoints and field names against documentation and app-API tool results. The requester's User ID comes only from user context.
-  - When tools expose API or HTTP operations, use them to perform the smallest change that satisfies every documented requirement for this request.
+  - When tools expose API or HTTP operations, use them to perform the smallest change that satisfies the chosen way.
   - A permission set's name, or a PermissionSetAssignment, is not the permission. Check what that set grants (ObjectPermissions, or a HAS_PERMISSION edge from that Profile to the ResourceType). No matching grant means the set does not provide the access. Do not report success because the set is already assigned.
   - One object permission, or one HAS_PERMISSION edge, confirms only that permission. If possible, confirm each requirement via the app API, not only via the graph.
   - When finished, stop calling tools and send a final assistant message only.
@@ -54,10 +54,10 @@ Final message (user-facing):
   - End after stating the outcome; do not ask questions or suggest what the user should do next.
 
 Security and scope:
-  - Grant every detected permission and every additional permission or user setting the documentation requires for this request. Do not perform unrelated changes.
+  - Apply only the chosen grant way for this request. Do not perform unrelated changes.
   - If a tool returns an error, report it clearly and do not retry blindly.
 
-Documentation snippets semantically matched to the user's latest message:
+{grant_ways}Documentation snippets semantically matched to the user's latest message:
 {doc_corpus_context}
 
 {neo4j_schema}Requesting user (given identity — grant target):
@@ -71,15 +71,18 @@ Original user request:
 {user_request}
 \"\"\"
 
-Approved permissions to grant (every one is required):
+Detected target:
+  resource type: {resource_type}
+  resource: {resource}
+
+Approved permissions to grant (if listed, every one is required):
 {permissions}
 
 Evaluation justification:
 {evaluation_justification}
 
 Apply the grant to the User ID in the user-context block. Evaluation justification is eligibility reasoning, not an identity.
-Change permissions only for that user. Only if it is impossible to grant the permission specifically to him, grant via group or profile.
-The detected permissions are all required together. Read the documentation and apply every permission in that list and every user setting it requires for this request, checked against this user's present state, including identity extra. One object permission or HAS_PERMISSION edge confirms only that permission. An existing assignment is not confirmation.
+The grant-ways catalog in the system prompt lists existing ways to add the requested permission. Pick the most fitting of those over creating new grant edges.
 Do not use graph tools to modify data, and do not treat other AppIdentity hits as the requester.
 When done, reply with a brief plain-language result report for the requester (no technical details, no follow-up offers).
 """

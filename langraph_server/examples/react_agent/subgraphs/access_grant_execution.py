@@ -15,6 +15,7 @@ from langgraph.runtime import Runtime
 from examples.react_agent.context import Context
 from examples.react_agent.edges.end import route_model_output
 from examples.react_agent.grant_execution_tools import load_grant_execution_tools
+from examples.react_agent.grant_ways import fetch_grant_ways
 from examples.react_agent.nodes.llm_call import call_model
 from examples.react_agent.nodes.tools import execute_tools
 from examples.react_agent.prompts import (
@@ -41,6 +42,10 @@ class AccessGrantInput:
     selected_apps: list[str] = field(default_factory=list)
     doc_corpus_context: str = field(default="")
     neo4j_schema: str = field(default="")
+    resource_type: str | None = field(default=None)
+    resource_type_external_id: str | None = field(default=None)
+    resource: str | None = field(default=None)
+    resource_external_id: str | None = field(default=None)
 
 
 @dataclass
@@ -61,23 +66,43 @@ def _grant_runtime(runtime: Runtime[Context]) -> Runtime[Context]:
 
 
 def _seed_grant_message(state: State) -> HumanMessage:
-    """Build the grant-execution task from the approved permissions and evaluation."""
+    """Build the grant-execution task from the detected target and evaluation."""
     evaluation = cast(AccessRequestEvaluation, state.access_evaluation)
+    permissions = format_detected_permissions(state.permissions)
     return HumanMessage(
         content=ACCESS_GRANT_EXECUTION_TASK_TEMPLATE.format(
             user_request=state.user_request,
-            permissions=format_detected_permissions(state.permissions),
+            resource_type=state.resource_type or "(none)",
+            resource=state.resource or "(none — resource type only)",
+            permissions=permissions or "(none listed — use the grant-ways catalog)",
             evaluation_justification=evaluation.justification,
         )
     )
 
 
+async def load_grant_ways(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
+    """Load existing profile/group grant paths for the detected type or instance."""
+    catalog = await fetch_grant_ways(
+        resource_type_external_id=state.resource_type_external_id or "",
+        resource_external_id=state.resource_external_id or "",
+        permissions=[permission.permission for permission in state.permissions],
+    )
+    logger.info(
+        "load_grant_ways: type=%s resource=%s chars=%s",
+        state.resource_type_external_id,
+        state.resource_external_id or "(none)",
+        len(catalog),
+    )
+    return {"grant_ways": catalog}
+
+
 async def seed_grant(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
-    """Seed the grant execution task from the approved permission list."""
+    """Seed the grant execution task from the detected target and evaluation."""
     evaluation = cast(AccessRequestEvaluation, state.access_evaluation)
     logger.info(
-        "seed_grant: %s should_grant=%s",
-        [(permission.resource, permission.permission) for permission in state.permissions],
+        "seed_grant: type=%s resource=%s should_grant=%s",
+        state.resource_type,
+        state.resource,
         evaluation.should_grant,
     )
     return {"messages": [_seed_grant_message(state)]}
@@ -104,11 +129,13 @@ builder = StateGraph(
     context_schema=Context,
 )
 
+builder.add_node("load_grant_ways", load_grant_ways)
 builder.add_node("seed_grant", seed_grant)
 builder.add_node("call_model", call_grant_model)
 builder.add_node("tools", run_grant_tools)
 
-builder.add_edge("__start__", "seed_grant")
+builder.add_edge("__start__", "load_grant_ways")
+builder.add_edge("load_grant_ways", "seed_grant")
 builder.add_edge("seed_grant", "call_model")
 builder.add_conditional_edges(
     "call_model",

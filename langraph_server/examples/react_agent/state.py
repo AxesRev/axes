@@ -153,3 +153,6 @@ class State(InputState):
 
     tenant_agent_context: str = field(default="")
     """Editable tenant-specific instructions loaded from PostgreSQL for access evaluation."""
+
+    grant_ways: str = field(default="")
+    """Existing profile/group HAS_PERMISSION paths for the detected type or instance."""

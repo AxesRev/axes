@@ -30,7 +30,7 @@ def route_after_permission_detection(state: State) -> Literal["access_request_ev
 
 
 def route_after_access_request_evaluation(state: State) -> Literal["access_grant_execution", "__end__"]:
-    if state.access_evaluation is not None and state.access_evaluation.should_grant and state.permissions:
+    if state.access_evaluation is not None and state.access_evaluation.should_grant:
         return "access_grant_execution"
     return "__end__"
 
