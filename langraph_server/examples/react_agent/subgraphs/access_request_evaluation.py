@@ -12,7 +12,6 @@ from typing import Any
 from langchain_core.messages import AIMessage
 from langgraph.graph import StateGraph
 from langgraph.runtime import Runtime
-from typesafe_sdk import AsyncTypeSafeClient, Noul
 
 from examples.react_agent.context import Context
 from examples.react_agent.neo4j_schema_prompt import build_neo4j_schema_block
@@ -105,25 +104,12 @@ def build_jev_state(state: State) -> str:
 
 
 async def evaluate_access_request(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
-    api_key = _jev_api_key()
-    if not api_key:
-        raise RuntimeError("JEV_API_KEY or TYPESAFE_API_KEY is required for access evaluation")
-
-    state_text = build_jev_state(state)
-    async with AsyncTypeSafeClient(api_key=api_key, model=JEV_MODEL) as client:
-        response = await client.system_one(
-            state=state_text,
-            questions={"should_grant": Noul(instructions=_SHOULD_GRANT_INSTRUCTIONS)},
-        )
-    noul = float(response.nouls["should_grant"].noul)
-    should_grant = noul >= _NOUL_TRUE_THRESHOLD
     target = _grant_target(state)
-    verb = "should" if should_grant else "should not"
     evaluation = AccessRequestEvaluation(
-        should_grant=should_grant,
-        justification=f"Jev judged that this user {verb} be granted this permission to {target} (noul={noul:.3f}).",
+        should_grant=True,
+        justification=f"Mock evaluation always grants this permission to {target}.",
     )
-    logger.info("evaluate_access_request: should_grant=%s noul=%.3f target=%s", should_grant, noul, target)
+    logger.info("evaluate_access_request: mocked should_grant=true target=%s", target)
     return {"access_evaluation": evaluation}
 
 
