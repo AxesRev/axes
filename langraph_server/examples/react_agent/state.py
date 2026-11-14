@@ -133,8 +133,17 @@ class State(InputState):
     resource_type: str | None = field(default=None)
     """Resource type Jev picked from the catalog (Campaign, repository, …)."""
 
+    resource_type_external_id: str | None = field(default=None)
+    """Graph ResourceType.external_id for the picked type."""
+
     specific_resource_requested: bool = field(default=False)
     """True when Jev judged that the user named a specific resource instance."""
+
+    resource: str | None = field(default=None)
+    """Resource instance Jev picked when a specific instance was requested."""
+
+    resource_external_id: str | None = field(default=None)
+    """Graph Resource.external_id for the picked instance."""
 
     doc_corpus_context: str = field(default="")
     """Semantically retrieved documentation snippets for the current user message (prompt injection)."""
