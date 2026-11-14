@@ -40,11 +40,19 @@ class ConnectionTenantRow(TypedDict):
     tenant_external_id: str
 
 
+class ResourceTypeRow(TypedDict):
+    external_id: str
+    name: str
+    connection_app: str
+    connection_external_id: str
+
+
 class ResourceRow(TypedDict):
     external_id: str
     name: str
     uri: str
     kind: str
+    resource_type_external_id: str
     connection_app: str
     connection_external_id: str
 
@@ -93,6 +101,11 @@ def gql_string(value: str) -> str:
 def json_property(value: dict[str, object]) -> str:
     """Serialize JSONProperty payloads the same way neomodel stores them."""
     return json.dumps(value)
+
+
+def resource_type_external_id(connection: ConnectionRef, type_name: str) -> str:
+    """Return a connection-scoped ResourceType id."""
+    return f"{connection['app']}:{connection['external_id']}:{type_name}"
 
 
 def _connection_rows_for_cypher(rows: list[AppConnectionRow]) -> list[dict[str, object]]:
@@ -171,6 +184,22 @@ async def merge_connections_belong_to_tenants(
     await _run_batched_query(query, rows, batch_size=batch_size)
 
 
+async def merge_resource_types(
+    rows: list[ResourceTypeRow],
+    *,
+    batch_size: int = PERMISSION_BATCH_SIZE,
+) -> None:
+    query = """
+    UNWIND $rows AS row
+    MERGE (rt:ResourceType {external_id: row.external_id})
+    SET rt.name = row.name
+    WITH rt, row
+    MATCH (c:AppConnection {app: row.connection_app, external_id: row.connection_external_id})
+    MERGE (rt)-[:BELONGS_TO]->(c)
+    """
+    await _run_batched_query(query, rows, batch_size=batch_size)
+
+
 async def merge_resources(rows: list[ResourceRow], *, batch_size: int = PERMISSION_BATCH_SIZE) -> None:
     query = """
     UNWIND $rows AS row
@@ -179,6 +208,9 @@ async def merge_resources(rows: list[ResourceRow], *, batch_size: int = PERMISSI
     WITH r, row
     MATCH (c:AppConnection {app: row.connection_app, external_id: row.connection_external_id})
     MERGE (r)-[:BELONGS_TO]->(c)
+    WITH r, row, c
+    MATCH (rt:ResourceType {external_id: row.resource_type_external_id})-[:BELONGS_TO]->(c)
+    MERGE (r)-[:INSTANCE_OF]->(rt)
     """
     await _run_batched_query(query, rows, batch_size=batch_size)
 

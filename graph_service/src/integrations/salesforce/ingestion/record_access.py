@@ -1,4 +1,4 @@
-"""Salesforce record-level Share access → subject HAS_PERMISSION edges."""
+"""Salesforce record-level Share access → instance Resource + HAS_PERMISSION edges."""
 
 from __future__ import annotations
 
@@ -9,11 +9,14 @@ from simple_salesforce.exceptions import SalesforceMalformedRequest
 
 from integrations.salesforce.client import query_all
 from integrations.salesforce.ingestion.groups import ensure_groups_for_ids
+from integrations.salesforce.ingestion.resources import resource_row_from_record
 from integrations.salesforce.ingestion.shared import (
     SALESFORCE_APP,
     ConnectionRef,
     RecordPermissionEdgeRow,
+    ResourceRow,
     merge_record_permissions,
+    merge_resources,
 )
 from integrations.salesforce.ingestion.users import ensure_identities_for_ids
 from integrations.salesforce.models import PERMISSION_EFFECT_GRANT, build_record_permission_extra
@@ -29,16 +32,12 @@ from integrations.salesforce.soql import build_share_table_soql
 logger = logging.getLogger(__name__)
 
 
-def record_permission_edge_from_share_access(
-    access: NormalizedShareAccess,
-    *,
-    target_sobject: str,
-) -> RecordPermissionEdgeRow:
+def record_permission_edge_from_share_access(access: NormalizedShareAccess) -> RecordPermissionEdgeRow:
     return RecordPermissionEdgeRow(
         subject_kind=access.subject.kind,
         subject_external_id=access.subject.external_id,
         subject_app=SALESFORCE_APP,
-        resource_external_id=target_sobject,
+        resource_external_id=access.record_id,
         permission=access.access_level,
         effect=PERMISSION_EFFECT_GRANT,
         extra=build_record_permission_extra(
@@ -53,7 +52,7 @@ async def ingest_record_access(
     sf: Salesforce,
     *,
     connection: ConnectionRef,
-    resources_by_name: dict[str, str],
+    resource_types_by_name: dict[str, str],
     known_identity_ids: set[str],
     known_group_ids: set[str],
 ) -> None:
@@ -62,12 +61,13 @@ async def ingest_record_access(
     if settings.share_object_allowlist:
         logger.info("record_access_allowlist count=%s", len(share_pairs))
 
+    instance_rows: dict[str, ResourceRow] = {}
     edges: list[RecordPermissionEdgeRow] = []
     referenced_user_ids: set[str] = set()
     referenced_group_ids: set[str] = set()
 
     for share_object_name, target_sobject in share_pairs:
-        if target_sobject not in resources_by_name:
+        if target_sobject not in resource_types_by_name:
             continue
         shape = describe_share_table(
             sf,
@@ -102,13 +102,18 @@ async def ingest_record_access(
             )
             if access is None:
                 continue
-            edge = record_permission_edge_from_share_access(access, target_sobject=target_sobject)
+            instance_rows[access.record_id] = resource_row_from_record(
+                access.record_id,
+                sobject_type=target_sobject,
+                connection=connection,
+            )
+            edges.append(record_permission_edge_from_share_access(access))
             if access.subject.kind == "identity":
                 referenced_user_ids.add(access.subject.external_id)
             else:
                 referenced_group_ids.add(access.subject.external_id)
-            edges.append(edge)
 
+    await merge_resources(list(instance_rows.values()))
     await ensure_identities_for_ids(
         sf,
         connection=connection,
@@ -122,4 +127,8 @@ async def ingest_record_access(
         known_group_ids=known_group_ids,
     )
     await merge_record_permissions(edges)
-    logger.info("merged_record_permissions count=%s", len(edges))
+    logger.info(
+        "merged_record_permissions count=%s instances=%s",
+        len(edges),
+        len(instance_rows),
+    )

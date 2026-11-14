@@ -37,11 +37,19 @@ class ConnectionTenantRow(TypedDict):
     tenant_external_id: str
 
 
+class ResourceTypeRow(TypedDict):
+    external_id: str
+    name: str
+    connection_app: str
+    connection_external_id: str
+
+
 class ResourceRow(TypedDict):
     external_id: str
     name: str
     uri: str
     kind: str
+    resource_type_external_id: str
     connection_app: str
     connection_external_id: str
 
@@ -125,6 +133,11 @@ class RecordPermissionEdgeRow(TypedDict):
 def json_property(value: dict[str, object]) -> str:
     """Serialize JSONProperty payloads the same way neomodel stores them."""
     return json.dumps(value)
+
+
+def resource_type_external_id(connection: ConnectionRef, type_name: str) -> str:
+    """Return a connection-scoped ResourceType id."""
+    return f"{connection['app']}:{connection['external_id']}:{type_name}"
 
 
 def _connection_rows_for_cypher(rows: list[AppConnectionRow]) -> list[dict[str, object]]:
@@ -267,6 +280,22 @@ async def merge_connections_belong_to_tenants(
     await _run_batched_query(query, rows, batch_size=batch_size)
 
 
+async def merge_resource_types(
+    rows: list[ResourceTypeRow],
+    *,
+    batch_size: int = PERMISSION_BATCH_SIZE,
+) -> None:
+    query = """
+    UNWIND $rows AS row
+    MERGE (rt:ResourceType {external_id: row.external_id})
+    SET rt.name = row.name
+    WITH rt, row
+    MATCH (c:AppConnection {app: row.connection_app, external_id: row.connection_external_id})
+    MERGE (rt)-[:BELONGS_TO]->(c)
+    """
+    await _run_batched_query(query, rows, batch_size=batch_size)
+
+
 async def merge_resources(rows: list[ResourceRow], *, batch_size: int = PERMISSION_BATCH_SIZE) -> None:
     query = """
     UNWIND $rows AS row
@@ -275,6 +304,9 @@ async def merge_resources(rows: list[ResourceRow], *, batch_size: int = PERMISSI
     WITH r, row
     MATCH (c:AppConnection {app: row.connection_app, external_id: row.connection_external_id})
     MERGE (r)-[:BELONGS_TO]->(c)
+    WITH r, row, c
+    MATCH (rt:ResourceType {external_id: row.resource_type_external_id})-[:BELONGS_TO]->(c)
+    MERGE (r)-[:INSTANCE_OF]->(rt)
     """
     await _run_batched_query(query, rows, batch_size=batch_size)
 
@@ -401,8 +433,9 @@ async def merge_profile_permissions(
     query = """
     UNWIND $rows AS row
     MATCH (profile:Profile {app: row.profile_app, external_id: row.profile_external_id})
-    MATCH (resource:Resource {external_id: row.resource_external_id})
-    MERGE (profile)-[hp:HAS_PERMISSION]->(resource)
+    MATCH (profile)-[:BELONGS_TO]->(c:AppConnection)
+    MATCH (resource_type:ResourceType {external_id: row.resource_external_id})-[:BELONGS_TO]->(c)
+    MERGE (profile)-[hp:HAS_PERMISSION]->(resource_type)
     SET hp.permission = row.permission, hp.effect = row.effect, hp.extra = row.extra
     """
     await _run_batched_query(

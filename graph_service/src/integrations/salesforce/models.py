@@ -28,7 +28,7 @@ class SalesforcePermissionExtra(BaseModel):
     """Shape stored on HAS_PERMISSION.extra for Salesforce profile permissions.
 
     Object and field access to the same SObject are modeled as separate
-    HAS_PERMISSION edges from a Profile to one Resource (kind ``object``).
+    HAS_PERMISSION edges from a Profile to one ResourceType.
     Field-scoped edges list the affected field API names in ``fields``.
     """
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from integrations.salesforce.ingestion.resources import resource_row_from_record
 from integrations.salesforce.ingestion.shared import (
     SALESFORCE_APP,
     ConnectionRef,
@@ -21,13 +22,11 @@ def resource_row_from_owned_record(
 ) -> ResourceRow:
     record_id = str(record["Id"])
     name = str(record.get("Name") or record_id)
-    return ResourceRow(
-        external_id=record_id,
+    return resource_row_from_record(
+        record_id,
+        sobject_type=sobject_type,
+        connection=connection,
         name=name,
-        uri=f"{sobject_type}/{record_id}",
-        kind="record",
-        connection_app=connection["app"],
-        connection_external_id=connection["external_id"],
     )
 
 

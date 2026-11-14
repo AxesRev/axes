@@ -11,6 +11,7 @@ from github.Organization import Organization
 from integrations.github.ingestion.org import upsert_connection
 from integrations.github.ingestion.permissions import ingest_permissions
 from integrations.github.ingestion.repos import ingest_repos
+from integrations.github.ingestion.resource_types import ingest_resource_types
 from integrations.github.ingestion.shared import make_github_integration
 from integrations.github.ingestion.teams import ingest_teams
 from integrations.github.ingestion.tenant import upsert_tenant
@@ -40,6 +41,9 @@ async def fetch_installation(
 
     await upsert_tenant(external_id=tenant_id, name=tenant_name)
     connection = await upsert_connection(account, tenant_external_id=tenant_id)
+
+    logger.info("ingest_resource_types login=%s", account.login)
+    await ingest_resource_types(connection)
 
     logger.info("ingest_repos login=%s", account.login)
     repos, resources_by_uri = await ingest_repos(installation, connection=connection)

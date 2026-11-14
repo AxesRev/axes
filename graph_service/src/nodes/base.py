@@ -12,8 +12,8 @@ class BaseNode(AsyncStructuredNode):
 
     ``app`` and ``external_id`` are optional integration identifiers. Set them
     when a node maps to a concrete object in an external system. Leave them
-    unset for synthetic or type-level nodes (e.g. a Salesforce SObject name
-    without a persisted external key). Integrations validate required IDs at
+    unset for synthetic nodes that have no persisted external key. Integrations
+    validate required IDs at
     ingest time where needed.
     """
 

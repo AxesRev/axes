@@ -92,7 +92,9 @@ def _extra_detector_context(state: State) -> str:
             )
 
         resource_permissions = [
-            permission for permission in user_context.permissions if permission.target_kind == "resource"
+            permission
+            for permission in user_context.permissions
+            if permission.target_kind in {"resource", "resource_type"}
         ]
         if resource_permissions:
             permission_lines = "\n".join(

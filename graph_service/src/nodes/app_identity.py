@@ -61,6 +61,12 @@ class AppIdentity(BaseNode):
         model=HasPermissionRel,
         cardinality=AsyncZeroOrMore,
     )
+    permitted_resource_types = AsyncRelationshipTo(
+        "nodes.resource_type.ResourceType",
+        "HAS_PERMISSION",
+        model=HasPermissionRel,
+        cardinality=AsyncZeroOrMore,
+    )
     permitted_groups = AsyncRelationshipTo(
         "nodes.group.Group",
         "HAS_PERMISSION",

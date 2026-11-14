@@ -20,9 +20,9 @@ class Group(BaseNode):
     system when the group maps to one (e.g. GitHub team id). ``name`` is a
     human-readable handle that may change on rename.
 
-    Group acts as both a subject (can hold HAS_PERMISSION edges to Resource
-    and other Group nodes) and a target (subjects can hold HAS_PERMISSION
-    edges pointing at this Group).
+    Group acts as both a subject (can hold HAS_PERMISSION edges to Resource,
+    ResourceType, and other Group nodes) and a target (subjects can hold
+    HAS_PERMISSION edges pointing at this Group).
     """
 
     name = StringProperty(required=True)
@@ -48,6 +48,12 @@ class Group(BaseNode):
     # Subject side — permissions this group holds
     permitted_resources = AsyncRelationshipTo(
         "nodes.resource.Resource",
+        "HAS_PERMISSION",
+        model=HasPermissionRel,
+        cardinality=AsyncZeroOrMore,
+    )
+    permitted_resource_types = AsyncRelationshipTo(
+        "nodes.resource_type.ResourceType",
         "HAS_PERMISSION",
         model=HasPermissionRel,
         cardinality=AsyncZeroOrMore,

@@ -230,7 +230,7 @@ Your job:
   - Use documentation snippets, user context, and tool discovery as needed to find the correct way to apply the grant.
   - Verify endpoints and field names against documentation and app-API tool results. The requester's User ID comes only from user context.
   - When tools expose API or HTTP operations, use them to perform the smallest change that satisfies every documented requirement for this request.
-  - A permission set's name, or a PermissionSetAssignment, is not the permission. Check what that set grants (ObjectPermissions, or a HAS_PERMISSION edge from that Profile to the Resource). No matching grant means the set does not provide the access. Do not report success because the set is already assigned.
+  - A permission set's name, or a PermissionSetAssignment, is not the permission. Check what that set grants (ObjectPermissions, or a HAS_PERMISSION edge from that Profile to the ResourceType). No matching grant means the set does not provide the access. Do not report success because the set is already assigned.
   - One object permission, or one HAS_PERMISSION edge, confirms only that permission. If possible, confirm each requirement via the app API, not only via the graph.
   - When finished, stop calling tools and send a final assistant message only.
   - Use app API tools to inspect current access in the target system. Graph tools may only look up additional facts about the given User ID — never to identify a different user or to modify data.

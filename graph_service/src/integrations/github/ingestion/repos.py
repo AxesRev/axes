@@ -7,7 +7,13 @@ import logging
 from github.Installation import Installation
 from github.Repository import Repository
 
-from integrations.github.ingestion.shared import ConnectionRef, ResourceRow, merge_resources
+from integrations.github.ingestion.resource_types import GITHUB_RESOURCE_TYPE_REPOSITORY
+from integrations.github.ingestion.shared import (
+    ConnectionRef,
+    ResourceRow,
+    merge_resources,
+    resource_type_external_id,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +23,8 @@ def resource_row_from_github(repo: Repository, *, connection: ConnectionRef) -> 
         external_id=str(repo.id),
         name=repo.name,
         uri=repo.full_name,
-        kind="repository",
+        kind=GITHUB_RESOURCE_TYPE_REPOSITORY,
+        resource_type_external_id=resource_type_external_id(connection, GITHUB_RESOURCE_TYPE_REPOSITORY),
         connection_app=connection["app"],
         connection_external_id=connection["external_id"],
     )

@@ -20,7 +20,7 @@ class AppConnection(BaseNode):
     app-specific fields outside the common schema.
 
     All nodes that are scoped to this workspace — AppIdentity, Resource,
-    Group, Profile — point here via a BELONGS_TO edge.
+    ResourceType, Group, Profile — point here via a BELONGS_TO edge.
     """
 
     name = StringProperty(required=True)
@@ -33,6 +33,11 @@ class AppConnection(BaseNode):
     )
     resources = AsyncRelationshipFrom(
         "nodes.resource.Resource",
+        "BELONGS_TO",
+        cardinality=AsyncZeroOrMore,
+    )
+    resource_types = AsyncRelationshipFrom(
+        "nodes.resource_type.ResourceType",
         "BELONGS_TO",
         cardinality=AsyncZeroOrMore,
     )
