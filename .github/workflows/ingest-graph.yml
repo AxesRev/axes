@@ -1,0 +1,22 @@
+name: Ingest graph
+
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: ingest-graph-dev
+  cancel-in-progress: false
+
+jobs:
+  ingest-graph:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Ingest graph
+        uses: ./.github/actions/fetch-graph

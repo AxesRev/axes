@@ -1,0 +1,74 @@
+name: Fetch graph
+description: Wipe Neo4j and ingest tenant graphs by running a one-shot Job from CronJob fetch-graph.
+
+inputs:
+  aws-region:
+    description: AWS region of the EKS cluster
+    required: false
+    default: eu-west-1
+  role-to-assume:
+    description: IAM role ARN for GitHub Actions OIDC
+    required: false
+    default: arn:aws:iam::042993547532:role/github-actions-deploy
+  eks-cluster:
+    description: EKS cluster name
+    required: false
+    default: axes-dev
+  namespace:
+    description: Kubernetes namespace of the fetch-graph CronJob
+    required: false
+    default: langraph-server
+  cronjob:
+    description: CronJob to clone for the one-shot ingest Job
+    required: false
+    default: fetch-graph
+  job-name:
+    description: One-shot Job name. Defaults to fetch-graph-<run id>-<attempt>.
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: ${{ inputs.role-to-assume }}
+        aws-region: ${{ inputs.aws-region }}
+
+    - name: Update kubeconfig
+      shell: bash
+      env:
+        EKS_CLUSTER: ${{ inputs.eks-cluster }}
+        AWS_REGION: ${{ inputs.aws-region }}
+      run: aws eks update-kubeconfig --name "$EKS_CLUSTER" --region "$AWS_REGION"
+
+    - name: Run fetch-graph Job
+      shell: bash
+      env:
+        FETCH_GRAPH_NAMESPACE: ${{ inputs.namespace }}
+        FETCH_GRAPH_CRONJOB: ${{ inputs.cronjob }}
+        JOB_NAME: ${{ inputs.job-name }}
+      run: |
+        set -euo pipefail
+        if [ -z "$JOB_NAME" ]; then
+          JOB_NAME="fetch-graph-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+        fi
+        cleanup() {
+          kubectl delete job "$JOB_NAME" \
+            --namespace="$FETCH_GRAPH_NAMESPACE" \
+            --wait=true \
+            --ignore-not-found
+        }
+        trap cleanup EXIT
+        kubectl create job "$JOB_NAME" \
+          --from="cronjob/$FETCH_GRAPH_CRONJOB" \
+          --namespace="$FETCH_GRAPH_NAMESPACE"
+        if ! kubectl wait --for=condition=complete "job/$JOB_NAME" \
+          --namespace="$FETCH_GRAPH_NAMESPACE" \
+          --timeout=110m; then
+          kubectl logs "job/$JOB_NAME" --namespace="$FETCH_GRAPH_NAMESPACE" --tail=200 || true
+          kubectl describe "job/$JOB_NAME" --namespace="$FETCH_GRAPH_NAMESPACE" || true
+          exit 1
+        fi
+        kubectl logs "job/$JOB_NAME" --namespace="$FETCH_GRAPH_NAMESPACE" --tail=50 || true
