@@ -25,6 +25,9 @@ logger = logging.getLogger(__name__)
 _GITHUB_OPENAPI_SPEC_URL = (
     "https://raw.githubusercontent.com/github/rest-api-description/main/descriptions/api.github.com/api.github.com.json"
 )
+# json_explorer is a ZeroShot JSON agent that passes `stop` sequences. OpenAI
+# Responses models (gpt-5.4-nano with reasoning) reject that argument.
+JSON_EXPLORER_MODEL = "openai/gpt-4o-mini"
 
 _toolkit_cache: dict[tuple[Any, ...], OpenAPIToolkit] = {}
 
@@ -145,9 +148,7 @@ def build_openapi_toolkit(
     access_token = get_installation_access_token(installation_id, api_version=api_version)
 
     cache_key = (
-        ctx.model,
-        ctx.reasoning_effort,
-        ctx.thinking_budget_tokens,
+        JSON_EXPLORER_MODEL,
         installation_id,
         access_token,
         spec_path,
@@ -162,11 +163,7 @@ def build_openapi_toolkit(
         return cached
 
     openapi_dict = _load_openapi_dict(spec_path=spec_path, spec_url=_GITHUB_OPENAPI_SPEC_URL)
-    llm = load_chat_model(
-        ctx.model,
-        thinking_budget_tokens=ctx.thinking_budget_tokens,
-        reasoning_effort=ctx.reasoning_effort,
-    )
+    llm = load_chat_model(JSON_EXPLORER_MODEL)
     requests_wrapper = GitHubHttpRequestsWrapper(
         headers={
             "Authorization": f"Bearer {access_token}",
