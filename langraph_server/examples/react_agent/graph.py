@@ -24,13 +24,13 @@ def route_after_detect_relevant_apps(state: State) -> Literal["load_user_context
 
 
 def route_after_permission_detection(state: State) -> Literal["access_request_evaluation", "__end__"]:
-    if state.permissions:
+    if state.resource_type:
         return "access_request_evaluation"
     return "__end__"
 
 
 def route_after_access_request_evaluation(state: State) -> Literal["access_grant_execution", "__end__"]:
-    if state.access_evaluation is not None and state.access_evaluation.should_grant:
+    if state.access_evaluation is not None and state.access_evaluation.should_grant and state.permissions:
         return "access_grant_execution"
     return "__end__"
 
