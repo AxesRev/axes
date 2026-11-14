@@ -1,50 +1,54 @@
-"""Permission detection subgraph."""
+"""Permission detection subgraph (Jev). Stage 1: resource type + instance flag."""
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
+import os
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
-from typing import Annotated, Any, Literal, NotRequired, cast
+from typing import Annotated, Any
 
-from langchain.agents import AgentState, create_agent
-from langchain.agents.middleware import AgentMiddleware, ModelRequest, dynamic_prompt
-from langchain.agents.structured_output import ToolStrategy
-from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, ToolMessage
+from langchain_core.messages import AIMessage, AnyMessage
 from langgraph.graph import StateGraph, add_messages
-from langgraph.prebuilt.tool_node import ToolCallRequest
 from langgraph.runtime import Runtime
+from typesafe_sdk import AsyncTypeSafeClient, Choice, Noul
 
-from examples.react_agent.app_api_tools import load_detection_lookup_tools
 from examples.react_agent.context import Context
 from examples.react_agent.neo4j_schema_prompt import build_neo4j_schema_block
-from examples.react_agent.nodes.tools import _get_all_tools, truncate_tool_message
-from examples.react_agent.nodes.validator import validate_results
-from examples.react_agent.prompts import (
-    PERMISSION_DETECTOR_BASE_PROMPT,
-    PERMISSION_DETECTOR_FEEDBACK_TEMPLATE,
-    PERMISSION_DETECTOR_TASK_TEMPLATE,
-)
-from examples.react_agent.state import DetectedPermissionList, Permission, State
+from examples.react_agent.nodes.tools import read_neo4j_cypher
+from examples.react_agent.state import ResourceTypeOption, State
 from examples.react_agent.user_context_models import UserContextData
 from examples.react_agent.user_context_prompt import build_user_context_block
-from examples.react_agent.utils import get_message_text, load_chat_model
 
 logger = logging.getLogger(__name__)
 
-MAX_REVISIONS: int = 3
-DETECTOR_MODEL = "openai/gpt-5.4-nano"
+JEV_MODEL = "jev-latest"
+_CHOICE_OPTION_LIMIT = 255
+_NOUL_TRUE_THRESHOLD = 0.5
+_CHOICE_ADVANCE_THRESHOLD = 0.5
+_RESOURCE_TYPE_INSTRUCTIONS = (
+    "Which catalog resource type is this access request about? "
+    "Pick the type (Campaign, repository, …), not a record or repo instance."
+)
+_SPECIFIC_INSTANCE_INSTRUCTIONS = (
+    "The user asked for access to a specific named resource instance "
+    "(a particular repository, Campaign record, or similar), not only a resource type."
+)
 
-_RESOURCE_DETECTOR_GROUP_LIMIT: int = 20
-_RESOURCE_DETECTOR_PROFILE_LIMIT: int = 20
-_RESOURCE_DETECTOR_PERMISSION_LIMIT: int = 50
+_RESOURCE_TYPES_QUERY = """
+MATCH (t:Tenant {external_id: $tenant_id})<-[:BELONGS_TO]-(c:AppConnection)
+      <-[:BELONGS_TO]-(rt:ResourceType)
+WHERE size($apps) = 0 OR c.app IN $apps
+RETURN c.app AS app, rt.name AS name, rt.external_id AS external_id
+ORDER BY c.app, rt.name
+"""
 
 
 @dataclass
 class PermissionDetectionInput:
-    """Parent channels this subgraph may read. Transcript stays private."""
+    """Parent channels this subgraph may read."""
 
     user_request: str = field(default="")
     user_contexts: list[UserContextData] = field(default_factory=list)
@@ -55,258 +59,256 @@ class PermissionDetectionInput:
 
 @dataclass
 class PermissionDetectionOutput:
-    """Typed result plus internal messages for the parent wrapper to filter."""
+    """Stage-1 result. Later Jev stages will extend this."""
 
-    permissions: list[Permission] = field(default_factory=list)
+    resource_type: str | None = None
+    specific_resource_requested: bool = False
     messages: Annotated[Sequence[AnyMessage], add_messages] = field(default_factory=list)
 
 
-class PermissionDetectorState(AgentState):
-    """create_agent state_schema without managed channels such as is_last_step."""
-
-    user_contexts: NotRequired[list[UserContextData]]
-    doc_corpus_context: NotRequired[str]
-    neo4j_schema: NotRequired[str]
-    selected_apps: NotRequired[list[str]]
+def _jev_api_key() -> str:
+    return os.environ.get("JEV_API_KEY", "").strip() or os.environ.get("TYPESAFE_API_KEY", "").strip()
 
 
-def _extra_detector_context(state: State) -> str:
-    """Add the user's current group, profile, and resource-access data."""
-    if not state.user_contexts:
-        return ""
-
-    sections: list[str] = []
-    for user_context in state.user_contexts:
-        if user_context.groups:
-            group_lines = "\n".join(
-                group.format_for_context() for group in user_context.groups[:_RESOURCE_DETECTOR_GROUP_LIMIT]
-            )
-            sections.append(f"Groups this user currently belongs to ({user_context.app}):\n{group_lines}")
-
-        if user_context.profiles:
-            profile_lines = "\n".join(
-                profile.format_for_context() for profile in user_context.profiles[:_RESOURCE_DETECTOR_PROFILE_LIMIT]
-            )
-            sections.append(
-                f"Profiles and permission sets assigned to this user ({user_context.app}):\n{profile_lines}"
-            )
-
-        resource_permissions = [
-            permission
-            for permission in user_context.permissions
-            if permission.target_kind in {"resource", "resource_type"}
-        ]
-        if resource_permissions:
-            permission_lines = "\n".join(
-                f"- {permission.target_name}: {permission.permission}"
-                for permission in resource_permissions[:_RESOURCE_DETECTOR_PERMISSION_LIMIT]
-            )
-            sections.append(
-                f"Resources this user currently has access to ({user_context.app}; present state only):\n"
-                + permission_lines
-            )
-
-    if not sections:
-        return ""
-
-    return "\n\n" + "\n\n".join(sections)
+def parse_resource_type_rows(rows: list[dict[str, Any]]) -> list[ResourceTypeOption]:
+    options: list[ResourceTypeOption] = []
+    seen: set[str] = set()
+    for row in rows:
+        app = str(row.get("app") or "").strip()
+        name = str(row.get("name") or "").strip()
+        external_id = str(row.get("external_id") or "").strip()
+        if not app or not name or not external_id:
+            continue
+        if external_id in seen:
+            continue
+        seen.add(external_id)
+        options.append(ResourceTypeOption(app=app, name=name, external_id=external_id))
+    return options
 
 
-def _feedback_block(state: State) -> str:
-    lines: list[str] = []
-    if state.resource_feedback:
-        lines.append(f"- resource: {state.resource_feedback}")
-    if state.permission_feedback:
-        lines.append(f"- permission: {state.permission_feedback}")
-    if not lines:
-        return ""
-    return PERMISSION_DETECTOR_FEEDBACK_TEMPLATE.format(feedback="\n".join(lines))
+@dataclass(frozen=True, slots=True)
+class _ChoicePick:
+    key: str
+    option: ResourceTypeOption
+    probability: float
 
 
-def _seed(state: State) -> HumanMessage:
-    base_content = PERMISSION_DETECTOR_TASK_TEMPLATE.format(
-        user_request=state.user_request,
-        feedback_block=_feedback_block(state),
-    )
-    return HumanMessage(content=base_content + _extra_detector_context(state))
+def choice_key(option: ResourceTypeOption, *, name_counts: dict[str, int]) -> str:
+    if name_counts.get(option.name, 0) > 1:
+        return f"{option.app}:{option.name}"
+    return option.name
 
 
-@dynamic_prompt
-def _detector_system_prompt(request: ModelRequest) -> str:
-    state = request.state
-    return PERMISSION_DETECTOR_BASE_PROMPT.format(
-        system_time=datetime.now(tz=UTC).isoformat(),
-        user_context=build_user_context_block(state.get("user_contexts") or []),
-        doc_corpus_context=(state.get("doc_corpus_context") or "").strip(),
-        neo4j_schema=build_neo4j_schema_block(state.get("neo4j_schema") or ""),
-    )
+def keyed_choice_criteria(options: list[ResourceTypeOption]) -> tuple[dict[str, str], dict[str, ResourceTypeOption]]:
+    name_counts: dict[str, int] = {}
+    app_name_counts: dict[str, int] = {}
+    for option in options:
+        name_counts[option.name] = name_counts.get(option.name, 0) + 1
+        app_name = f"{option.app}:{option.name}"
+        app_name_counts[app_name] = app_name_counts.get(app_name, 0) + 1
+
+    criteria: dict[str, str] = {}
+    by_key: dict[str, ResourceTypeOption] = {}
+    for option in options:
+        key = choice_key(option, name_counts=name_counts)
+        if key in criteria or app_name_counts.get(f"{option.app}:{option.name}", 0) > 1:
+            key = option.external_id
+        criteria[key] = f"{option.app} resource type {option.name}"
+        by_key[key] = option
+    return criteria, by_key
 
 
-def _selected_apps(state: Any) -> list[str]:
-    if isinstance(state, dict):
-        return list(state.get("selected_apps") or [])
-    return list(getattr(state, "selected_apps", None) or [])
+def _chunks(options: list[ResourceTypeOption], size: int) -> list[list[ResourceTypeOption]]:
+    return [options[index : index + size] for index in range(0, len(options), size)]
 
 
-async def _inspect_tools_by_name(*, runtime: Any, state: Any) -> dict[str, Any]:
-    tools = await load_detection_lookup_tools(
-        runtime=runtime,
-        selected_apps=_selected_apps(state),
-    )
-    return {tool.name: tool for tool in tools if getattr(tool, "name", None)}
-
-
-class _BindDetectorRuntime(AgentMiddleware):
-    """Attach inspect-only app API tools at request time and execute them."""
-
-    async def awrap_model_call(self, request: ModelRequest, handler):
-        context = request.runtime.context
-        inspect_by_name = await _inspect_tools_by_name(runtime=request.runtime, state=request.state)
-        existing_names = {getattr(tool, "name", None) for tool in request.tools}
-        extra_tools = [tool for name, tool in inspect_by_name.items() if name not in existing_names]
-        return await handler(
-            request.override(
-                model=load_chat_model(
-                    DETECTOR_MODEL,
-                    thinking_budget_tokens=context.thinking_budget_tokens,
-                    reasoning_effort=context.reasoning_effort,
-                ),
-                tools=[*request.tools, *extra_tools],
-            )
-        )
-
-    async def awrap_tool_call(self, request: ToolCallRequest, handler):
-        if request.tool is None:
-            inspect_by_name = await _inspect_tools_by_name(runtime=request.runtime, state=request.state)
-            tool = inspect_by_name.get(request.tool_call.get("name"))
-            if tool is not None:
-                request = request.override(tool=tool)
-        result = await handler(request)
-        if isinstance(result, ToolMessage):
-            return truncate_tool_message(result)
-        return result
-
-
-async def seed_detection(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
-    logger.info("seed_detection: starting permission detection")
-    return {"messages": [_seed(state)]}
-
-
-async def apply_structured_response(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
-    detected = state.structured_response
-    if detected is None:
-        logger.warning("apply_structured_response: missing structured_response")
-        return {}
-    logger.info(
-        "apply_structured_response: %s",
-        [(item.resource_result.value, item.permission_result.value) for item in detected.permissions],
-    )
-    return {"detected_permissions": detected.permissions}
-
-
-async def inject_feedback(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
-    logger.info("inject_feedback: sending validator feedback back to detector")
-    return {"messages": [_seed(state)]}
-
-
-def route_validator(state: State) -> Literal["inject_feedback", "finalize"]:
-    if state.revision_count >= MAX_REVISIONS:
-        logger.warning("route_validator: revision cap (%d) — forcing finalize", state.revision_count)
-        return "finalize"
-
-    if state.resource_feedback or state.permission_feedback:
-        logger.info("route_validator: feedback present — re-running detector")
-        return "inject_feedback"
-
-    logger.info("route_validator: passed — finalize")
-    return "finalize"
-
-
-async def finalize(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
-    detected = state.detected_permissions
-    permission_values = [item.permission_result.value for item in detected]
-    if not detected or any(not value for value in permission_values):
-        logger.warning("finalize: missing required permission in %r", permission_values)
-        return {
-            "messages": [
-                AIMessage(
-                    content="Sorry, I could not determine a complete permission for this request (missing required fields)."
-                )
-            ]
-        }
-
-    permissions = [
-        Permission(resource=item.resource_result.value, permission=cast(str, item.permission_result.value))
-        for item in detected
+def build_jev_state(state: State) -> str:
+    sections = [
+        "User access request:",
+        state.user_request.strip() or "(empty)",
+        "",
+        f"Selected apps: {', '.join(state.selected_apps) if state.selected_apps else '(none)'}",
     ]
+    user_context = build_user_context_block(state.user_contexts).strip()
+    if user_context:
+        sections.extend(["", user_context])
+    docs = state.doc_corpus_context.strip()
+    if docs:
+        sections.extend(["", "Documentation snippets:", docs])
+    schema = build_neo4j_schema_block(state.neo4j_schema).strip()
+    if schema:
+        sections.extend(["", schema])
+    return "\n".join(sections)
+
+
+def noul_to_bool(value: float) -> bool:
+    return value >= _NOUL_TRUE_THRESHOLD
+
+
+async def _ask_specific_instance(client: AsyncTypeSafeClient, state_text: str) -> float:
+    response = await client.system_one(
+        state=state_text,
+        questions={
+            "specific_resource_requested": Noul(instructions=_SPECIFIC_INSTANCE_INSTRUCTIONS),
+        },
+    )
+    return float(response.nouls["specific_resource_requested"].noul)
+
+
+async def _choose_resource_type(
+    client: AsyncTypeSafeClient,
+    state_text: str,
+    options: list[ResourceTypeOption],
+) -> _ChoicePick | None:
+    criteria, by_key = keyed_choice_criteria(options)
+    response = await client.system_one(
+        state=state_text,
+        questions={
+            "resource_type": Choice(instructions=_RESOURCE_TYPE_INSTRUCTIONS, criteria=criteria),
+        },
+    )
+    answer = response.choices["resource_type"]
+    key = str(answer.choice)
+    option = by_key.get(key)
+    if option is None:
+        logger.warning("resource_type_choice_unknown key=%s options=%s", key, list(by_key))
+        return None
+    probability = float((answer.probabilities or {}).get(key, 0.0))
     logger.info(
-        "finalize: %s",
-        [(permission.resource, permission.permission) for permission in permissions],
+        "resource_type_chunk_choice key=%s probability=%.3f confidence=%s",
+        key,
+        probability,
+        getattr(answer, "confidence", None),
     )
-    return {"permissions": permissions}
+    return _ChoicePick(key=key, option=option, probability=probability)
 
 
-async def make_permission_detection_graph():
-    tools = await _get_all_tools()
-    logger.info("permission_detection: %d lookup tool(s): %s", len(tools), [tool.name for tool in tools])
-    context = Context()
-    detector = create_agent(
-        model=load_chat_model(
-            DETECTOR_MODEL,
-            thinking_budget_tokens=context.thinking_budget_tokens,
-            reasoning_effort=context.reasoning_effort,
-        ),
-        tools=tools,
-        system_prompt=PERMISSION_DETECTOR_BASE_PROMPT,
-        middleware=[_detector_system_prompt, _BindDetectorRuntime()],
-        response_format=ToolStrategy(DetectedPermissionList),
-        state_schema=PermissionDetectorState,
-        context_schema=Context,
-        name="detector",
+async def _tournament_resource_type(
+    client: AsyncTypeSafeClient,
+    state_text: str,
+    options: list[ResourceTypeOption],
+) -> _ChoicePick | None:
+    if not options:
+        return None
+
+    chunks = _chunks(options, _CHOICE_OPTION_LIMIT)
+    if len(chunks) == 1:
+        return await _choose_resource_type(client, state_text, chunks[0])
+
+    picks = await asyncio.gather(*[_choose_resource_type(client, state_text, chunk) for chunk in chunks])
+    finalists = [pick for pick in picks if pick is not None and pick.probability > _CHOICE_ADVANCE_THRESHOLD]
+    logger.info(
+        "resource_type_tournament chunks=%s advanced=%s",
+        len(chunks),
+        [pick.key for pick in finalists],
     )
+    if not finalists:
+        return None
+    if len(finalists) == 1:
+        return finalists[0]
+    return await _tournament_resource_type(client, state_text, [pick.option for pick in finalists])
 
+
+async def load_resource_types(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
+    tenant_id = runtime.context.tenant_id.strip()
+    if not tenant_id:
+        logger.warning("load_resource_types: empty tenant_id")
+        return {"resource_types": []}
+
+    rows = await read_neo4j_cypher(
+        _RESOURCE_TYPES_QUERY,
+        {"tenant_id": tenant_id, "apps": list(state.selected_apps)},
+    )
+    options = parse_resource_type_rows(rows)
+    logger.info(
+        "load_resource_types: tenant=%s apps=%s count=%s",
+        tenant_id,
+        state.selected_apps,
+        len(options),
+    )
+    return {"resource_types": options}
+
+
+def _as_resource_type_options(raw: list[ResourceTypeOption] | list[dict[str, Any]]) -> list[ResourceTypeOption]:
+    options: list[ResourceTypeOption] = []
+    for item in raw:
+        if isinstance(item, ResourceTypeOption):
+            options.append(item)
+            continue
+        parsed = parse_resource_type_rows([item])
+        options.extend(parsed)
+    return options
+
+
+async def select_resource_type(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
+    options = _as_resource_type_options(state.resource_types)
+    if not options:
+        logger.warning("select_resource_type: no resource types")
+        return {"resource_type": None, "specific_resource_requested": False}
+
+    api_key = _jev_api_key()
+    if not api_key:
+        raise RuntimeError("JEV_API_KEY or TYPESAFE_API_KEY is required for permission detection")
+
+    state_text = build_jev_state(state)
+    async with AsyncTypeSafeClient(api_key=api_key, model=JEV_MODEL) as client:
+        noul_task = asyncio.create_task(_ask_specific_instance(client, state_text))
+        try:
+            pick = await _tournament_resource_type(client, state_text, options)
+            noul = await noul_task
+        finally:
+            if not noul_task.done():
+                noul_task.cancel()
+
+    resource_type = pick.key if pick is not None else None
+    specific = noul_to_bool(noul)
+    logger.info(
+        "select_resource_type: resource_type=%s specific_resource_requested=%s noul=%.3f",
+        resource_type,
+        specific,
+        noul,
+    )
+    return {
+        "resource_type": resource_type,
+        "specific_resource_requested": specific,
+        "messages": [
+            AIMessage(
+                content=json.dumps(
+                    {"resource_type": resource_type, "specific_resource_requested": specific},
+                    separators=(",", ":"),
+                )
+            )
+        ],
+    }
+
+
+def make_permission_detection_graph():
     builder = StateGraph(
         State,
         input_schema=PermissionDetectionInput,
         output_schema=PermissionDetectionOutput,
         context_schema=Context,
     )
-    builder.add_node("seed_detection", seed_detection)
-    builder.add_node("detector", detector)
-    builder.add_node("apply_structured_response", apply_structured_response)
-    builder.add_node("inject_feedback", inject_feedback)
-    builder.add_node("validator", validate_results)
-    builder.add_node("finalize", finalize)
-    builder.add_edge("__start__", "seed_detection")
-    builder.add_edge("seed_detection", "detector")
-    builder.add_edge("detector", "apply_structured_response")
-    builder.add_edge("apply_structured_response", "validator")
-    builder.add_conditional_edges(
-        "validator",
-        route_validator,
-        ["inject_feedback", "finalize"],
-    )
-    builder.add_edge("inject_feedback", "detector")
-    builder.add_edge("finalize", "__end__")
+    builder.add_node("load_resource_types", load_resource_types)
+    builder.add_node("select_resource_type", select_resource_type)
+    builder.add_edge("__start__", "load_resource_types")
+    builder.add_edge("load_resource_types", "select_resource_type")
+    builder.add_edge("select_resource_type", "__end__")
     return builder.compile(name="Required Permission Agent")
 
 
 def make_permission_detection_node(compiled):
-    """Wrap the detector so the parent gets the permission and its JSON in chat."""
+    """Run stage-1 detection and copy its fields onto the parent state."""
 
     async def run_permission_detection(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
         result = await compiled.ainvoke(state, context=runtime.context)
-        permissions = result.get("permissions")
-        if permissions:
-            payload = json.dumps(
-                [permission.model_dump(mode="json") for permission in permissions],
-                separators=(",", ":"),
-            )
-            return {"permissions": permissions, "messages": [AIMessage(content=payload)]}
+        payload = {
+            "resource_type": result.get("resource_type"),
+            "specific_resource_requested": bool(result.get("specific_resource_requested")),
+        }
         messages = result.get("messages") or []
-        last = messages[-1] if messages else None
-        if not isinstance(last, AIMessage) or not get_message_text(last).strip():
-            return {}
-        return {"messages": [last]}
+        if not messages:
+            messages = [AIMessage(content=json.dumps(payload, separators=(",", ":")))]
+        return {**payload, "messages": messages}
 
     return run_permission_detection

@@ -36,7 +36,7 @@ def route_after_access_request_evaluation(state: State) -> Literal["access_grant
 
 
 async def graph():
-    permission_detection_graph = await make_permission_detection_graph()
+    permission_detection_graph = make_permission_detection_graph()
 
     builder = StateGraph(State, input_schema=InputState, context_schema=Context)
     builder.add_node("detect_relevant_apps", detect_relevant_apps)
