@@ -329,7 +329,6 @@ def make_permission_detection_node(compiled):
         }
         return {
             "resource_type": payload["resource_type"],
-            "specific_resource_requested": payload["specific_resource_requested"],
             "resource_type_external_id": result.get("resource_type_external_id"),
             "requested_objects": requested_objects,
             "messages": [AIMessage(content=json.dumps(payload, separators=(",", ":")))],

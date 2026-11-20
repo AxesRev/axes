@@ -47,8 +47,6 @@ class AccessEvaluationInput:
     doc_corpus_context: str = field(default="")
     neo4j_schema: str = field(default="")
     resource_type: str | None = field(default=None)
-    resource_type_external_id: str | None = field(default=None)
-    specific_resource_requested: bool = field(default=False)
     requested_objects: list[ResourceInstanceOption] = field(default_factory=list)
 
 
