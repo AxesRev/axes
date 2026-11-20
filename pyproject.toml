@@ -23,7 +23,8 @@ aegra-integrations-service = { workspace = true }
 aegra-slack-app = { workspace = true }
 
 [tool.uv.workspace]
-members = ["langraph_server", "graph_service", "billing_service", "tenant_service", "integrations_service", "slack_app", "neo4j_mcp"]
+members = ["langraph_server", "graph_service", "billing_service", "tenant_service", "integrations_service", "slack_app"]
+exclude = ["neo4j_mcp"]
 
 [dependency-groups]
 dev = [

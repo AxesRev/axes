@@ -44,12 +44,11 @@ dependencies = [
     "auth0-fastapi-api>=1.0.0b5",
     "pymupdf>=1.28.0",
     "aiohttp>=3.10.0",
-    "langchain>=1.0.0",
-    "langchain-community>=0.4.1",
-    "langchain-mcp-adapters>=0.2.1",
+    "langchain[mcp]>=1.5.2",
     "pygithub>=2.9.1",
     "simple-salesforce>=1.12.6",
     "typesafe-sdk>=0.7.5",
+    "fastmcp[jev]>=4.2.3",
 ]
 
 [project.urls]

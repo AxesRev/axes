@@ -19,13 +19,13 @@ logger = logging.getLogger(__name__)
 AppApiToolLoader = Callable[..., list[Any] | Awaitable[list[Any]]]
 
 
-def _load_github_api_tools(
+async def _load_github_api_tools(
     runtime: Runtime[Context],
     *,
     include_read: bool,
     include_write: bool,
 ) -> list[Any]:
-    return build_github_api_tools(runtime, include_read=include_read, include_write=include_write)
+    return await build_github_api_tools(runtime, include_read=include_read, include_write=include_write)
 
 
 async def _load_salesforce_api_tools(

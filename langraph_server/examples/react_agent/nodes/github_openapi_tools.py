@@ -1,189 +1,107 @@
-"""GitHub REST OpenAPI tools: spec inspect plus HTTP read/write."""
+"""GitHub REST tools: one FastMCP tool per OpenAPI operation, discovered through Jev search."""
 
 from __future__ import annotations
 
+import functools
 import json
 import logging
 import os
+from collections.abc import Generator
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any
 
-import aiohttp
 import httpx
-from langchain_community.agent_toolkits.openapi.toolkit import OpenAPIToolkit
-from langchain_community.tools.json.tool import JsonSpec
-from langchain_community.utilities.requests import TextRequestsWrapper
+import httpx2
+from fastmcp import FastMCP
+from fastmcp.experimental.transforms.jev_search import JevSearchTransform
+from fastmcp.server.providers.openapi import MCPType, RouteMap
+from langchain.mcp import MCPAdapter
 from langgraph.runtime import Runtime
-from requests import Response
 
 from examples.react_agent.context import Context
 from examples.react_agent.github_installation_token import get_installation_access_token
-from examples.react_agent.utils import load_chat_model
 
 logger = logging.getLogger(__name__)
 
 _GITHUB_OPENAPI_SPEC_URL = (
     "https://raw.githubusercontent.com/github/rest-api-description/main/descriptions/api.github.com/api.github.com.json"
 )
-# json_explorer is a ZeroShot JSON agent that passes `stop` sequences. OpenAI
-# Responses models (gpt-5.4-nano with reasoning) reject that argument.
-JSON_EXPLORER_MODEL = "openai/gpt-4o-mini"
+_GITHUB_API_URL = "https://api.github.com"
+_READ_ONLY_ROUTE_MAPS = [
+    RouteMap(methods=["GET"], mcp_type=MCPType.TOOL),
+    RouteMap(mcp_type=MCPType.EXCLUDE),
+]
 
-_toolkit_cache: dict[tuple[Any, ...], OpenAPIToolkit] = {}
-
-
-def _format_http_tool_output(*, status_code: int, body: str) -> str:
-    normalized = body.strip()
-    if normalized:
-        return f"HTTP {status_code}\n\n{normalized}"
-    return f"HTTP {status_code}\n\n(empty body)"
+_server_cache: dict[tuple[str, bool], FastMCP] = {}
 
 
-class GitHubHttpRequestsWrapper(TextRequestsWrapper):
-    """TextRequestsWrapper that includes HTTP status in tool output for the LLM."""
+class _InstallationTokenAuth(httpx2.Auth):
+    """Sets a fresh GitHub App installation token on every request."""
 
-    def _format_response(self, *, status_code: int, body: str | dict[str, Any]) -> str:
-        if isinstance(body, dict):
-            text = json.dumps(body, ensure_ascii=False, indent=2)
-        else:
-            text = body
-        return _format_http_tool_output(status_code=status_code, body=text)
+    def __init__(self, installation_id: str) -> None:
+        self._installation_id = installation_id
 
-    def _get_resp_content(self, response: Response) -> str | dict[str, Any]:
-        content = super()._get_resp_content(response)
-        return self._format_response(status_code=response.status_code, body=content)
-
-    async def _aget_resp_content(self, response: aiohttp.ClientResponse) -> str | dict[str, Any]:
-        content = await super()._aget_resp_content(response)
-        return self._format_response(status_code=response.status, body=content)
+    def auth_flow(self, request: httpx2.Request) -> Generator[httpx2.Request, httpx2.Response, None]:
+        request.headers["Authorization"] = f"Bearer {get_installation_access_token(self._installation_id)}"
+        yield request
 
 
-def _env_bool(name: str, default: bool) -> bool:
-    raw = os.environ.get(name)
-    if raw is None:
-        return default
-    return raw.strip().lower() in {"1", "true", "yes", "on"}
-
-
-def _load_openapi_dict(*, spec_path: str, spec_url: str) -> dict[str, Any]:
+@functools.cache
+def _openapi_spec() -> dict[str, Any]:
+    spec_path = os.environ.get("GITHUB_OPENAPI_SPEC_PATH", "").strip()
     if spec_path:
-        path = Path(spec_path)
-        if not path.is_file():
-            msg = f"GITHUB_OPENAPI_SPEC_PATH does not exist: {spec_path}"
-            raise FileNotFoundError(msg)
-        return json.loads(path.read_text(encoding="utf-8"))
-
-    response = httpx.get(spec_url, timeout=60.0)
+        return json.loads(Path(spec_path).read_text(encoding="utf-8"))
+    response = httpx.get(_GITHUB_OPENAPI_SPEC_URL, timeout=60.0)
     response.raise_for_status()
-    loaded = response.json()
-    if not isinstance(loaded, dict):
-        msg = "GitHub OpenAPI spec must be a JSON object"
-        raise TypeError(msg)
-    return loaded
+    return response.json()
 
 
-def github_tool_access(name: str) -> Literal["read", "write"]:
-    """Classify a GitHub OpenAPI toolkit tool as inspect (read) or mutate (write)."""
-    normalized = name.strip().lower()
-    if normalized.startswith("json_") or normalized == "json_explorer":
-        return "read"
-    if normalized == "requests_get" or normalized.endswith("_get"):
-        return "read"
-    return "write"
+def _github_server(installation_id: str, *, include_write: bool) -> FastMCP:
+    cache_key = (installation_id, include_write)
+    cached = _server_cache.get(cache_key)
+    if cached is not None:
+        return cached
+
+    client = httpx2.AsyncClient(
+        base_url=_GITHUB_API_URL,
+        headers={
+            "X-GitHub-Api-Version": os.environ.get("GITHUB_API_VERSION", "2022-11-28").strip(),
+            "Accept": "application/vnd.github+json",
+        },
+        auth=_InstallationTokenAuth(installation_id),
+        timeout=30.0,
+    )
+    server = FastMCP.from_openapi(
+        openapi_spec=_openapi_spec(),
+        client=client,
+        name="github",
+        route_maps=None if include_write else _READ_ONLY_ROUTE_MAPS,
+    )
+    server.add_transform(
+        JevSearchTransform(
+            api_key=os.environ["JEV_API_KEY"],
+            search_tool_name="search_github_api",
+            call_tool_name="call_github_api",
+        )
+    )
+    _server_cache[cache_key] = server
+    logger.info(
+        "github_openapi_server: initialized (installation_id=%s, include_write=%s)", installation_id, include_write
+    )
+    return server
 
 
-def select_github_tools(
-    tools: list[Any],
+async def build_github_api_tools(
+    runtime: Runtime[Context],
     *,
     include_read: bool,
     include_write: bool,
 ) -> list[Any]:
-    """Keep GitHub toolkit tools that match the requested access."""
-    selected: list[Any] = []
-    for tool in tools:
-        access = github_tool_access(getattr(tool, "name", "") or "")
-        if (access == "read" and include_read) or (access == "write" and include_write):
-            selected.append(tool)
-    return selected
-
-
-def build_github_api_tools(
-    runtime: Runtime[Context],
-    *,
-    include_read: bool = True,
-    include_write: bool = True,
-) -> list[Any]:
-    """GitHub inspect tools, mutate tools, or both."""
+    """Jev search plus call tools over the GitHub REST API (GET-only unless ``include_write``)."""
     if not include_read and not include_write:
         return []
-    toolkit = build_openapi_toolkit(runtime, allow_dangerous_requests=include_write)
-    return select_github_tools(
-        toolkit.get_tools(),
-        include_read=include_read,
-        include_write=include_write,
-    )
-
-
-def build_openapi_toolkit(
-    runtime: Runtime[Context],
-    *,
-    allow_dangerous_requests: bool | None = None,
-) -> OpenAPIToolkit:
-    """Build (or return cached) OpenAPIToolkit for GitHub REST API calls."""
-    ctx = runtime.context
-    installation_id = ctx.github_installation_id.strip()
+    installation_id = runtime.context.github_installation_id.strip()
     if not installation_id:
         msg = "github_installation_id is required for GitHub API tools"
         raise ValueError(msg)
-
-    spec_path = os.environ.get("GITHUB_OPENAPI_SPEC_PATH", "").strip()
-    api_version = os.environ.get("GITHUB_API_VERSION", "2022-11-28").strip()
-    if allow_dangerous_requests is None:
-        allow_dangerous = _env_bool("GITHUB_OPENAPI_ALLOW_DANGEROUS_REQUESTS", True)
-    else:
-        allow_dangerous = allow_dangerous_requests
-    json_agent_max_iterations = int(os.environ.get("GITHUB_OPENAPI_JSON_AGENT_MAX_ITERATIONS", "15"))
-    json_spec_max_value_length = int(os.environ.get("GITHUB_OPENAPI_JSON_SPEC_MAX_VALUE_LENGTH", "200"))
-    verbose = _env_bool("GITHUB_OPENAPI_VERBOSE", False)
-    access_token = get_installation_access_token(installation_id, api_version=api_version)
-
-    cache_key = (
-        JSON_EXPLORER_MODEL,
-        installation_id,
-        access_token,
-        spec_path,
-        api_version,
-        allow_dangerous,
-        json_agent_max_iterations,
-        json_spec_max_value_length,
-        verbose,
-    )
-    cached = _toolkit_cache.get(cache_key)
-    if cached is not None:
-        return cached
-
-    openapi_dict = _load_openapi_dict(spec_path=spec_path, spec_url=_GITHUB_OPENAPI_SPEC_URL)
-    llm = load_chat_model(JSON_EXPLORER_MODEL)
-    requests_wrapper = GitHubHttpRequestsWrapper(
-        headers={
-            "Authorization": f"Bearer {access_token}",
-            "X-GitHub-Api-Version": api_version,
-            "Accept": "application/vnd.github+json",
-        },
-    )
-    toolkit = OpenAPIToolkit.from_llm(
-        llm=llm,
-        json_spec=JsonSpec(dict_=openapi_dict, max_value_length=json_spec_max_value_length),
-        requests_wrapper=requests_wrapper,
-        allow_dangerous_requests=allow_dangerous,
-        verbose=verbose,
-        agent_executor_kwargs={"max_iterations": json_agent_max_iterations},
-    )
-    _toolkit_cache[cache_key] = toolkit
-    logger.info(
-        "github_openapi_toolkit: initialized (spec=%s, api_version=%s, allow_dangerous=%s)",
-        spec_path or _GITHUB_OPENAPI_SPEC_URL,
-        api_version,
-        allow_dangerous,
-    )
-    return toolkit
+    return await MCPAdapter(_github_server(installation_id, include_write=include_write)).list_tools()

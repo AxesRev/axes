@@ -4,9 +4,9 @@ import os
 from typing import Any
 
 import tiktoken
+from langchain.mcp import MCPAdapter
 from langchain_core.messages import ToolMessage
 from langchain_core.tools import BaseTool
-from langchain_mcp_adapters.client import MultiServerMCPClient
 from langgraph.prebuilt import ToolNode
 from langgraph.runtime import Runtime
 
@@ -84,24 +84,20 @@ async def execute_tools(
     return result
 
 
-def _mcp_servers() -> dict[str, dict[str, Any]]:
-    servers: dict[str, dict[str, Any]] = {}
-
+def _neo4j_mcp_url() -> str:
     neo4j_host = os.environ.get("NEO4J_MCP_HOST", settings.app.NEO4J_MCP_HOST).strip()
     if neo4j_host:
-        servers["neo4j"] = {"transport": "http", "url": f"{neo4j_host.rstrip('/')}/mcp/"}
-
-    return servers
+        return f"{neo4j_host.rstrip('/')}/mcp/"
+    return ""
 
 
 async def _get_all_tools(_runtime: Runtime[Context] | None = None) -> list[Any]:
     """Static TOOLS plus MCP tools when ``NEO4J_MCP_HOST`` is set."""
-    servers = _mcp_servers()
-    if not servers:
+    url = _neo4j_mcp_url()
+    if not url:
         return list(TOOLS)
 
-    client = MultiServerMCPClient(servers)
-    mcp_tools = await client.get_tools()
+    mcp_tools = await MCPAdapter(url).list_tools()
     return [*TOOLS, *mcp_tools]
 
 
@@ -121,12 +117,11 @@ def _extract_tool_text(result: Any) -> str:
 
 
 async def _get_mcp_tool(name: str) -> BaseTool | None:
-    servers = _mcp_servers()
-    if not servers:
+    url = _neo4j_mcp_url()
+    if not url:
         return None
 
-    client = MultiServerMCPClient(servers)
-    tools = await client.get_tools()
+    tools = await MCPAdapter(url).list_tools()
     for tool in tools:
         if tool.name == name:
             return tool
