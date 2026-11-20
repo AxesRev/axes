@@ -1,4 +1,4 @@
-ARG PY_VERSION=3.12
+ARG PY_VERSION=3.14
 FROM public.ecr.aws/lambda/python:${PY_VERSION} AS builder
 ARG PY_VERSION
 

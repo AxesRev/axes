@@ -3,7 +3,7 @@ name = "aegra-api"
 version = "0.8.0"
 description = "Aegra core API - Self-hosted Agent Protocol server"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.14,<3.15"
 license = "Apache-2.0"
 authors = [{ name = "Muhammad Ibrahim", email = "mibrahim37612@gmail.com" }]
 keywords = ["langgraph", "agents", "llm", "fastapi", "agent-protocol"]
@@ -12,7 +12,7 @@ classifiers = [
     "Framework :: FastAPI",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: Apache Software License",
-    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 
@@ -74,7 +74,7 @@ packages = ["src/aegra_api"]
 
 [tool.ruff]
 line-length = 120
-target-version = "py312"
+target-version = "py314"
 
 [tool.ruff.lint]
 select = [

@@ -2,7 +2,7 @@
 name = "aegra-tenant-service"
 version = "0.1.0"
 description = "Auth0 tenant API: identity, integrations, and agent context"
-requires-python = ">=3.12"
+requires-python = ">=3.14,<3.15"
 license = "Apache-2.0"
 
 dependencies = [
@@ -27,7 +27,7 @@ packages = ["src/tenants"]
 
 [tool.ruff]
 line-length = 120
-target-version = "py312"
+target-version = "py314"
 
 [tool.ruff.lint]
 select = ["E", "W", "F", "I", "B", "C4", "UP", "ARG", "SIM"]
