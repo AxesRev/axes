@@ -23,9 +23,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /build
 
 COPY slack_app/pyproject.toml ./pyproject.toml
-COPY uv.lock ./
+COPY slack_app/uv.lock ./
+COPY common /common
 
-RUN uv export --frozen --no-emit-project --no-dev --format=requirements-txt > requirements.txt && \
+RUN uv export --frozen --no-emit-project --no-editable --no-dev --format=requirements-txt > requirements.txt && \
     uv pip install --system --compile-bytecode -r requirements.txt && \
     rm requirements.txt
 
@@ -40,7 +41,6 @@ COPY --from=builder /usr/local/lib/python${PY_VERSION}/site-packages/ /usr/local
 COPY --from=builder /usr/local/bin/ /usr/local/bin/
 
 COPY slack_app/src/slack_app ./slack_app
-COPY common ./common
 
 EXPOSE 8000
 

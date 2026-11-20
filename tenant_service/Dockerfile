@@ -7,9 +7,10 @@ COPY --from=ghcr.io/astral-sh/uv:0.9.26 /uv /usr/local/bin/uv
 WORKDIR /build
 
 COPY tenant_service/pyproject.toml ./pyproject.toml
-COPY uv.lock ./
+COPY tenant_service/uv.lock ./
+COPY common /common
 
-RUN uv export --frozen --no-emit-project --no-dev --format=requirements-txt > requirements.txt && \
+RUN uv export --frozen --no-emit-project --no-editable --no-dev --format=requirements-txt > requirements.txt && \
     uv pip install --system --compile-bytecode -r requirements.txt && \
     rm requirements.txt
 
@@ -20,6 +21,5 @@ COPY --from=builder /var/lang/lib/python${PY_VERSION}/site-packages/ /var/lang/l
 COPY --from=builder /var/lang/bin/ /var/lang/bin/
 
 COPY tenant_service/src/tenants ${LAMBDA_TASK_ROOT}/tenants
-COPY common ${LAMBDA_TASK_ROOT}/common
 
 CMD ["tenants.app.handler"]

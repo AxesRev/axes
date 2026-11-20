@@ -17,6 +17,7 @@ classifiers = [
 ]
 
 dependencies = [
+    "axes-common",
     # Core
     "fastapi>=0.110.1",
     "uvicorn>=0.35.0",
@@ -56,6 +57,9 @@ Homepage = "https://github.com/ibbybuilds/aegra"
 Documentation = "https://github.com/ibbybuilds/aegra#readme"
 Repository = "https://github.com/ibbybuilds/aegra"
 Issues = "https://github.com/ibbybuilds/aegra/issues"
+
+[tool.uv.sources]
+axes-common = { path = "../common", editable = true }
 
 [build-system]
 requires = ["hatchling"]

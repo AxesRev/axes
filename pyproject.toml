@@ -1,34 +1,18 @@
-# Root pyproject.toml - Workspace configuration + dev tools
-# LangGraph / Agent Protocol server lives in langraph_server/
-
 [project]
 name = "aegra-workspace"
 version = "0.0.0"
 requires-python = ">=3.12"
 dependencies = [
-    "aegra-billing-service",
-    "aegra-tenant-service",
-    "aegra-integrations-service",
-    "aegra-slack-app",
     "httpx>=0.27.0",
 ]
 
 [tool.uv]
 package = false
 
-[tool.uv.sources]
-aegra-billing-service = { workspace = true }
-aegra-tenant-service = { workspace = true }
-aegra-integrations-service = { workspace = true }
-aegra-slack-app = { workspace = true }
-
-[tool.uv.workspace]
-members = ["langraph_server", "graph_service", "billing_service", "tenant_service", "integrations_service", "slack_app"]
-exclude = ["neo4j_mcp"]
-
 [dependency-groups]
 dev = [
     "pre-commit>=4.0.1",
+    "ruff>=0.13.0",
 ]
 
 [tool.ruff]

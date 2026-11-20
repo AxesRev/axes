@@ -23,9 +23,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY langraph_server/pyproject.toml langraph_server/README.md ./
-COPY uv.lock ./
+COPY langraph_server/uv.lock ./
+COPY common /common
 
-RUN uv export --frozen --no-emit-project --format=requirements-txt > requirements.txt && \
+RUN uv export --frozen --no-emit-project --no-editable --format=requirements-txt > requirements.txt && \
     uv pip install --system --compile-bytecode -r requirements.txt && \
     rm requirements.txt
 
@@ -48,7 +49,6 @@ COPY langraph_server/alembic.ini ./alembic.ini
 COPY langraph_server/alembic/ ./alembic/
 COPY langraph_server/aegra.json ./aegra.json
 COPY langraph_server/examples/ ./examples/
-COPY common ./common
 
 EXPOSE 8000
 

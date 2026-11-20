@@ -31,16 +31,16 @@ cd aegra
 # Set secrets (OPENAI_API_KEY, etc.) in .env — app defaults live in code
 
 # Install dependencies
-uv sync --all-packages
+make dev-install
 
 # Start PostgreSQL (if not running)
 docker compose up -d
 
 # Run migrations
-uv run --package aegra-api alembic upgrade head
+uv run --project langraph_server alembic upgrade head
 
 # Start server
-uv run --package aegra-api uvicorn aegra_api.main:app --reload
+uv run --project langraph_server uvicorn aegra_api.main:app --reload
 ```
 
 ## Configuration
