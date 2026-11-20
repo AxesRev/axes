@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import json
 import logging
 import os
@@ -18,7 +19,7 @@ from examples.react_agent.context import Context
 from examples.react_agent.jev_tournament import TournamentOption, jev_choice_tournament
 from examples.react_agent.neo4j_schema_prompt import build_neo4j_schema_block
 from examples.react_agent.nodes.tools import read_neo4j_cypher
-from examples.react_agent.state import ResourceTypeOption, State
+from examples.react_agent.state import ResourceInstanceOption, ResourceTypeOption, State
 from examples.react_agent.user_context_models import UserContextData
 from examples.react_agent.user_context_prompt import build_user_context_block
 
@@ -59,15 +60,6 @@ ORDER BY r.name, r.uri, r.external_id
 """
 
 
-@dataclass(frozen=True, slots=True)
-class ResourceInstanceOption:
-    app: str
-    name: str
-    uri: str
-    external_id: str
-    kind: str
-
-
 @dataclass
 class PermissionDetectionInput:
     """Parent channels this subgraph may read."""
@@ -86,8 +78,7 @@ class PermissionDetectionOutput:
     resource_type: str | None = None
     resource_type_external_id: str | None = None
     specific_resource_requested: bool = False
-    resource: str | None = None
-    resource_external_id: str | None = None
+    requested_objects: list[ResourceInstanceOption] = field(default_factory=list)
 
 
 def _jev_api_key() -> str:
@@ -269,7 +260,7 @@ async def select_resource_instance(state: State, runtime: Runtime[Context]) -> d
     type_id = (state.resource_type_external_id or "").strip()
     if not tenant_id or not type_id:
         logger.warning("select_resource_instance: missing tenant or resource type")
-        return {"resource": None, "resource_external_id": None}
+        return {"requested_objects": []}
 
     rows = await read_neo4j_cypher(
         _RESOURCE_INSTANCES_QUERY,
@@ -278,7 +269,7 @@ async def select_resource_instance(state: State, runtime: Runtime[Context]) -> d
     instances = parse_resource_instance_rows(rows)
     logger.info("select_resource_instance: type=%s count=%s", type_id, len(instances))
     if not instances:
-        return {"resource": None, "resource_external_id": None}
+        return {"requested_objects": []}
 
     api_key = _jev_api_key()
     if not api_key:
@@ -293,13 +284,9 @@ async def select_resource_instance(state: State, runtime: Runtime[Context]) -> d
             question_id="resource_instance",
         )
 
-    resource = pick.key if pick is not None else None
-    resource_external_id = pick.option.payload.external_id if pick is not None else None
-    logger.info("select_resource_instance: resource=%s", resource)
-    return {
-        "resource": resource,
-        "resource_external_id": resource_external_id,
-    }
+    requested_objects = [pick.option.payload] if pick is not None else []
+    logger.info("select_resource_instance: requested_objects=%s", requested_objects)
+    return {"requested_objects": requested_objects}
 
 
 def route_after_select_resource_type(state: State) -> Literal["select_resource_instance", "__end__"]:
@@ -334,15 +321,17 @@ def make_permission_detection_node(compiled):
 
     async def run_permission_detection(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
         result = await compiled.ainvoke(state, context=runtime.context)
+        requested_objects = result["requested_objects"]
         payload = {
             "resource_type": result.get("resource_type"),
             "specific_resource_requested": bool(result.get("specific_resource_requested")),
-            "resource": result.get("resource"),
+            "requested_objects": [dataclasses.asdict(obj) for obj in requested_objects],
         }
         return {
-            **payload,
+            "resource_type": payload["resource_type"],
+            "specific_resource_requested": payload["specific_resource_requested"],
             "resource_type_external_id": result.get("resource_type_external_id"),
-            "resource_external_id": result.get("resource_external_id"),
+            "requested_objects": requested_objects,
             "messages": [AIMessage(content=json.dumps(payload, separators=(",", ":")))],
         }
 

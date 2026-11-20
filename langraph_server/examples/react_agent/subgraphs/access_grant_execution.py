@@ -22,7 +22,14 @@ from examples.react_agent.prompts import (
     ACCESS_GRANT_EXECUTION_BASE_PROMPT,
     ACCESS_GRANT_EXECUTION_TASK_TEMPLATE,
 )
-from examples.react_agent.state import AccessRequestEvaluation, Permission, State, format_detected_permissions
+from examples.react_agent.state import (
+    AccessRequestEvaluation,
+    Permission,
+    ResourceInstanceOption,
+    State,
+    format_detected_permissions,
+    format_requested_objects,
+)
 from examples.react_agent.user_context_models import UserContextData
 from examples.react_agent.utils import get_message_text
 
@@ -44,8 +51,7 @@ class AccessGrantInput:
     neo4j_schema: str = field(default="")
     resource_type: str | None = field(default=None)
     resource_type_external_id: str | None = field(default=None)
-    resource: str | None = field(default=None)
-    resource_external_id: str | None = field(default=None)
+    requested_objects: list[ResourceInstanceOption] = field(default_factory=list)
 
 
 @dataclass
@@ -73,7 +79,7 @@ def _seed_grant_message(state: State) -> HumanMessage:
         content=ACCESS_GRANT_EXECUTION_TASK_TEMPLATE.format(
             user_request=state.user_request,
             resource_type=state.resource_type or "(none)",
-            resource=state.resource or "(none — resource type only)",
+            requested_objects=format_requested_objects(state.requested_objects) or "  (none — resource type only)",
             permissions=permissions or "(none listed — use the grant-ways catalog)",
             evaluation_justification=evaluation.justification,
         )
@@ -84,13 +90,13 @@ async def load_grant_ways(state: State, runtime: Runtime[Context]) -> dict[str, 
     """Load existing profile/group grant paths for the detected type or instance."""
     catalog = await fetch_grant_ways(
         resource_type_external_id=state.resource_type_external_id or "",
-        resource_external_id=state.resource_external_id or "",
+        resource_external_ids=[obj.external_id for obj in state.requested_objects],
         permissions=[permission.permission for permission in state.permissions],
     )
     logger.info(
-        "load_grant_ways: type=%s resource=%s chars=%s",
+        "load_grant_ways: type=%s requested_objects=%s chars=%s",
         state.resource_type_external_id,
-        state.resource_external_id or "(none)",
+        [obj.external_id for obj in state.requested_objects],
         len(catalog),
     )
     return {"grant_ways": catalog}
@@ -100,9 +106,9 @@ async def seed_grant(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
     """Seed the grant execution task from the detected target and evaluation."""
     evaluation = cast(AccessRequestEvaluation, state.access_evaluation)
     logger.info(
-        "seed_grant: type=%s resource=%s should_grant=%s",
+        "seed_grant: type=%s requested_objects=%s should_grant=%s",
         state.resource_type,
-        state.resource,
+        [obj.external_id for obj in state.requested_objects],
         evaluation.should_grant,
     )
     return {"messages": [_seed_grant_message(state)]}

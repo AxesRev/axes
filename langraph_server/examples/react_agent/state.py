@@ -40,6 +40,22 @@ class ResourceTypeOption:
     external_id: str
 
 
+@dataclass(frozen=True, slots=True)
+class ResourceInstanceOption:
+    """One concrete resource from a Resource graph node (a repository, a record, …)."""
+
+    app: str
+    name: str
+    uri: str
+    external_id: str
+    kind: str
+
+
+def format_requested_objects(objects: list[ResourceInstanceOption]) -> str:
+    """Render the requested resource instances for downstream task prompts."""
+    return "\n".join(f"  - {obj.name} ({obj.app} {obj.kind}, uri: {obj.uri}, id: {obj.external_id})" for obj in objects)
+
+
 def format_detected_permissions(permissions: list[Permission]) -> str:
     """Render the detected permission list for downstream task prompts."""
     lines: list[str] = []
@@ -139,11 +155,8 @@ class State(InputState):
     specific_resource_requested: bool = field(default=False)
     """True when Jev judged that the user named a specific resource instance."""
 
-    resource: str | None = field(default=None)
-    """Resource instance Jev picked when a specific instance was requested."""
-
-    resource_external_id: str | None = field(default=None)
-    """Graph Resource.external_id for the picked instance."""
+    requested_objects: list[ResourceInstanceOption] = field(default_factory=list)
+    """Resource instances Jev picked when specific instances were requested (full graph objects)."""
 
     doc_corpus_context: str = field(default="")
     """Semantically retrieved documentation snippets for the current user message (prompt injection)."""

@@ -13,9 +13,10 @@ logger = logging.getLogger(__name__)
 
 _GRANT_WAYS_QUERY = """
 MATCH (rt:ResourceType {external_id: $resource_type_external_id})
-OPTIONAL MATCH (r:Resource {external_id: $resource_external_id})
-WHERE $resource_external_id <> ''
-WITH [rt] + CASE WHEN r IS NULL THEN [] ELSE [r] END AS targets
+OPTIONAL MATCH (r:Resource)
+WHERE r.external_id IN $resource_external_ids
+WITH rt, collect(r) AS resources
+WITH [rt] + resources AS targets
 UNWIND targets AS target
 MATCH (subject)-[hp:HAS_PERMISSION]->(target)
 WHERE (subject:Profile OR subject:Group)
@@ -202,7 +203,7 @@ def build_grant_ways_block(catalog: str) -> str:
 async def fetch_grant_ways(
     *,
     resource_type_external_id: str,
-    resource_external_id: str = "",
+    resource_external_ids: list[str],
     permissions: list[str] | None = None,
 ) -> str:
     type_id = resource_type_external_id.strip()
@@ -213,15 +214,15 @@ async def fetch_grant_ways(
         _GRANT_WAYS_QUERY,
         {
             "resource_type_external_id": type_id,
-            "resource_external_id": resource_external_id.strip(),
+            "resource_external_ids": resource_external_ids,
             "permissions": [name for name in (permissions or []) if name.strip()],
         },
     )
     ways = parse_grant_way_rows(rows)
     logger.info(
-        "fetch_grant_ways: type=%s resource=%s rows=%s ways=%s",
+        "fetch_grant_ways: type=%s resources=%s rows=%s ways=%s",
         type_id,
-        resource_external_id.strip() or "(none)",
+        resource_external_ids,
         len(rows),
         len(ways),
     )

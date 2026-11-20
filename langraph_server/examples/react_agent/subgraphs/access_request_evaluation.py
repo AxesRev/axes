@@ -22,7 +22,14 @@ from examples.react_agent.prompts import (
     ACCESS_EVALUATION_EXTRACTOR_PROMPT,
     ACCESS_EVALUATION_TASK_TEMPLATE,
 )
-from examples.react_agent.state import AccessRequestEvaluation, Permission, State, format_detected_permissions
+from examples.react_agent.state import (
+    AccessRequestEvaluation,
+    Permission,
+    ResourceInstanceOption,
+    State,
+    format_detected_permissions,
+    format_requested_objects,
+)
 from examples.react_agent.user_context_models import UserContextData
 from examples.react_agent.utils import load_chat_model
 
@@ -42,8 +49,7 @@ class AccessEvaluationInput:
     resource_type: str | None = field(default=None)
     resource_type_external_id: str | None = field(default=None)
     specific_resource_requested: bool = field(default=False)
-    resource: str | None = field(default=None)
-    resource_external_id: str | None = field(default=None)
+    requested_objects: list[ResourceInstanceOption] = field(default_factory=list)
 
 
 @dataclass
@@ -59,7 +65,8 @@ def _seed_evaluation_message(state: State) -> HumanMessage:
         content=ACCESS_EVALUATION_TASK_TEMPLATE.format(
             user_request=state.user_request,
             resource_type=state.resource_type or "(none)",
-            resource=state.resource or "(none — evaluate the resource type)",
+            requested_objects=format_requested_objects(state.requested_objects)
+            or "  (none — evaluate the resource type)",
             permissions=format_detected_permissions(state.permissions)
             or "(none listed — evaluate the detected resource/resource type)",
         )
@@ -69,9 +76,9 @@ def _seed_evaluation_message(state: State) -> HumanMessage:
 async def seed_evaluation(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
     """Seed the evaluation task from the detected target and original user request."""
     logger.info(
-        "seed_evaluation: type=%s resource=%s permissions=%s",
+        "seed_evaluation: type=%s requested_objects=%s permissions=%s",
         state.resource_type,
-        state.resource,
+        [obj.external_id for obj in state.requested_objects],
         [(permission.resource, permission.permission) for permission in state.permissions],
     )
     return {"messages": [_seed_evaluation_message(state)]}

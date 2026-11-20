@@ -80,7 +80,8 @@ Original user request:
 
 Detected target:
   resource type: {resource_type}
-  resource: {resource}
+  requested objects:
+{requested_objects}
 
 Requested permissions:
 {permissions}
@@ -153,7 +154,8 @@ Original user request:
 
 Detected target:
   resource type: {resource_type}
-  resource: {resource}
+  requested objects:
+{requested_objects}
 
 Approved permissions to grant (if listed, every one is required):
 {permissions}
