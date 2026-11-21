@@ -20,6 +20,7 @@ from examples.react_agent.jev_tournament import TournamentOption, jev_choice_tou
 from examples.react_agent.neo4j_schema_prompt import build_neo4j_schema_block
 from examples.react_agent.nodes.tools import read_neo4j_cypher
 from examples.react_agent.state import ResourceInstanceOption, ResourceTypeOption, State
+from examples.react_agent.supported_apps import PERMISSION_TYPES_BY_APP
 from examples.react_agent.user_context_models import UserContextData
 from examples.react_agent.user_context_prompt import build_user_context_block
 
@@ -61,20 +62,6 @@ RETURN c.app AS app,
        r.uri AS uri,
        r.kind AS kind
 ORDER BY r.name, r.uri, r.external_id
-"""
-
-
-_PERMISSION_TYPES_QUERY = """
-MATCH (t:Tenant {external_id: $tenant_id})<-[:BELONGS_TO]-(c:AppConnection)
-      <-[:BELONGS_TO]-(:ResourceType {external_id: $resource_type_external_id})
-MATCH (c)<-[:BELONGS_TO]-(rt:ResourceType)
-OPTIONAL MATCH (r:Resource)-[:INSTANCE_OF]->(rt)
-WITH c, collect(DISTINCT rt) + collect(DISTINCT r) AS targets
-UNWIND targets AS target
-MATCH ()-[hp:HAS_PERMISSION]->(target)
-WHERE coalesce(hp.effect, 'grant') <> 'mute' AND hp.permission IS NOT NULL
-RETURN DISTINCT c.app AS app, hp.permission AS permission
-ORDER BY permission
 """
 
 
@@ -311,37 +298,33 @@ async def select_resource_instance(state: State, runtime: Runtime[Context]) -> d
     return {"requested_objects": requested_objects}
 
 
-def parse_permission_type_rows(rows: list[dict[str, Any]]) -> list[str]:
-    permissions: list[str] = []
-    for row in rows:
-        permission = str(row.get("permission") or "").strip()
-        if permission and permission not in permissions:
-            permissions.append(permission)
-    return permissions
-
-
 def permission_type_tournament_option(app: str, permission: str) -> TournamentOption[str]:
+    description = PERMISSION_TYPES_BY_APP.get(app, {}).get(permission, "")
     return TournamentOption(
         option_id=permission,
         name=permission,
-        description=f"{app} permission type {permission}".strip(),
+        description=f"{app} permission {permission}: {description}".strip(" :"),
         payload=permission,
     )
 
 
-async def load_permission_types(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
-    tenant_id = runtime.context.tenant_id.strip()
-    type_id = (state.resource_type_external_id or "").strip()
-    if not tenant_id or not type_id:
-        logger.warning("load_permission_types: missing tenant or resource type")
-        return {"permission_types": []}
-
-    rows = await read_neo4j_cypher(
-        _PERMISSION_TYPES_QUERY,
-        {"tenant_id": tenant_id, "resource_type_external_id": type_id},
+def _selected_type_app(state: State) -> str:
+    return next(
+        (
+            option.app
+            for option in _as_resource_type_options(state.resource_types)
+            if option.external_id == state.resource_type_external_id
+        ),
+        "",
     )
-    permission_types = parse_permission_type_rows(rows)
-    logger.info("load_permission_types: type=%s permission_types=%s", type_id, permission_types)
+
+
+async def load_permission_types(state: State) -> dict[str, Any]:
+    app = _selected_type_app(state)
+    permission_types = list(PERMISSION_TYPES_BY_APP.get(app, {}))
+    if not permission_types:
+        logger.warning("load_permission_types: no permission types for app=%s", app)
+    logger.info("load_permission_types: app=%s permission_types=%s", app, permission_types)
     return {"permission_types": permission_types}
 
 
@@ -354,14 +337,7 @@ async def select_permission_type(state: State, runtime: Runtime[Context]) -> dic
     if not api_key:
         raise RuntimeError("JEV_API_KEY or TYPESAFE_API_KEY is required for permission detection")
 
-    app = next(
-        (
-            option.app
-            for option in _as_resource_type_options(state.resource_types)
-            if option.external_id == state.resource_type_external_id
-        ),
-        "",
-    )
+    app = _selected_type_app(state)
     async with AsyncTypeSafeClient(api_key=api_key, model=JEV_MODEL) as client:
         pick = await jev_choice_tournament(
             client,

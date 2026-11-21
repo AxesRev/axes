@@ -130,7 +130,7 @@ class State(InputState):
     """Resource instances Jev picked when specific instances were requested (full graph objects)."""
 
     permission_types: list[str] = field(default_factory=list)
-    """Distinct HAS_PERMISSION permission values the tenant has for the picked type's app."""
+    """Permission values for the picked type's app (PERMISSION_TYPES_BY_APP)."""
 
     permission_type: str | None = field(default=None)
     """Permission type Jev picked from permission_types (read, edit, push, …)."""
