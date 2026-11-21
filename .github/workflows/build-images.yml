@@ -29,10 +29,6 @@ jobs:
             context: .
             dockerfile: langraph_server/Dockerfile
             repository: axes/langraph-server
-          - name: neo4j-mcp
-            context: neo4j_mcp
-            dockerfile: neo4j_mcp/Dockerfile
-            repository: axes/neo4j-mcp
           - name: slack-app
             context: .
             dockerfile: slack_app/Dockerfile

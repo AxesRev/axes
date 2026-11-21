@@ -7,7 +7,7 @@ from langgraph.runtime import Runtime
 
 from examples.react_agent.context import Context
 from examples.react_agent.grant_ways import build_grant_ways_block
-from examples.react_agent.neo4j_schema_prompt import build_neo4j_schema_block
+from examples.react_agent.graph_schema_prompt import build_graph_schema_block
 from examples.react_agent.nodes.tools import _get_all_tools
 from examples.react_agent.state import State
 from examples.react_agent.tenant_agent_context_prompt import build_tenant_agent_context_block
@@ -38,7 +38,7 @@ async def call_model(
         system_time=datetime.now(tz=UTC).isoformat(),
         user_context=build_user_context_block(state.user_contexts),
         doc_corpus_context=state.doc_corpus_context.strip(),
-        neo4j_schema=build_neo4j_schema_block(state.neo4j_schema),
+        graph_schema=build_graph_schema_block(state.graph_schema),
         tenant_agent_context=build_tenant_agent_context_block(state.tenant_agent_context),
         grant_ways=build_grant_ways_block(state.grant_ways),
     )

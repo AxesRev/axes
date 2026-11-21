@@ -1,10 +1,10 @@
-"""Fetch user context from the Neo4j graph via MCP."""
+"""Fetch user context from the tenant's access graph."""
 
 from __future__ import annotations
 
 import logging
 
-from examples.react_agent.nodes.tools import read_neo4j_cypher
+from examples.react_agent.graph_db import read_graph
 from examples.react_agent.user_context_models import UserContextData, build_user_context
 
 logger = logging.getLogger(__name__)
@@ -60,9 +60,9 @@ MATCH (i:Identity {external_id: $email})-[:HAS_PROFILE]->(u:AppIdentity {app: $a
 )
 
 
-async def fetch_user_context(*, app: str, user_id: str) -> UserContextData | None:
-    """Load user, group, profile, and permission context via read_neo4j_cypher on Neo4j MCP."""
-    rows = await read_neo4j_cypher(_USER_CONTEXT_QUERY, {"app": app, "user_id": user_id})
+async def fetch_user_context(*, tenant_id: str, app: str, user_id: str) -> UserContextData | None:
+    """Load user, group, profile, and permission context from the tenant graph."""
+    rows = await read_graph(tenant_id, _USER_CONTEXT_QUERY, {"app": app, "user_id": user_id})
     if not rows:
         logger.info("fetch_user_context: no AppIdentity found app=%s user_id=%s", app, user_id)
         return None
@@ -79,13 +79,13 @@ async def fetch_user_context(*, app: str, user_id: str) -> UserContextData | Non
     return user_context
 
 
-async def fetch_user_context_by_email(*, app: str, email: str) -> UserContextData | None:
+async def fetch_user_context_by_email(*, tenant_id: str, app: str, email: str) -> UserContextData | None:
     """Load user context when the app identity is linked to a canonical Identity email."""
     normalized_email = email.strip().lower()
     if not normalized_email:
         return None
 
-    rows = await read_neo4j_cypher(_USER_CONTEXT_BY_EMAIL_QUERY, {"app": app, "email": normalized_email})
+    rows = await read_graph(tenant_id, _USER_CONTEXT_BY_EMAIL_QUERY, {"app": app, "email": normalized_email})
     if not rows:
         logger.info("fetch_user_context_by_email: no AppIdentity found app=%s email=%s", app, normalized_email)
         return None
@@ -104,13 +104,14 @@ async def fetch_user_context_by_email(*, app: str, email: str) -> UserContextDat
 
 async def fetch_user_context_for_app(
     *,
+    tenant_id: str,
     app: str,
     user_id: str | None = None,
     email: str | None = None,
 ) -> UserContextData | None:
     """Resolve user context for an app using an external id and/or linked email."""
     if user_id:
-        return await fetch_user_context(app=app, user_id=user_id)
+        return await fetch_user_context(tenant_id=tenant_id, app=app, user_id=user_id)
     if email:
-        return await fetch_user_context_by_email(app=app, email=email)
+        return await fetch_user_context_by_email(tenant_id=tenant_id, app=app, email=email)
     return None

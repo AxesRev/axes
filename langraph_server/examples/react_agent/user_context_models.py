@@ -1,4 +1,4 @@
-"""User context models built from Neo4j MCP query results."""
+"""User context models built from tenant graph query results."""
 
 from __future__ import annotations
 

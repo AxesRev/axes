@@ -40,9 +40,10 @@ class RunnerSettings(BaseSettings):
         extra="ignore",
     )
 
-    NEO4J_URI: str = "bolt://localhost:7687"
-    NEO4J_USER: str = "neo4j"
-    NEO4J_PASSWORD: str
+    ARCADEDB_BOLT_URI: str = "bolt://localhost:7687"
+    ARCADEDB_HTTP_URL: str = "http://localhost:2480"
+    ARCADEDB_ROOT_PASSWORD: str
+    ARCADEDB_TENANT_KEY: str
 
     POSTGRES_USER: str
     POSTGRES_PASSWORD: str
@@ -57,12 +58,6 @@ class RunnerSettings(BaseSettings):
             f"postgresql://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}"
             f"@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
         )
-
-    @computed_field
-    @property
-    def neomodel_url(self) -> str:
-        uri = self.NEO4J_URI.removeprefix("bolt://")
-        return f"bolt://{self.NEO4J_USER}:{self.NEO4J_PASSWORD}@{uri}"
 
 
 @lru_cache

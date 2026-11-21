@@ -14,10 +14,9 @@ from __future__ import annotations
 import asyncio
 import logging
 
-import nodes as _nodes_pkg  # noqa: F401 — registers all node classes with neomodel
 from integrations.app_names import GITHUB_APP_NAME
 from integrations.github.ingestion.installation import fetch_installation
-from integrations.graph_runner import setup_graph, teardown_graph
+from integrations.graph_db import setup_graph, teardown_graph, tenant_graph
 from integrations.tenant_plans import github_installation_id, load_tenant_fetch_plans
 
 logger = logging.getLogger(__name__)
@@ -48,11 +47,12 @@ async def fetch_github_for_all_tenants() -> None:
                 plan.tenant_id,
                 installation_id,
             )
-            await fetch_installation(
-                installation_id,
-                tenant_id=plan.tenant_id,
-                tenant_name=plan.tenant_name,
-            )
+            async with tenant_graph(plan.tenant_id):
+                await fetch_installation(
+                    installation_id,
+                    tenant_id=plan.tenant_id,
+                    tenant_name=plan.tenant_name,
+                )
 
     if not found_any:
         logger.error("no_github_app_integrations_found")
@@ -61,7 +61,7 @@ async def fetch_github_for_all_tenants() -> None:
 
 async def _run_once() -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s %(message)s")
-    await setup_graph(wipe=True)
+    await setup_graph()
     try:
         await fetch_github_for_all_tenants()
     finally:

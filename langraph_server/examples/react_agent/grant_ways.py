@@ -7,7 +7,7 @@ import logging
 from dataclasses import dataclass
 from typing import Any
 
-from examples.react_agent.nodes.tools import read_neo4j_cypher
+from examples.react_agent.graph_db import read_graph
 
 logger = logging.getLogger(__name__)
 
@@ -202,6 +202,7 @@ def build_grant_ways_block(catalog: str) -> str:
 
 async def fetch_grant_ways(
     *,
+    tenant_id: str,
     resource_type_external_id: str,
     resource_external_ids: list[str],
     permissions: list[str] | None = None,
@@ -210,7 +211,8 @@ async def fetch_grant_ways(
     if not type_id:
         return format_grant_ways([])
 
-    rows = await read_neo4j_cypher(
+    rows = await read_graph(
+        tenant_id,
         _GRANT_WAYS_QUERY,
         {
             "resource_type_external_id": type_id,

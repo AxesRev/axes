@@ -28,7 +28,12 @@ variable "graph_service_image" {
   type        = string
 }
 
-variable "neo4j_bolt_uri" {
+variable "arcadedb_bolt_uri" {
   type    = string
-  default = "bolt://neo4j.neo4j.svc.cluster.local:7687"
+  default = "bolt://arcadedb.arcadedb.svc.cluster.local:7687"
+}
+
+variable "arcadedb_http_url" {
+  type    = string
+  default = "http://arcadedb.arcadedb.svc.cluster.local:2480"
 }

@@ -109,7 +109,7 @@ class State(InputState):
     """Supported apps chosen for this request (github, salesforce)."""
 
     user_contexts: list[UserContextData] = field(default_factory=list)
-    """Per-app user, group, and permission context loaded from the graph via Neo4j MCP."""
+    """Per-app user, group, and permission context loaded from the tenant graph."""
 
     user_request: str = field(default="")
     """Original Slack request text. Subgraphs seed from this instead of inheriting parent messages."""
@@ -138,8 +138,8 @@ class State(InputState):
     doc_corpus_context: str = field(default="")
     """Semantically retrieved documentation snippets for the current user message (prompt injection)."""
 
-    neo4j_schema: str = field(default="")
-    """Neo4j labels, properties, and relationships loaded once per run for Cypher prompts."""
+    graph_schema: str = field(default="")
+    """Access graph labels, properties, and relationships for Cypher prompts."""
 
     tenant_agent_context: str = field(default="")
     """Editable tenant-specific instructions loaded from PostgreSQL for access evaluation."""

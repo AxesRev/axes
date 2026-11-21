@@ -17,9 +17,9 @@ from typesafe_sdk import AsyncTypeSafeClient, Noul
 
 from common.permissions import PERMISSION_TYPES_BY_APP
 from examples.react_agent.context import Context
+from examples.react_agent.graph_db import read_graph
+from examples.react_agent.graph_schema_prompt import build_graph_schema_block
 from examples.react_agent.jev_tournament import TournamentOption, jev_choice_tournament
-from examples.react_agent.neo4j_schema_prompt import build_neo4j_schema_block
-from examples.react_agent.nodes.tools import read_neo4j_cypher
 from examples.react_agent.state import ResourceInstanceOption, ResourceTypeOption, State
 from examples.react_agent.user_context_models import UserContextData
 from examples.react_agent.user_context_prompt import build_user_context_block
@@ -73,7 +73,7 @@ class PermissionDetectionInput:
     user_contexts: list[UserContextData] = field(default_factory=list)
     selected_apps: list[str] = field(default_factory=list)
     doc_corpus_context: str = field(default="")
-    neo4j_schema: str = field(default="")
+    graph_schema: str = field(default="")
 
 
 @dataclass
@@ -167,7 +167,7 @@ def build_jev_state(state: State) -> str:
     docs = state.doc_corpus_context.strip()
     if docs:
         sections.extend(["", "Documentation snippets:", docs])
-    schema = build_neo4j_schema_block(state.neo4j_schema).strip()
+    schema = build_graph_schema_block(state.graph_schema).strip()
     if schema:
         sections.extend(["", schema])
     return "\n".join(sections)
@@ -204,7 +204,8 @@ async def load_resource_types(state: State, runtime: Runtime[Context]) -> dict[s
         logger.warning("load_resource_types: empty tenant_id")
         return {"resource_types": []}
 
-    rows = await read_neo4j_cypher(
+    rows = await read_graph(
+        tenant_id,
         _RESOURCE_TYPES_QUERY,
         {"tenant_id": tenant_id, "apps": list(state.selected_apps)},
     )
@@ -271,7 +272,8 @@ async def select_resource_instance(state: State, runtime: Runtime[Context]) -> d
         logger.warning("select_resource_instance: missing tenant or resource type")
         return {"requested_objects": []}
 
-    rows = await read_neo4j_cypher(
+    rows = await read_graph(
+        tenant_id,
         _RESOURCE_INSTANCES_QUERY,
         {"tenant_id": tenant_id, "resource_type_external_id": type_id},
     )

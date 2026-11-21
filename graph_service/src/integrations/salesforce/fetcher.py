@@ -19,9 +19,8 @@ import asyncio
 import logging
 import sys
 
-import nodes as _nodes_pkg  # noqa: F401 — registers all node classes with neomodel
 from integrations.app_names import SALESFORCE_APP_NAME
-from integrations.graph_runner import setup_graph, teardown_graph
+from integrations.graph_db import setup_graph, teardown_graph, tenant_graph
 from integrations.salesforce.run import run_salesforce_ingestion
 from integrations.tenant_plans import load_tenant_fetch_plans, salesforce_fetch_credentials
 
@@ -61,13 +60,14 @@ async def fetch_salesforce_for_all_tenants(*, skip_record_access: bool) -> None:
                 org_id,
                 username,
             )
-            await run_salesforce_ingestion(
-                tenant_id=plan.tenant_id,
-                tenant_name=plan.tenant_name,
-                org_id=org_id,
-                integration_username=username,
-                skip_record_access=skip_record_access,
-            )
+            async with tenant_graph(plan.tenant_id):
+                await run_salesforce_ingestion(
+                    tenant_id=plan.tenant_id,
+                    tenant_name=plan.tenant_name,
+                    org_id=org_id,
+                    integration_username=username,
+                    skip_record_access=skip_record_access,
+                )
 
     if not found_any:
         logger.error("no_salesforce_app_integrations_found")
@@ -77,7 +77,7 @@ async def fetch_salesforce_for_all_tenants(*, skip_record_access: bool) -> None:
 async def _run_once() -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s %(message)s")
     skip_record_access = _parse_skip_record_access(sys.argv[1:])
-    await setup_graph(wipe=True)
+    await setup_graph()
     try:
         await fetch_salesforce_for_all_tenants(skip_record_access=skip_record_access)
     finally:

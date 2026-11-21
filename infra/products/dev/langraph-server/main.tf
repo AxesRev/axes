@@ -95,15 +95,30 @@ resource "kubernetes_secret_v1" "github" {
   type = "Opaque"
 }
 
-resource "kubernetes_secret_v1" "neo4j" {
+# Ingestion (fetch-graph) writes tenant databases as root.
+resource "kubernetes_secret_v1" "arcadedb_root" {
   metadata {
-    name      = "langraph-server-neo4j"
+    name      = "langraph-server-arcadedb-root"
     namespace = kubernetes_namespace_v1.this.metadata[0].name
   }
 
   data = sensitive({
-    NEO4J_USER     = "neo4j"
-    NEO4J_PASSWORD = local.generated["NEO4J_PASSWORD"]
+    ARCADEDB_ROOT_PASSWORD = local.generated["ARCADEDB_ROOT_PASSWORD"]
+    ARCADEDB_TENANT_KEY    = local.generated["ARCADEDB_TENANT_KEY"]
+  })
+
+  type = "Opaque"
+}
+
+# The agent only derives per-tenant read-only credentials; it never gets the root password.
+resource "kubernetes_secret_v1" "arcadedb_reader" {
+  metadata {
+    name      = "langraph-server-arcadedb-reader"
+    namespace = kubernetes_namespace_v1.this.metadata[0].name
+  }
+
+  data = sensitive({
+    ARCADEDB_TENANT_KEY = local.generated["ARCADEDB_TENANT_KEY"]
   })
 
   type = "Opaque"
@@ -384,6 +399,26 @@ resource "kubernetes_deployment_v1" "this" {
             }
           }
 
+          env {
+            name  = "ARCADEDB_BOLT_URI"
+            value = var.arcadedb_bolt_uri
+          }
+
+          env {
+            name  = "ARCADEDB_HTTP_URL"
+            value = var.arcadedb_http_url
+          }
+
+          env {
+            name = "ARCADEDB_TENANT_KEY"
+            value_from {
+              secret_key_ref {
+                name = kubernetes_secret_v1.arcadedb_reader.metadata[0].name
+                key  = "ARCADEDB_TENANT_KEY"
+              }
+            }
+          }
+
           resources {
             requests = {
               cpu    = "250m"
@@ -489,8 +524,13 @@ resource "kubernetes_cron_job_v1" "fetch_graph" {
               image = var.graph_service_image
 
               env {
-                name  = "NEO4J_URI"
-                value = var.neo4j_bolt_uri
+                name  = "ARCADEDB_BOLT_URI"
+                value = var.arcadedb_bolt_uri
+              }
+
+              env {
+                name  = "ARCADEDB_HTTP_URL"
+                value = var.arcadedb_http_url
               }
 
               dynamic "env_from" {
@@ -498,7 +538,7 @@ resource "kubernetes_cron_job_v1" "fetch_graph" {
                   kubernetes_secret_v1.postgres.metadata[0].name,
                   kubernetes_secret_v1.github.metadata[0].name,
                   kubernetes_secret_v1.salesforce.metadata[0].name,
-                  kubernetes_secret_v1.neo4j.metadata[0].name,
+                  kubernetes_secret_v1.arcadedb_root.metadata[0].name,
                 ]
                 content {
                   secret_ref {

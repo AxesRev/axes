@@ -6,7 +6,7 @@ import logging
 import re
 from typing import Literal, TypedDict
 
-from neomodel import adb
+from integrations.graph_db import graph_query
 
 logger = logging.getLogger(__name__)
 
@@ -66,7 +66,7 @@ async def correlate_app_identities_by_email(rows: list[AppIdentityCorrelationRow
     """
     for start in range(0, len(rows), CORRELATION_BATCH_SIZE):
         batch = rows[start : start + CORRELATION_BATCH_SIZE]
-        await adb.cypher_query(query, {"rows": batch})
+        await graph_query(query, {"rows": batch})
 
     logger.info("correlated_app_identities count=%s", len(rows))
     return len(rows)

@@ -38,7 +38,7 @@ class Context:
         default="",
         metadata={
             "description": (
-                "Legacy GitHub PAT setting retained for compatibility. User context is loaded via Neo4j MCP."
+                "Legacy GitHub PAT setting retained for compatibility. User context is loaded from the tenant graph."
             ),
         },
     )

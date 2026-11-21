@@ -6,6 +6,7 @@ import logging
 
 from integrations.app_names import GITHUB_APP_NAME, SALESFORCE_APP_NAME, SLACK_APP_NAME
 from integrations.github.ingestion.installation import fetch_installation
+from integrations.graph_db import tenant_graph
 from integrations.salesforce.run import run_salesforce_ingestion
 from integrations.tenant_plans import (
     AppIntegrationPlan,
@@ -31,22 +32,23 @@ async def fetch_tenant(plan: TenantFetchPlan) -> None:
         [integration.app_name for integration in plan.integrations],
     )
 
-    for integration in plan.integrations:
-        if integration.app_name == GITHUB_APP_NAME:
-            await _fetch_github_integration(plan, integration)
-        elif integration.app_name == SALESFORCE_APP_NAME:
-            await _fetch_salesforce_integration(plan, integration)
-        elif integration.app_name == SLACK_APP_NAME:
-            logger.debug(
-                "tenant_fetch_skip_slack_no_graph_ingest tenant_id=%s",
-                plan.tenant_id,
-            )
-        else:
-            logger.warning(
-                "tenant_fetch_unknown_app tenant_id=%s app_name=%s",
-                plan.tenant_id,
-                integration.app_name,
-            )
+    async with tenant_graph(plan.tenant_id):
+        for integration in plan.integrations:
+            if integration.app_name == GITHUB_APP_NAME:
+                await _fetch_github_integration(plan, integration)
+            elif integration.app_name == SALESFORCE_APP_NAME:
+                await _fetch_salesforce_integration(plan, integration)
+            elif integration.app_name == SLACK_APP_NAME:
+                logger.debug(
+                    "tenant_fetch_skip_slack_no_graph_ingest tenant_id=%s",
+                    plan.tenant_id,
+                )
+            else:
+                logger.warning(
+                    "tenant_fetch_unknown_app tenant_id=%s app_name=%s",
+                    plan.tenant_id,
+                    integration.app_name,
+                )
 
     logger.info("tenant_fetch_complete tenant_id=%s", plan.tenant_id)
 

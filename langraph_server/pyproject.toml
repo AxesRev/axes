@@ -50,6 +50,7 @@ dependencies = [
     "simple-salesforce>=1.12.6",
     "typesafe-sdk>=0.7.5",
     "fastmcp[jev]>=4.2.3",
+    "neo4j>=5.28.0",
 ]
 
 [project.urls]

@@ -1,5 +1,5 @@
 name: Fetch graph
-description: Wipe Neo4j and ingest tenant graphs by running a one-shot Job from CronJob fetch-graph.
+description: Rebuild each tenant's ArcadeDB graph database by running a one-shot Job from CronJob fetch-graph.
 
 inputs:
   aws-region:

@@ -6,7 +6,7 @@ import json
 import logging
 from typing import Literal, TypedDict
 
-from neomodel import adb
+from integrations.graph_db import graph_query
 
 logger = logging.getLogger(__name__)
 
@@ -131,7 +131,7 @@ class RecordPermissionEdgeRow(TypedDict):
 
 
 def json_property(value: dict[str, object]) -> str:
-    """Serialize JSONProperty payloads the same way neomodel stores them."""
+    """Serialize extra payloads as JSON text (ArcadeDB Cypher refuses map properties)."""
     return json.dumps(value)
 
 
@@ -241,7 +241,7 @@ async def _run_batched_query(
     base_params = params or {}
     for start in range(0, len(rows), batch_size):
         batch = rows[start : start + batch_size]
-        await adb.cypher_query(query, {"rows": batch, **base_params})
+        await graph_query(query, {"rows": batch, **base_params})
 
 
 async def merge_tenants(rows: list[TenantRow], *, batch_size: int = PERMISSION_BATCH_SIZE) -> None:

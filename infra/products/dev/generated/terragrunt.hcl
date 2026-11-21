@@ -19,11 +19,12 @@ dependency "rds" {
   mock_outputs_allowed_terraform_commands = ["validate", "plan", "destroy"]
 }
 
-dependency "neo4j" {
-  config_path = "../neo4j"
+dependency "arcadedb" {
+  config_path = "../arcadedb"
 
   mock_outputs = {
-    password = "mock-password"
+    password   = "mock-password"
+    tenant_key = "mock-tenant-key"
   }
   mock_outputs_allowed_terraform_commands = ["validate", "plan", "destroy"]
 }
@@ -42,7 +43,7 @@ inputs = {
     POSTGRES_USER     = dependency.rds.outputs.master_username
     POSTGRES_PASSWORD = dependency.rds.outputs.master_password
 
-    NEO4J_PASSWORD = dependency.neo4j.outputs.password
-    NEO4J_AUTH     = "neo4j/${dependency.neo4j.outputs.password}"
+    ARCADEDB_ROOT_PASSWORD = dependency.arcadedb.outputs.password
+    ARCADEDB_TENANT_KEY    = dependency.arcadedb.outputs.tenant_key
   }
 }

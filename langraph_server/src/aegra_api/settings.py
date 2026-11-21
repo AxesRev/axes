@@ -44,7 +44,9 @@ class AppSettings(EnvBase):
     HOST: str = "0.0.0.0"  # nosec B104
     PORT: int = 8000
     SERVER_URL: str = "http://localhost:8000"
-    NEO4J_MCP_HOST: str = "http://neo4j-mcp.neo4j.svc.cluster.local:8811"
+    ARCADEDB_HTTP_URL: str = "http://arcadedb.arcadedb.svc.cluster.local:2480"
+    ARCADEDB_BOLT_URI: str = "bolt://arcadedb.arcadedb.svc.cluster.local:7687"
+    ARCADEDB_TENANT_KEY: str = ""
 
     # App logic
     AEGRA_CONFIG: str = "aegra.json"

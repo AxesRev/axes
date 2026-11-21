@@ -41,9 +41,11 @@ async def load_user_context(state: State, runtime: Runtime[Context]) -> dict[str
             continue
 
         try:
-            user_context = await fetch_user_context_for_app(app=app, user_id=user_id, email=email)
+            user_context = await fetch_user_context_for_app(
+                tenant_id=runtime.context.tenant_id, app=app, user_id=user_id, email=email
+            )
         except RuntimeError:
-            logger.info("load_user_context: skipped app=%s — Neo4j MCP not configured", app)
+            logger.info("load_user_context: skipped app=%s — graph not configured", app)
             continue
 
         if user_context is None:

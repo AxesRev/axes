@@ -1,4 +1,4 @@
-"""GitHub installation → Neo4j graph ingestion."""
+"""GitHub installation → tenant graph ingestion."""
 
 from __future__ import annotations
 

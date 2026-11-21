@@ -43,7 +43,7 @@ class AccessEvaluationInput:
     user_contexts: list[UserContextData] = field(default_factory=list)
     selected_apps: list[str] = field(default_factory=list)
     doc_corpus_context: str = field(default="")
-    neo4j_schema: str = field(default="")
+    graph_schema: str = field(default="")
     resource_type: str | None = field(default=None)
     requested_objects: list[ResourceInstanceOption] = field(default_factory=list)
 

@@ -7,9 +7,9 @@ import logging
 from typing import Literal, TypedDict
 
 from github import Auth, GithubIntegration
-from neomodel import adb
 
 from integrations.github.settings import get_github_settings
+from integrations.graph_db import graph_query
 
 logger = logging.getLogger(__name__)
 
@@ -99,7 +99,7 @@ def gql_string(value: str) -> str:
 
 
 def json_property(value: dict[str, object]) -> str:
-    """Serialize JSONProperty payloads the same way neomodel stores them."""
+    """Serialize extra payloads as JSON text (ArcadeDB Cypher refuses map properties)."""
     return json.dumps(value)
 
 
@@ -145,7 +145,7 @@ async def _run_batched_query(
 
     for start in range(0, len(rows), batch_size):
         batch = rows[start : start + batch_size]
-        await adb.cypher_query(query, {"rows": batch})
+        await graph_query(query, {"rows": batch})
 
 
 async def merge_tenants(rows: list[TenantRow], *, batch_size: int = PERMISSION_BATCH_SIZE) -> None:
@@ -284,7 +284,7 @@ async def merge_resource_permissions(
         """
         for start in range(0, len(user_rows), batch_size):
             batch = user_rows[start : start + batch_size]
-            await adb.cypher_query(user_query, {"rows": batch, "app": GITHUB_APP})
+            await graph_query(user_query, {"rows": batch, "app": GITHUB_APP})
 
     if team_rows:
         team_query = """

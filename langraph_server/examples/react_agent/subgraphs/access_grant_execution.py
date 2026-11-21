@@ -46,7 +46,7 @@ class AccessGrantInput:
     user_contexts: list[UserContextData] = field(default_factory=list)
     selected_apps: list[str] = field(default_factory=list)
     doc_corpus_context: str = field(default="")
-    neo4j_schema: str = field(default="")
+    graph_schema: str = field(default="")
     resource_type: str | None = field(default=None)
     resource_type_external_id: str | None = field(default=None)
     requested_objects: list[ResourceInstanceOption] = field(default_factory=list)
@@ -86,6 +86,7 @@ def _seed_grant_message(state: State) -> HumanMessage:
 async def load_grant_ways(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
     """Load existing profile/group grant paths for the detected type or instance."""
     catalog = await fetch_grant_ways(
+        tenant_id=runtime.context.tenant_id,
         resource_type_external_id=state.resource_type_external_id or "",
         resource_external_ids=[obj.external_id for obj in state.requested_objects],
         permissions=[state.permission_type] if state.permission_type else [],

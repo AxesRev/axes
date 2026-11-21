@@ -1,4 +1,4 @@
-"""Parent CLI: wipe Neo4j once and fetch graph data for every tenant.
+"""Parent CLI: rebuild every tenant's ArcadeDB graph database.
 
 Run from repo root:
 
@@ -14,16 +14,15 @@ from __future__ import annotations
 import asyncio
 import logging
 
-import nodes as _nodes_pkg  # noqa: F401 — registers all node classes with neomodel
-from integrations.graph_runner import setup_graph, teardown_graph
+from integrations.graph_db import setup_graph, teardown_graph
 from integrations.tenant_runner import fetch_all_tenants
 
 logger = logging.getLogger(__name__)
 
 
 async def run_all_fetchers() -> None:
-    """Wipe the graph, then ingest each tenant's configured app integrations."""
-    await setup_graph(wipe=True)
+    """Reset each tenant's database, then ingest its configured app integrations."""
+    await setup_graph()
 
     try:
         await fetch_all_tenants()

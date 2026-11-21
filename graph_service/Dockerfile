@@ -40,7 +40,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY --from=builder /usr/local/lib/python${PY_VERSION}/site-packages/ /usr/local/lib/python${PY_VERSION}/site-packages/
 COPY --from=builder /usr/local/bin/ /usr/local/bin/
 
-COPY graph_service/src/nodes ./nodes
 COPY graph_service/src/integrations ./integrations
 
 USER app
