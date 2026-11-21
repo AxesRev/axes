@@ -83,8 +83,8 @@ Detected target:
   requested objects:
 {requested_objects}
 
-Requested permissions:
-{permissions}
+Requested permission type:
+  {permission_type}
 
 Use tools as needed to get additional information about that identity (role, org, related records for its User ID)
 and any guidelines about who should have this access. Do not identify a different user.
@@ -96,7 +96,7 @@ Use the model's structured-output schema (should_grant + justification); do not 
 
 For `justification`:
   - Explain why this user should or should not receive the requested access. Write for an audit reader, not as instructions to a human or another LLM.
-  - Name the requested resource/resource type (and listed permissions, if any) only. Do not add permissions, licenses, features, or user settings, and do not discuss whether the list is enough, complete, or correct.
+  - Name the requested resource/resource type (and permission type, if any) only. Do not add permissions, licenses, features, or user settings, and do not discuss whether the list is enough, complete, or correct.
   - Ground in eligibility of the identity already given in user context (that User ID / Username) and in guidelines
     about who should have this access — not in whether they already have the permission, and not in RBAC exact-match rules. Do not rename
     the requester from unrelated tool hits. Do not treat a profile or permission-set name as eligibility.
@@ -115,7 +115,7 @@ Your job:
   - Pick the most fitting of those ways. Do not create a new HAS_PERMISSION edge (new share, new collaborator
     grant, new permission set, new team permission) when a listed way fits.
   - Create a new grant edge only if none of the listed ways fit the requested access.
-  - The listed permissions and grant-ways cover the requested access, not necessarily everything required for it to work.
+  - The permission type and grant-ways cover the requested access, not necessarily everything required for it to work.
     Documentation may require additional settings, licenses, features, or related permissions. Check the documentation
     for those prerequisites and apply any that are missing for this user.
   - Change permissions and documented prerequisites only for that user.
@@ -157,15 +157,15 @@ Detected target:
   requested objects:
 {requested_objects}
 
-Approved permissions to grant (if listed, every one is required):
-{permissions}
+Approved permission type to grant:
+  {permission_type}
 
 Evaluation justification:
 {evaluation_justification}
 
 Apply the grant to the User ID in the user-context block. Evaluation justification is eligibility reasoning, not an identity.
 The grant-ways catalog in the system prompt lists existing ways to add the requested permission. Pick the most fitting of those over creating new grant edges.
-The listed permissions may not be the only change required. Check documentation for other settings that must be enabled for this access, and apply those too if they are missing.
+The permission type may not be the only change required. Check documentation for other settings that must be enabled for this access, and apply those too if they are missing.
 Do not use graph tools to modify data, and do not treat other AppIdentity hits as the requester.
 When done, reply with a brief plain-language result report for the requester (no technical details, no follow-up offers).
 """

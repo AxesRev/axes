@@ -24,10 +24,8 @@ from examples.react_agent.prompts import (
 )
 from examples.react_agent.state import (
     AccessRequestEvaluation,
-    Permission,
     ResourceInstanceOption,
     State,
-    format_detected_permissions,
     format_requested_objects,
 )
 from examples.react_agent.user_context_models import UserContextData
@@ -41,7 +39,7 @@ class AccessEvaluationInput:
     """Parent channels this subgraph may read. Transcript stays private."""
 
     user_request: str = field(default="")
-    permissions: list[Permission] = field(default_factory=list)
+    permission_type: str | None = field(default=None)
     user_contexts: list[UserContextData] = field(default_factory=list)
     selected_apps: list[str] = field(default_factory=list)
     doc_corpus_context: str = field(default="")
@@ -65,8 +63,7 @@ def _seed_evaluation_message(state: State) -> HumanMessage:
             resource_type=state.resource_type or "(none)",
             requested_objects=format_requested_objects(state.requested_objects)
             or "  (none — evaluate the resource type)",
-            permissions=format_detected_permissions(state.permissions)
-            or "(none listed — evaluate the detected resource/resource type)",
+            permission_type=state.permission_type or "(none detected — evaluate the resource/resource type)",
         )
     )
 
@@ -74,10 +71,10 @@ def _seed_evaluation_message(state: State) -> HumanMessage:
 async def seed_evaluation(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
     """Seed the evaluation task from the detected target and original user request."""
     logger.info(
-        "seed_evaluation: type=%s requested_objects=%s permissions=%s",
+        "seed_evaluation: type=%s requested_objects=%s permission_type=%s",
         state.resource_type,
         [obj.external_id for obj in state.requested_objects],
-        [(permission.resource, permission.permission) for permission in state.permissions],
+        state.permission_type,
     )
     return {"messages": [_seed_evaluation_message(state)]}
 

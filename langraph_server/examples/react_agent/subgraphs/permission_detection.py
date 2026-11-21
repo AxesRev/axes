@@ -1,4 +1,4 @@
-"""Permission detection subgraph (Jev). Stage 1: type, instance flag, optional instance."""
+"""Permission detection subgraph (Jev): resource type, instance flag, optional instance, permission type."""
 
 from __future__ import annotations
 
@@ -34,6 +34,10 @@ _RESOURCE_TYPE_INSTRUCTIONS = (
 _RESOURCE_INSTANCE_INSTRUCTIONS = (
     "Which specific resource instance is this access request about? Pick the named record or repository, not the type."
 )
+_PERMISSION_TYPE_INSTRUCTIONS = (
+    "Which permission type does this access request need on the selected resource type or instance? "
+    "Pick the single level of access the user asked for (read, edit, push, …), not a profile or group."
+)
 _SPECIFIC_INSTANCE_INSTRUCTIONS = (
     "The user asked for access to a specific named resource instance "
     "(a particular repository, Campaign record, or similar), not only a resource type."
@@ -60,6 +64,20 @@ ORDER BY r.name, r.uri, r.external_id
 """
 
 
+_PERMISSION_TYPES_QUERY = """
+MATCH (t:Tenant {external_id: $tenant_id})<-[:BELONGS_TO]-(c:AppConnection)
+      <-[:BELONGS_TO]-(:ResourceType {external_id: $resource_type_external_id})
+MATCH (c)<-[:BELONGS_TO]-(rt:ResourceType)
+OPTIONAL MATCH (r:Resource)-[:INSTANCE_OF]->(rt)
+WITH c, collect(DISTINCT rt) + collect(DISTINCT r) AS targets
+UNWIND targets AS target
+MATCH ()-[hp:HAS_PERMISSION]->(target)
+WHERE coalesce(hp.effect, 'grant') <> 'mute' AND hp.permission IS NOT NULL
+RETURN DISTINCT c.app AS app, hp.permission AS permission
+ORDER BY permission
+"""
+
+
 @dataclass
 class PermissionDetectionInput:
     """Parent channels this subgraph may read."""
@@ -73,12 +91,13 @@ class PermissionDetectionInput:
 
 @dataclass
 class PermissionDetectionOutput:
-    """Stage-1 result. Later Jev stages will extend this."""
+    """Detected target and the permission type requested on it."""
 
     resource_type: str | None = None
     resource_type_external_id: str | None = None
     specific_resource_requested: bool = False
     requested_objects: list[ResourceInstanceOption] = field(default_factory=list)
+    permission_type: str | None = None
 
 
 def _jev_api_key() -> str:
@@ -152,6 +171,9 @@ def build_jev_state(state: State) -> str:
     ]
     if state.resource_type:
         sections.extend(["", f"Selected resource type: {state.resource_type}"])
+    if state.requested_objects:
+        names = ", ".join(obj.name for obj in state.requested_objects)
+        sections.extend(["", f"Selected resource instances: {names}"])
     user_context = build_user_context_block(state.user_contexts).strip()
     if user_context:
         sections.extend(["", user_context])
@@ -289,10 +311,79 @@ async def select_resource_instance(state: State, runtime: Runtime[Context]) -> d
     return {"requested_objects": requested_objects}
 
 
-def route_after_select_resource_type(state: State) -> Literal["select_resource_instance", "__end__"]:
-    if state.specific_resource_requested and state.resource_type:
+def parse_permission_type_rows(rows: list[dict[str, Any]]) -> list[str]:
+    permissions: list[str] = []
+    for row in rows:
+        permission = str(row.get("permission") or "").strip()
+        if permission and permission not in permissions:
+            permissions.append(permission)
+    return permissions
+
+
+def permission_type_tournament_option(app: str, permission: str) -> TournamentOption[str]:
+    return TournamentOption(
+        option_id=permission,
+        name=permission,
+        description=f"{app} permission type {permission}".strip(),
+        payload=permission,
+    )
+
+
+async def load_permission_types(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
+    tenant_id = runtime.context.tenant_id.strip()
+    type_id = (state.resource_type_external_id or "").strip()
+    if not tenant_id or not type_id:
+        logger.warning("load_permission_types: missing tenant or resource type")
+        return {"permission_types": []}
+
+    rows = await read_neo4j_cypher(
+        _PERMISSION_TYPES_QUERY,
+        {"tenant_id": tenant_id, "resource_type_external_id": type_id},
+    )
+    permission_types = parse_permission_type_rows(rows)
+    logger.info("load_permission_types: type=%s permission_types=%s", type_id, permission_types)
+    return {"permission_types": permission_types}
+
+
+async def select_permission_type(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
+    if not state.permission_types:
+        logger.warning("select_permission_type: no permission types")
+        return {"permission_type": None}
+
+    api_key = _jev_api_key()
+    if not api_key:
+        raise RuntimeError("JEV_API_KEY or TYPESAFE_API_KEY is required for permission detection")
+
+    app = next(
+        (
+            option.app
+            for option in _as_resource_type_options(state.resource_types)
+            if option.external_id == state.resource_type_external_id
+        ),
+        "",
+    )
+    async with AsyncTypeSafeClient(api_key=api_key, model=JEV_MODEL) as client:
+        pick = await jev_choice_tournament(
+            client,
+            state_text=build_jev_state(state),
+            options=[permission_type_tournament_option(app, permission) for permission in state.permission_types],
+            instructions=_PERMISSION_TYPE_INSTRUCTIONS,
+            question_id="permission_type",
+        )
+
+    permission_type = pick.option.payload if pick is not None else None
+    logger.info("select_permission_type: permission_type=%s", permission_type)
+    return {"permission_type": permission_type}
+
+
+def route_after_select_resource_type(
+    state: State,
+) -> Literal["select_resource_instance", "load_permission_types", "__end__"]:
+    if not state.resource_type:
+        return "__end__"
+    if state.specific_resource_requested:
         return "select_resource_instance"
-    return "__end__"
+    return "load_permission_types"
 
 
 def make_permission_detection_graph():
@@ -305,19 +396,23 @@ def make_permission_detection_graph():
     builder.add_node("load_resource_types", load_resource_types)
     builder.add_node("select_resource_type", select_resource_type)
     builder.add_node("select_resource_instance", select_resource_instance)
+    builder.add_node("load_permission_types", load_permission_types)
+    builder.add_node("select_permission_type", select_permission_type)
     builder.add_edge("__start__", "load_resource_types")
     builder.add_edge("load_resource_types", "select_resource_type")
     builder.add_conditional_edges(
         "select_resource_type",
         route_after_select_resource_type,
-        ["select_resource_instance", "__end__"],
+        ["select_resource_instance", "load_permission_types", "__end__"],
     )
-    builder.add_edge("select_resource_instance", "__end__")
+    builder.add_edge("select_resource_instance", "load_permission_types")
+    builder.add_edge("load_permission_types", "select_permission_type")
+    builder.add_edge("select_permission_type", "__end__")
     return builder.compile(name="Required Permission Agent")
 
 
 def make_permission_detection_node(compiled):
-    """Run stage-1 detection and copy its fields onto the parent state."""
+    """Run detection and copy its fields onto the parent state."""
 
     async def run_permission_detection(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
         result = await compiled.ainvoke(state, context=runtime.context)
@@ -326,11 +421,13 @@ def make_permission_detection_node(compiled):
             "resource_type": result.get("resource_type"),
             "specific_resource_requested": bool(result.get("specific_resource_requested")),
             "requested_objects": [dataclasses.asdict(obj) for obj in requested_objects],
+            "permission_type": result.get("permission_type"),
         }
         return {
             "resource_type": payload["resource_type"],
             "resource_type_external_id": result.get("resource_type_external_id"),
             "requested_objects": requested_objects,
+            "permission_type": payload["permission_type"],
             "messages": [AIMessage(content=json.dumps(payload, separators=(",", ":")))],
         }
 

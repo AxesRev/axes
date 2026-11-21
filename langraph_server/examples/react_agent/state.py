@@ -14,23 +14,6 @@ from pydantic import BaseModel, Field
 from examples.react_agent.user_context_models import UserContextData
 
 
-class Permission(BaseModel):
-    resource: Annotated[
-        str | None,
-        Field(
-            description=(
-                "Concrete name or identifier of the entity the request is about, as it appears in tools "
-                "(external data sources), documentation, or graph/user-context data. Prefer that entity's "
-                "identifier when the request is about a specific resource or named permission object and the "
-                "source has one. If the request is a kind of permission not tied to a particular instance, "
-                "use the object/type they mean — not a related record's identifier. Null when there is no "
-                "such entity."
-            ),
-        ),
-    ] = None
-    permission: Annotated[str, Field(description="The name or type of the permission being requested.")]
-
-
 @dataclass(frozen=True, slots=True)
 class ResourceTypeOption:
     """One catalog type for the tenant, from a ResourceType graph node."""
@@ -54,15 +37,6 @@ class ResourceInstanceOption:
 def format_requested_objects(objects: list[ResourceInstanceOption]) -> str:
     """Render the requested resource instances for downstream task prompts."""
     return "\n".join(f"  - {obj.name} ({obj.app} {obj.kind}, uri: {obj.uri}, id: {obj.external_id})" for obj in objects)
-
-
-def format_detected_permissions(permissions: list[Permission]) -> str:
-    """Render the detected permission list for downstream task prompts."""
-    lines: list[str] = []
-    for permission in permissions:
-        resource = permission.resource if permission.resource else "(none — no specific resource)"
-        lines.append(f"  - resource: {resource}\n    permission: {permission.permission}")
-    return "\n".join(lines)
 
 
 class AccessRequestEvaluation(BaseModel):
@@ -128,9 +102,6 @@ class State(InputState):
     It is set to 'True' when the step count reaches recursion_limit - 1.
     """
 
-    permissions: list[Permission] = field(default_factory=list)
-    """Permission objects required together for this grant."""
-
     access_evaluation: AccessRequestEvaluation | None = field(default=None)
     """Evaluation of whether the detected permission request should be granted."""
 
@@ -157,6 +128,12 @@ class State(InputState):
 
     requested_objects: list[ResourceInstanceOption] = field(default_factory=list)
     """Resource instances Jev picked when specific instances were requested (full graph objects)."""
+
+    permission_types: list[str] = field(default_factory=list)
+    """Distinct HAS_PERMISSION permission values the tenant has for the picked type's app."""
+
+    permission_type: str | None = field(default=None)
+    """Permission type Jev picked from permission_types (read, edit, push, …)."""
 
     doc_corpus_context: str = field(default="")
     """Semantically retrieved documentation snippets for the current user message (prompt injection)."""

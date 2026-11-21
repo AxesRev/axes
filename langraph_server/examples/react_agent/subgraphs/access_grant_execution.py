@@ -24,10 +24,8 @@ from examples.react_agent.prompts import (
 )
 from examples.react_agent.state import (
     AccessRequestEvaluation,
-    Permission,
     ResourceInstanceOption,
     State,
-    format_detected_permissions,
     format_requested_objects,
 )
 from examples.react_agent.user_context_models import UserContextData
@@ -43,7 +41,7 @@ class AccessGrantInput:
     """Parent channels this subgraph may read. Transcript stays private."""
 
     user_request: str = field(default="")
-    permissions: list[Permission] = field(default_factory=list)
+    permission_type: str | None = field(default=None)
     access_evaluation: AccessRequestEvaluation | None = field(default=None)
     user_contexts: list[UserContextData] = field(default_factory=list)
     selected_apps: list[str] = field(default_factory=list)
@@ -74,13 +72,12 @@ def _grant_runtime(runtime: Runtime[Context]) -> Runtime[Context]:
 def _seed_grant_message(state: State) -> HumanMessage:
     """Build the grant-execution task from the detected target and evaluation."""
     evaluation = cast(AccessRequestEvaluation, state.access_evaluation)
-    permissions = format_detected_permissions(state.permissions)
     return HumanMessage(
         content=ACCESS_GRANT_EXECUTION_TASK_TEMPLATE.format(
             user_request=state.user_request,
             resource_type=state.resource_type or "(none)",
             requested_objects=format_requested_objects(state.requested_objects) or "  (none — resource type only)",
-            permissions=permissions or "(none listed — use the grant-ways catalog)",
+            permission_type=state.permission_type or "(none detected — use the grant-ways catalog)",
             evaluation_justification=evaluation.justification,
         )
     )
@@ -91,7 +88,7 @@ async def load_grant_ways(state: State, runtime: Runtime[Context]) -> dict[str, 
     catalog = await fetch_grant_ways(
         resource_type_external_id=state.resource_type_external_id or "",
         resource_external_ids=[obj.external_id for obj in state.requested_objects],
-        permissions=[permission.permission for permission in state.permissions],
+        permissions=[state.permission_type] if state.permission_type else [],
     )
     logger.info(
         "load_grant_ways: type=%s requested_objects=%s chars=%s",
