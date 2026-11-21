@@ -71,6 +71,7 @@ jobs:
               - 'common/**'
             graph_service:
               - 'graph_service/**'
+              - 'common/**'
             webapp:
               - 'webapp/**'
 

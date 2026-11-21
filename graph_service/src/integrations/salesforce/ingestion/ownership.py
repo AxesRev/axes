@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from common.permissions import PERMISSION_EFFECT_GRANT, PERMISSION_OWNER
+
 from integrations.salesforce.ingestion.resources import resource_row_from_record
 from integrations.salesforce.ingestion.shared import (
     SALESFORCE_APP,
@@ -11,7 +13,7 @@ from integrations.salesforce.ingestion.shared import (
     RecordPermissionEdgeRow,
     ResourceRow,
 )
-from integrations.salesforce.models import PERMISSION_EFFECT_GRANT, PERMISSION_OWNER, build_owner_permission_extra
+from integrations.salesforce.models import build_owner_permission_extra
 
 
 def resource_row_from_owned_record(

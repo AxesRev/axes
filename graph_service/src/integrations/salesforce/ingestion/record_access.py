@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 
+from common.permissions import PERMISSION_EFFECT_GRANT
 from simple_salesforce import Salesforce
 from simple_salesforce.exceptions import SalesforceMalformedRequest
 
@@ -19,7 +20,7 @@ from integrations.salesforce.ingestion.shared import (
     merge_resources,
 )
 from integrations.salesforce.ingestion.users import ensure_identities_for_ids
-from integrations.salesforce.models import PERMISSION_EFFECT_GRANT, build_record_permission_extra
+from integrations.salesforce.models import build_record_permission_extra
 from integrations.salesforce.settings import get_salesforce_settings
 from integrations.salesforce.share_objects import (
     NormalizedShareAccess,

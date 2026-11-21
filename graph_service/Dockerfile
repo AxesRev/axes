@@ -24,6 +24,7 @@ WORKDIR /build
 
 COPY graph_service/pyproject.toml ./pyproject.toml
 COPY graph_service/uv.lock ./
+COPY common /common
 
 RUN uv export --frozen --no-emit-project --no-editable --no-dev --format=requirements-txt > requirements.txt && \
     uv pip install --system --compile-bytecode -r requirements.txt && \

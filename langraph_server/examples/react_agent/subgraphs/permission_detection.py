@@ -15,12 +15,12 @@ from langgraph.graph import StateGraph
 from langgraph.runtime import Runtime
 from typesafe_sdk import AsyncTypeSafeClient, Noul
 
+from common.permissions import PERMISSION_TYPES_BY_APP
 from examples.react_agent.context import Context
 from examples.react_agent.jev_tournament import TournamentOption, jev_choice_tournament
 from examples.react_agent.neo4j_schema_prompt import build_neo4j_schema_block
 from examples.react_agent.nodes.tools import read_neo4j_cypher
 from examples.react_agent.state import ResourceInstanceOption, ResourceTypeOption, State
-from examples.react_agent.supported_apps import PERMISSION_TYPES_BY_APP
 from examples.react_agent.user_context_models import UserContextData
 from examples.react_agent.user_context_prompt import build_user_context_block
 

@@ -8,6 +8,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from common.permissions import PERMISSION_ALL, PERMISSION_EDIT, PERMISSION_READ, PERMISSION_TYPES_BY_APP
 from simple_salesforce import Salesforce
 
 from integrations.salesforce.client import describe_global, describe_sobject_field_names
@@ -45,9 +46,9 @@ ALLOWED_SHARE_ROW_CAUSES = frozenset(
 )
 
 _SHARE_ACCESS_LEVEL_MAP = {
-    "Read": "read",
-    "Edit": "edit",
-    "All": "all",
+    "Read": PERMISSION_READ,
+    "Edit": PERMISSION_EDIT,
+    "All": PERMISSION_ALL,
 }
 
 
@@ -169,9 +170,12 @@ def describe_share_table(
 
 def normalize_share_access_level(access_level: object | None) -> str:
     if not access_level:
-        return "read"
+        return PERMISSION_READ
     raw = str(access_level)
-    return _SHARE_ACCESS_LEVEL_MAP.get(raw, raw.lower())
+    permission = _SHARE_ACCESS_LEVEL_MAP.get(raw, raw.lower())
+    if permission not in PERMISSION_TYPES_BY_APP["salesforce"]:
+        logger.warning("share_access_level_unknown access_level=%s permission=%s", raw, permission)
+    return permission
 
 
 def normalize_share_access(

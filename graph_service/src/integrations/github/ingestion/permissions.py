@@ -6,6 +6,7 @@ import logging
 from dataclasses import dataclass
 from typing import Literal
 
+from common.permissions import PERMISSION_TYPES_BY_APP
 from github import GithubException
 from github.MainClass import Github
 from github.Repository import Repository
@@ -315,6 +316,8 @@ async def ingest_permissions(
 
     edge_rows: list[PermissionEdgeRow] = []
     for grant in grants:
+        if grant.permission not in PERMISSION_TYPES_BY_APP["github"]:
+            logger.warning("permissions_unknown_value permission=%s repo=%s", grant.permission, grant.repo_full_name)
         resource_external_id = resources_by_uri.get(grant.repo_full_name)
         if resource_external_id is None:
             logger.warning("permissions_skip_unknown_repo full_name=%s", grant.repo_full_name)

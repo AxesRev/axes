@@ -5,6 +5,16 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from common.permissions import (
+    PERMISSION_CREATE,
+    PERMISSION_DELETE,
+    PERMISSION_EDIT,
+    PERMISSION_EFFECT_GRANT,
+    PERMISSION_EFFECT_MUTE,
+    PERMISSION_MODIFY_ALL,
+    PERMISSION_READ,
+    PERMISSION_VIEW_ALL,
+)
 from simple_salesforce import Salesforce
 
 from integrations.salesforce.client import query_all, query_muting_permission_set_links
@@ -14,18 +24,7 @@ from integrations.salesforce.ingestion.shared import (
     ProfilePermissionEdgeRow,
     merge_profile_permissions,
 )
-from integrations.salesforce.models import (
-    PERMISSION_CREATE,
-    PERMISSION_DELETE,
-    PERMISSION_EDIT,
-    PERMISSION_EFFECT_GRANT,
-    PERMISSION_EFFECT_MUTE,
-    PERMISSION_MODIFY_ALL,
-    PERMISSION_READ,
-    PERMISSION_VIEW_ALL,
-    build_field_permission_extra,
-    build_object_permission_extra,
-)
+from integrations.salesforce.models import build_field_permission_extra, build_object_permission_extra
 
 logger = logging.getLogger(__name__)
 

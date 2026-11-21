@@ -1,4 +1,4 @@
-from integrations.salesforce.models import (
+from common.permissions import (
     PERMISSION_CREATE,
     PERMISSION_DELETE,
     PERMISSION_EDIT,
@@ -7,6 +7,9 @@ from integrations.salesforce.models import (
     PERMISSION_MODIFY_ALL,
     PERMISSION_READ,
     PERMISSION_VIEW_ALL,
+)
+
+from integrations.salesforce.models import (
     SalesforceAppIdentityExtra,
     SalesforceConnectionExtra,
     SalesforceGroupExtra,

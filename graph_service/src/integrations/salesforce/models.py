@@ -2,18 +2,8 @@ from __future__ import annotations
 
 from typing import Literal
 
+from common.permissions import PERMISSION_ALL
 from pydantic import BaseModel, Field, model_validator
-
-PERMISSION_READ = "read"
-PERMISSION_CREATE = "create"
-PERMISSION_EDIT = "edit"
-PERMISSION_DELETE = "delete"
-PERMISSION_VIEW_ALL = "view_all"
-PERMISSION_MODIFY_ALL = "modify_all"
-PERMISSION_OWNER = "owner"
-
-PERMISSION_EFFECT_GRANT = "grant"
-PERMISSION_EFFECT_MUTE = "mute"
 
 
 class SalesforceConnectionExtra(BaseModel):
@@ -76,7 +66,7 @@ def build_owner_permission_extra(*, record_id: str) -> dict[str, object]:
     return SalesforceRecordPermissionExtra(
         record_id=record_id,
         row_cause="Owner",
-        access_level="all",
+        access_level=PERMISSION_ALL,
     ).model_dump()
 
 
