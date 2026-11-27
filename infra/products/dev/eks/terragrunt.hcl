@@ -30,7 +30,9 @@ inputs = {
 
   additional_node_security_group_ids = [dependency.vpc.outputs.db_clients_security_group_id]
 
-  cluster_admin_principal_arn    = "arn:aws:iam::042993547532:root"
+  # IAM Identity Center admin role (kirillSSO). EKS access entries take the role ARN without its
+  # aws-reserved/sso.amazonaws.com/<region>/ path.
+  cluster_admin_principal_arn    = "arn:aws:iam::042993547532:role/AWSReservedSSO_AdministratorAccess_1f4f2f43f16629f6"
   github_actions_deploy_role_arn = "arn:aws:iam::042993547532:role/github-actions-deploy"
 
   node_instance_types = ["t4g.medium"]
