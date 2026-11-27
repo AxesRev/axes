@@ -11,6 +11,7 @@ logger = logging.getLogger(__name__)
 
 _USER_CONTEXT_GRAPH_TAIL = """
 OPTIONAL MATCH (u)-[:MEMBER_OF]->(g:Group)
+OPTIONAL MATCH (u)-[:MEMBER_OF]->(child:Group)-[:MEMBER_OF*1..5]->(ag:Group)
 OPTIONAL MATCH (u)-[p:HAS_PERMISSION]->(target)
 WHERE target:Resource OR target:Scope OR target:Group
 OPTIONAL MATCH (target)-[:BELONGS_TO]->(owner:AppConnection)
@@ -24,6 +25,12 @@ RETURN u.app AS app,
            name: g.name,
            description: g.description
        }) AS groups,
+       collect(DISTINCT {
+           external_id: ag.external_id,
+           name: ag.name,
+           description: ag.description,
+           via: child.name
+       }) AS inherited_groups,
        collect(DISTINCT {
            permission: p.permission,
            target_kind: CASE

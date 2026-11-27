@@ -163,7 +163,9 @@ def parse_grant_way_rows(rows: list[dict[str, Any]]) -> list[GrantWay]:
     return ways
 
 
-def format_grant_ways(ways: list[GrantWay]) -> str:
+def format_grant_ways(ways: list[GrantWay], held_subject_ids: set[str] | None = None) -> str:
+    """Render the catalog; ways whose subject the requester already holds are marked as already held."""
+    held = held_subject_ids or set()
     if not ways:
         return (
             "Existing ways to add the requested permission:\n"
@@ -189,7 +191,10 @@ def format_grant_ways(ways: list[GrantWay]) -> str:
             current_permission = perm_label
             lines.append(f"  {perm_label}:")
         via = f" [{way.via}]" if way.via else ""
-        lines.append(f'    - {way.attach} "{way.subject_name}" ({way.subject_external_id}){via}')
+        already = (
+            " [REQUESTER ALREADY HOLDS THIS: they already have this access]" if way.subject_external_id in held else ""
+        )
+        lines.append(f'    - {way.attach} "{way.subject_name}" ({way.subject_external_id}){via}{already}')
     return "\n".join(lines)
 
 

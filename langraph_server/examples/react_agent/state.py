@@ -153,3 +153,6 @@ class State(InputState):
 
     peer_analysis: dict[str, str] = field(default_factory=dict)
     """Team name -> "peers with access/peers checked", only for teams passing the peer thresholds."""
+
+    peer_teams_checked: int = field(default=0)
+    """How many of the requester's teams peer analysis looked at (0 = no peer data at all)."""

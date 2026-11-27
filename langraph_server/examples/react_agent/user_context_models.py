@@ -12,9 +12,12 @@ class UserContextGroup(BaseModel):
     external_id: str
     name: str
     description: str | None = None
+    inherited_via: str | None = None
+    """Set when membership comes through a nested group: the user's direct group it is inherited through."""
 
     def format_for_context(self) -> str:
-        return f"- {self.name} - {self.description}"
+        via = f" (inherited: member through {self.inherited_via})" if self.inherited_via else ""
+        return f"- {self.name}{via} - {self.description}"
 
 
 class UserContextProfile(BaseModel):
@@ -65,7 +68,7 @@ class UserContextData(BaseModel):
             "Use this User ID as the requester in every lookup, decision, grant, and justification. "
             "Tools may only fetch additional facts about this User ID (role, team, org, related records). "
             "If a tool returns a different person or AppIdentity, ignore it.\n\n"
-            "Groups this user belongs to (current membership):\n"
+            "Groups this user belongs to (current membership, including groups inherited through nested groups):\n"
             f"{group_lines}\n\n"
             "Profiles and permission sets assigned to this user (names only; a name or an assignment is not the access inside the set):\n"
             f"{profile_lines}\n\n"
@@ -84,18 +87,25 @@ class UserContextData(BaseModel):
         return f"  - group {perm.target_name}: {perm.permission}"
 
 
-def parse_group_rows(rows: list[dict[str, Any]]) -> list[UserContextGroup]:
+def parse_group_rows(
+    rows: list[dict[str, Any]],
+    inherited_rows: list[dict[str, Any]] | None = None,
+) -> list[UserContextGroup]:
+    """Direct groups first, then groups inherited through nested membership (each listed once)."""
     groups: list[UserContextGroup] = []
-    for row in rows:
+    seen: set[str] = set()
+    for row, inherited in [(r, False) for r in rows] + [(r, True) for r in inherited_rows or []]:
         external_id = row.get("external_id")
         name = row.get("name")
-        if not external_id or not name:
+        if not external_id or not name or str(external_id) in seen:
             continue
+        seen.add(str(external_id))
         groups.append(
             UserContextGroup(
                 external_id=str(external_id),
                 name=str(name),
                 description=row.get("description"),
+                inherited_via=_optional_str(row.get("via")) if inherited else None,
             )
         )
     return groups
@@ -176,7 +186,7 @@ def build_user_context(record: dict[str, Any]) -> UserContextData:
         app=str(record["app"]),
         user_id=str(record["user_id"]),
         user_name=str(record["user_name"]),
-        groups=parse_group_rows(record.get("groups") or []),
+        groups=parse_group_rows(record.get("groups") or [], record.get("inherited_groups") or []),
         profiles=parse_profile_rows(record.get("profiles") or []),
         permissions=parse_permission_rows(record.get("permissions") or []),
         extra="" if raw_extra is None else str(raw_extra).strip(),

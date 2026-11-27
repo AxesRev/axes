@@ -115,6 +115,8 @@ Your job:
   - Pick the most fitting of those ways. Do not create a new HAS_PERMISSION edge (new share, new collaborator
     grant, new permission set, new team permission) when a listed way fits.
   - Create a new grant edge only if none of the listed ways fit the requested access.
+  - If a listed way is marked as already held by the requester (for example a group they belong to directly or
+    through a nested group), they already have this access: make no change and report that they already have it.
   - The permission type and grant-ways cover the requested access, not necessarily everything required for it to work.
     Documentation may require additional settings, licenses, features, or related permissions. Check the documentation
     for those prerequisites and apply any that are missing for this user.

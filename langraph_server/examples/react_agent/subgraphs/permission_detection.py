@@ -392,7 +392,12 @@ async def load_grant_ways(state: State, runtime: Runtime[Context]) -> dict[str, 
         state.permission_type,
         len(ways),
     )
-    return {"grant_ways": format_grant_ways(ways), "grant_way_subject_ids": grant_way_subject_ids(ways)}
+    # Groups include nested-group inheritance, so access through a parent group counts as held.
+    held = {item.external_id for ctx in state.user_contexts for item in [*ctx.groups, *ctx.profiles]}
+    return {
+        "grant_ways": format_grant_ways(ways, held),
+        "grant_way_subject_ids": grant_way_subject_ids(ways),
+    }
 
 
 def route_after_select_scope(

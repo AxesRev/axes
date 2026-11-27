@@ -65,21 +65,21 @@ def _seed_evaluation_message(state: State) -> HumanMessage:
             scope=state.scope or "(none)",
             requested_objects=format_requested_objects(state.requested_objects) or "  (none — evaluate the scope)",
             permission_type=state.permission_type or "(none detected — evaluate the resource/scope)",
-            peer_analysis=build_peer_analysis_block(state.peer_analysis),
+            peer_analysis=build_peer_analysis_block(state.peer_analysis, state.peer_teams_checked),
         )
     )
 
 
 async def load_peer_analysis(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
     """Share of the requester's team peers that already hold the requested access."""
-    stats = await fetch_peer_analysis(
+    stats, teams_checked = await fetch_peer_analysis(
         tenant_id=runtime.context.tenant_id,
         user_contexts=state.user_contexts,
         subject_ids=state.grant_way_subject_ids,
         resource_ids=[obj.external_id for obj in state.requested_objects],
         permission=state.permission_type,
     )
-    return {"peer_analysis": stats}
+    return {"peer_analysis": stats, "peer_teams_checked": teams_checked}
 
 
 async def seed_evaluation(state: State, runtime: Runtime[Context]) -> dict[str, Any]:

@@ -2,8 +2,8 @@
 
 Peers are the other members of every Group the requester is a MEMBER_OF. Large teams are
 sampled, then one indexed lookup per sampled peer checks whether they hold any grant-way
-subject (profile or group) or a direct HAS_PERMISSION on a requested resource. Cost grows
-with the number of sampled peers, not peers x grant ways.
+subject (profile, or group directly or through nested groups) or a direct HAS_PERMISSION on a
+requested resource. Cost grows with the number of sampled peers, not peers x grant ways.
 """
 
 from __future__ import annotations
@@ -40,7 +40,7 @@ MATCH (peer:AppIdentity {external_id: peer_id})
 WHERE peer.app = $app
 OPTIONAL MATCH (peer)-[:ASSIGNED_PROFILE]->(p:Profile)
 WHERE p.external_id IN $subject_ids
-OPTIONAL MATCH (peer)-[:MEMBER_OF]->(g:Group)
+OPTIONAL MATCH (peer)-[:MEMBER_OF*1..6]->(g:Group)
 WHERE g.external_id IN $subject_ids
 OPTIONAL MATCH (peer)-[d:HAS_PERMISSION]->(r:Resource)
 WHERE r.external_id IN $resource_ids
@@ -116,11 +116,12 @@ async def _peer_analysis_for_user(
     subject_ids: list[str],
     resource_ids: list[str],
     permission: str,
-) -> dict[str, str]:
+) -> tuple[dict[str, str], int]:
+    """Passing teams' stats, and how many of the requester's teams were checked."""
     rows = await read_graph(tenant_id, _TEAM_PEERS_QUERY, {"app": user.app, "user_id": user.user_id})
     teams = parse_team_rows(rows, user.user_id)
     if not teams:
-        return {}
+        return {}, 0
 
     sampled = sorted({pid for team in teams for pid in team.peer_ids})
     access_rows = await read_graph(
@@ -145,7 +146,7 @@ async def _peer_analysis_for_user(
         len(peers_with_access),
         stats,
     )
-    return stats
+    return stats, len(teams)
 
 
 async def fetch_peer_analysis(
@@ -155,28 +156,36 @@ async def fetch_peer_analysis(
     subject_ids: list[str],
     resource_ids: list[str],
     permission: str | None,
-) -> dict[str, str]:
-    """Per-team peer coverage of the requested access, filtered to teams that pass the thresholds."""
+) -> tuple[dict[str, str], int]:
+    """Per-team peer coverage of the requested access (teams passing the thresholds), and teams checked."""
     if not tenant_id.strip() or not permission or not (subject_ids or resource_ids):
-        return {}
+        return {}, 0
     stats: dict[str, str] = {}
+    teams_checked = 0
     for user in user_contexts:
-        for team, value in (
-            await _peer_analysis_for_user(
-                tenant_id=tenant_id,
-                user=user,
-                subject_ids=subject_ids,
-                resource_ids=resource_ids,
-                permission=permission,
-            )
-        ).items():
+        user_stats, user_teams = await _peer_analysis_for_user(
+            tenant_id=tenant_id,
+            user=user,
+            subject_ids=subject_ids,
+            resource_ids=resource_ids,
+            permission=permission,
+        )
+        teams_checked += user_teams
+        for team, value in user_stats.items():
             stats.setdefault(team, value)
-    return stats
+    return stats, teams_checked
 
 
-def build_peer_analysis_block(stats: dict[str, str]) -> str:
+def build_peer_analysis_block(stats: dict[str, str], teams_checked: int = 0) -> str:
     if not stats:
-        return ""
+        if not teams_checked:
+            return ""
+        return (
+            "Peer access: no significant number of the requesting user's team members have this access "
+            f"(checked {teams_checked} team(s); none reached {int(MIN_ACCESS_RATIO * 100)}% of peers holding it). "
+            "This is evidence that this access is not normal for the user's role. Weigh it against the stated need: "
+            "grant only with a clear, specific reason this user needs access their teammates do not have.\n\n"
+        )
     return (
         "Peer access (teams the requesting user belongs to; value is peers who already have this access / peers checked):\n"
         f"{json.dumps(stats, ensure_ascii=False)}\n"
