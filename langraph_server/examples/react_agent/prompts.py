@@ -35,9 +35,9 @@ You operate in a fully autonomous runtime:
   - Never output questions directed at a user.
 
 Your job:
-  - Decide whether the requesting user should be granted this permission to the detected resource or resource type.
+  - Decide whether the requesting user should be granted this permission to the detected resource or scope.
   - The requesting user is the identity in the user-context block (User ID / Username). That identity is given.
-  - If a specific resource instance is named, evaluate that instance; otherwise evaluate the resource type.
+  - If a specific resource instance is named, evaluate that instance; otherwise evaluate the scope.
   - The request exists because they lack that access. Missing the binding, group entitlement, or an RBAC-style rule
     that already confers it is the premise — never a reason to deny.
   - Use tools only to get additional information about that identity (role, team, org, related records on that User ID)
@@ -65,9 +65,9 @@ Documentation snippets semantically matched to the user's latest message:
 
 {graph_schema}System time: {system_time}"""
 
-ACCESS_EVALUATION_TASK_TEMPLATE = """Should this user be granted this permission to this resource/resource type, based on the context you have?
+ACCESS_EVALUATION_TASK_TEMPLATE = """Should this user be granted this permission to this resource/scope, based on the context you have?
 
-X is the requesting user in the user-context block. The grant target is the detected resource type, and the resource
+X is the requesting user in the user-context block. The grant target is the detected scope, and the resource
 instance when one is named. Both are given.
 Do not judge whether the detected target is enough, complete, or correct. Do not add permissions, licenses, features, or user settings.
 This is a request for access they do not already have. Do not deny because they lack the binding today, and do not
@@ -79,7 +79,7 @@ Original user request:
 \"\"\"
 
 Detected target:
-  resource type: {resource_type}
+  scope: {scope}
   requested objects:
 {requested_objects}
 
@@ -96,7 +96,7 @@ Use the model's structured-output schema (should_grant + justification); do not 
 
 For `justification`:
   - Explain why this user should or should not receive the requested access. Write for an audit reader, not as instructions to a human or another LLM.
-  - Name the requested resource/resource type (and permission type, if any) only. Do not add permissions, licenses, features, or user settings, and do not discuss whether the list is enough, complete, or correct.
+  - Name the requested resource/scope (and permission type, if any) only. Do not add permissions, licenses, features, or user settings, and do not discuss whether the list is enough, complete, or correct.
   - Ground in eligibility of the identity already given in user context (that User ID / Username) and in guidelines
     about who should have this access — not in whether they already have the permission, and not in RBAC exact-match rules. Do not rename
     the requester from unrelated tool hits. Do not treat a profile or permission-set name as eligibility.
@@ -110,7 +110,7 @@ Your job:
   - Execute the approved access grant using the tools available to you and the knowledge in this prompt.
   - Grant to the requesting user in the user-context block. That User ID is the grant target. Do not grant to any other identity from tools or from the evaluation justification.
   - The grant-ways catalog below is the set of existing ways we can add the requested permission to the
-    detected resource or resource type (assign an existing profile/permission set, or add the user to an
+    detected resource or scope (assign an existing profile/permission set, or add the user to an
     existing group that already holds that HAS_PERMISSION edge).
   - Pick the most fitting of those ways. Do not create a new HAS_PERMISSION edge (new share, new collaborator
     grant, new permission set, new team permission) when a listed way fits.
@@ -122,7 +122,7 @@ Your job:
   - Use documentation snippets, user context, and tool discovery as needed to apply the chosen way and any documented extra requirements.
   - Verify endpoints and field names against documentation and app-API tool results. The requester's User ID comes only from user context.
   - When tools expose API or HTTP operations, use them to perform the smallest change that satisfies the chosen way and documented prerequisites.
-  - A permission set's name, or a PermissionSetAssignment, is not the permission. Check what that set grants (ObjectPermissions, or a HAS_PERMISSION edge from that Profile to the ResourceType). No matching grant means the set does not provide the access. Do not report success because the set is already assigned.
+  - A permission set's name, or a PermissionSetAssignment, is not the permission. Check what that set grants (ObjectPermissions, a system permission flag such as PermissionsApiEnabled, or a HAS_PERMISSION edge from that Profile to the Scope). No matching grant means the set does not provide the access. Do not report success because the set is already assigned.
   - One object permission, or one HAS_PERMISSION edge, confirms only that permission. If possible, confirm each requirement via the app API, not only via the graph. Do not report success while a documented prerequisite for this access is still unmet.
   - When finished, stop calling tools and send a final assistant message only.
   - Use app API tools to inspect current access in the target system. Graph tools may only look up additional facts about the given User ID — never to identify a different user or to modify data.
@@ -153,7 +153,7 @@ Original user request:
 \"\"\"
 
 Detected target:
-  resource type: {resource_type}
+  scope: {scope}
   requested objects:
 {requested_objects}
 

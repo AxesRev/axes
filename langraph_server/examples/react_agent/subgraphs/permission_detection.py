@@ -1,4 +1,4 @@
-"""Permission detection subgraph (Jev): resource type, instance flag, optional instance, permission type, grant ways."""
+"""Permission detection subgraph (Jev): scope, instance flag, optional instance, permission type, grant ways."""
 
 from __future__ import annotations
 
@@ -15,13 +15,14 @@ from langgraph.graph import StateGraph
 from langgraph.runtime import Runtime
 from typesafe_sdk import AsyncTypeSafeClient, Noul
 
-from common.permissions import PERMISSION_TYPES_BY_APP
+from common.graph_schema import SCOPE_KIND_OBJECT, SCOPE_KIND_SYSTEM_PERMISSION
+from common.permissions import PERMISSION_ENABLED, PERMISSION_TYPES_BY_APP
 from examples.react_agent.context import Context
 from examples.react_agent.grant_ways import fetch_grant_ways, format_grant_ways, grant_way_subject_ids
 from examples.react_agent.graph_db import read_graph
 from examples.react_agent.graph_schema_prompt import build_graph_schema_block
 from examples.react_agent.jev_tournament import TournamentOption, jev_choice_tournament
-from examples.react_agent.state import ResourceInstanceOption, ResourceTypeOption, State
+from examples.react_agent.state import ResourceInstanceOption, ScopeOption, State
 from examples.react_agent.user_context_models import UserContextData
 from examples.react_agent.user_context_prompt import build_user_context_block
 
@@ -29,34 +30,35 @@ logger = logging.getLogger(__name__)
 
 JEV_MODEL = "jev-latest"
 _NOUL_TRUE_THRESHOLD = 0.5
-_RESOURCE_TYPE_INSTRUCTIONS = (
-    "Which catalog resource type is this access request about? "
-    "Pick the type (Campaign, repository, …), not a record or repo instance."
+_SCOPE_INSTRUCTIONS = (
+    "Which catalog scope is this access request about? "
+    "Pick an object type (Campaign, repository, …) for access to records, or a system permission "
+    "(API Enabled, Export Reports, …) for an org-wide ability. Never a single record or repo instance."
 )
 _RESOURCE_INSTANCE_INSTRUCTIONS = (
     "Which specific resource instance is this access request about? Pick the named record or repository, not the type."
 )
 _PERMISSION_TYPE_INSTRUCTIONS = (
-    "Which permission type does this access request need on the selected resource type or instance? "
+    "Which permission type does this access request need on the selected scope or instance? "
     "Pick the single level of access the user asked for (read, edit, push, …), not a profile or group."
 )
 _SPECIFIC_INSTANCE_INSTRUCTIONS = (
     "The user asked for access to a specific named resource instance "
-    "(a particular repository, Campaign record, or similar), not only a resource type."
+    "(a particular repository, Campaign record, or similar), not only a scope."
 )
 
-_RESOURCE_TYPES_QUERY = """
+_SCOPES_QUERY = """
 MATCH (t:Tenant {external_id: $tenant_id})<-[:BELONGS_TO]-(c:AppConnection)
-      <-[:BELONGS_TO]-(rt:ResourceType)
+      <-[:BELONGS_TO]-(rt:Scope)
 WHERE size($apps) = 0 OR c.app IN $apps
-RETURN c.app AS app, rt.name AS name, rt.external_id AS external_id
+RETURN c.app AS app, rt.name AS name, rt.external_id AS external_id, rt.kind AS kind
 ORDER BY c.app, rt.name
 """
 
 _RESOURCE_INSTANCES_QUERY = """
 MATCH (t:Tenant {external_id: $tenant_id})<-[:BELONGS_TO]-(c:AppConnection)
-      <-[:BELONGS_TO]-(rt:ResourceType {external_id: $resource_type_external_id})
-MATCH (r:Resource)-[:INSTANCE_OF]->(rt)
+      <-[:BELONGS_TO]-(rt:Scope {external_id: $scope_external_id})
+MATCH (r:Resource)-[:IN_SCOPE]->(rt)
 RETURN c.app AS app,
        r.external_id AS external_id,
        r.name AS name,
@@ -81,8 +83,8 @@ class PermissionDetectionInput:
 class PermissionDetectionOutput:
     """Detected target and the permission type requested on it."""
 
-    resource_type: str | None = None
-    resource_type_external_id: str | None = None
+    scope: str | None = None
+    scope_external_id: str | None = None
     specific_resource_requested: bool = False
     requested_objects: list[ResourceInstanceOption] = field(default_factory=list)
     permission_type: str | None = None
@@ -94,8 +96,8 @@ def _jev_api_key() -> str:
     return os.environ.get("JEV_API_KEY", "").strip() or os.environ.get("TYPESAFE_API_KEY", "").strip()
 
 
-def parse_resource_type_rows(rows: list[dict[str, Any]]) -> list[ResourceTypeOption]:
-    options: list[ResourceTypeOption] = []
+def parse_scope_rows(rows: list[dict[str, Any]]) -> list[ScopeOption]:
+    options: list[ScopeOption] = []
     seen: set[str] = set()
     for row in rows:
         app = str(row.get("app") or "").strip()
@@ -106,7 +108,8 @@ def parse_resource_type_rows(rows: list[dict[str, Any]]) -> list[ResourceTypeOpt
         if external_id in seen:
             continue
         seen.add(external_id)
-        options.append(ResourceTypeOption(app=app, name=name, external_id=external_id))
+        kind = str(row.get("kind") or "").strip() or SCOPE_KIND_OBJECT
+        options.append(ScopeOption(app=app, name=name, external_id=external_id, kind=kind))
     return options
 
 
@@ -131,11 +134,15 @@ def parse_resource_instance_rows(rows: list[dict[str, Any]]) -> list[ResourceIns
     return options
 
 
-def resource_type_tournament_option(option: ResourceTypeOption) -> TournamentOption[ResourceTypeOption]:
+def scope_tournament_option(option: ScopeOption) -> TournamentOption[ScopeOption]:
     return TournamentOption(
         option_id=option.external_id,
         name=option.name,
-        description=f"{option.app} resource type {option.name}",
+        description=(
+            f"{option.app} system permission {option.name}"
+            if option.kind == SCOPE_KIND_SYSTEM_PERMISSION
+            else f"{option.app} object type {option.name}"
+        ),
         payload=option,
     )
 
@@ -159,8 +166,8 @@ def build_jev_state(state: State) -> str:
         "",
         f"Selected apps: {', '.join(state.selected_apps) if state.selected_apps else '(none)'}",
     ]
-    if state.resource_type:
-        sections.extend(["", f"Selected resource type: {state.resource_type}"])
+    if state.scope:
+        sections.extend(["", f"Selected scope: {state.scope}"])
     if state.requested_objects:
         names = ", ".join(obj.name for obj in state.requested_objects)
         sections.extend(["", f"Selected resource instances: {names}"])
@@ -190,45 +197,45 @@ async def _ask_specific_instance(client: AsyncTypeSafeClient, state_text: str) -
     return float(response.nouls["specific_resource_requested"].noul)
 
 
-def _as_resource_type_options(raw: list[ResourceTypeOption] | list[dict[str, Any]]) -> list[ResourceTypeOption]:
-    options: list[ResourceTypeOption] = []
+def _as_scope_options(raw: list[ScopeOption] | list[dict[str, Any]]) -> list[ScopeOption]:
+    options: list[ScopeOption] = []
     for item in raw:
-        if isinstance(item, ResourceTypeOption):
+        if isinstance(item, ScopeOption):
             options.append(item)
             continue
-        parsed = parse_resource_type_rows([item])
+        parsed = parse_scope_rows([item])
         options.extend(parsed)
     return options
 
 
-async def load_resource_types(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
+async def load_scopes(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
     tenant_id = runtime.context.tenant_id.strip()
     if not tenant_id:
-        logger.warning("load_resource_types: empty tenant_id")
-        return {"resource_types": []}
+        logger.warning("load_scopes: empty tenant_id")
+        return {"scopes": []}
 
     rows = await read_graph(
         tenant_id,
-        _RESOURCE_TYPES_QUERY,
+        _SCOPES_QUERY,
         {"tenant_id": tenant_id, "apps": list(state.selected_apps)},
     )
-    options = parse_resource_type_rows(rows)
+    options = parse_scope_rows(rows)
     logger.info(
-        "load_resource_types: tenant=%s apps=%s count=%s",
+        "load_scopes: tenant=%s apps=%s count=%s",
         tenant_id,
         state.selected_apps,
         len(options),
     )
-    return {"resource_types": options}
+    return {"scopes": options}
 
 
-async def select_resource_type(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
-    options = _as_resource_type_options(state.resource_types)
+async def select_scope(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
+    options = _as_scope_options(state.scopes)
     if not options:
-        logger.warning("select_resource_type: no resource types")
+        logger.warning("select_scope: no scopes")
         return {
-            "resource_type": None,
-            "resource_type_external_id": None,
+            "scope": None,
+            "scope_external_id": None,
             "specific_resource_requested": False,
         }
 
@@ -243,42 +250,42 @@ async def select_resource_type(state: State, runtime: Runtime[Context]) -> dict[
             pick = await jev_choice_tournament(
                 client,
                 state_text=state_text,
-                options=[resource_type_tournament_option(option) for option in options],
-                instructions=_RESOURCE_TYPE_INSTRUCTIONS,
-                question_id="resource_type",
+                options=[scope_tournament_option(option) for option in options],
+                instructions=_SCOPE_INSTRUCTIONS,
+                question_id="scope",
             )
             noul = await noul_task
         finally:
             if not noul_task.done():
                 noul_task.cancel()
 
-    resource_type = pick.key if pick is not None else None
-    resource_type_external_id = pick.option.payload.external_id if pick is not None else None
+    scope = pick.key if pick is not None else None
+    scope_external_id = pick.option.payload.external_id if pick is not None else None
     specific = noul_to_bool(noul)
     logger.info(
-        "select_resource_type: resource_type=%s specific_resource_requested=%s noul=%.3f",
-        resource_type,
+        "select_scope: scope=%s specific_resource_requested=%s noul=%.3f",
+        scope,
         specific,
         noul,
     )
     return {
-        "resource_type": resource_type,
-        "resource_type_external_id": resource_type_external_id,
+        "scope": scope,
+        "scope_external_id": scope_external_id,
         "specific_resource_requested": specific,
     }
 
 
 async def select_resource_instance(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
     tenant_id = runtime.context.tenant_id.strip()
-    type_id = (state.resource_type_external_id or "").strip()
+    type_id = (state.scope_external_id or "").strip()
     if not tenant_id or not type_id:
-        logger.warning("select_resource_instance: missing tenant or resource type")
+        logger.warning("select_resource_instance: missing tenant or scope")
         return {"requested_objects": []}
 
     rows = await read_graph(
         tenant_id,
         _RESOURCE_INSTANCES_QUERY,
-        {"tenant_id": tenant_id, "resource_type_external_id": type_id},
+        {"tenant_id": tenant_id, "scope_external_id": type_id},
     )
     instances = parse_resource_instance_rows(rows)
     logger.info("select_resource_instance: type=%s count=%s", type_id, len(instances))
@@ -313,20 +320,30 @@ def permission_type_tournament_option(app: str, permission: str) -> TournamentOp
     )
 
 
-def _selected_type_app(state: State) -> str:
+def _selected_scope(state: State) -> ScopeOption | None:
     return next(
-        (
-            option.app
-            for option in _as_resource_type_options(state.resource_types)
-            if option.external_id == state.resource_type_external_id
-        ),
-        "",
+        (option for option in _as_scope_options(state.scopes) if option.external_id == state.scope_external_id),
+        None,
     )
 
 
-async def load_permission_types(state: State) -> dict[str, Any]:
-    app = _selected_type_app(state)
+def _selected_type_app(state: State) -> str:
+    scope = _selected_scope(state)
+    return scope.app if scope else ""
+
+
+def permission_types_for_scope(app: str, kind: str) -> list[str]:
+    """System permissions are only ever 'enabled'; object scopes never are."""
     permission_types = list(PERMISSION_TYPES_BY_APP.get(app, {}))
+    if kind == SCOPE_KIND_SYSTEM_PERMISSION:
+        return [p for p in permission_types if p == PERMISSION_ENABLED]
+    return [p for p in permission_types if p != PERMISSION_ENABLED]
+
+
+async def load_permission_types(state: State) -> dict[str, Any]:
+    scope = _selected_scope(state)
+    app = scope.app if scope else ""
+    permission_types = permission_types_for_scope(app, scope.kind if scope else SCOPE_KIND_OBJECT)
     if not permission_types:
         logger.warning("load_permission_types: no permission types for app=%s", app)
     logger.info("load_permission_types: app=%s permission_types=%s", app, permission_types)
@@ -337,6 +354,9 @@ async def select_permission_type(state: State, runtime: Runtime[Context]) -> dic
     if not state.permission_types:
         logger.warning("select_permission_type: no permission types")
         return {"permission_type": None}
+    if len(state.permission_types) == 1:
+        logger.info("select_permission_type: only option permission_type=%s", state.permission_types[0])
+        return {"permission_type": state.permission_types[0]}
 
     api_key = _jev_api_key()
     if not api_key:
@@ -361,13 +381,13 @@ async def load_grant_ways(state: State, runtime: Runtime[Context]) -> dict[str, 
     """Load existing profile/group grant paths for the detected type or instance and permission."""
     ways = await fetch_grant_ways(
         tenant_id=runtime.context.tenant_id,
-        resource_type_external_id=state.resource_type_external_id or "",
+        scope_external_id=state.scope_external_id or "",
         resource_external_ids=[obj.external_id for obj in state.requested_objects],
         permissions=[state.permission_type] if state.permission_type else [],
     )
     logger.info(
         "load_grant_ways: type=%s requested_objects=%s permission_type=%s ways=%s",
-        state.resource_type_external_id,
+        state.scope_external_id,
         [obj.external_id for obj in state.requested_objects],
         state.permission_type,
         len(ways),
@@ -375,12 +395,14 @@ async def load_grant_ways(state: State, runtime: Runtime[Context]) -> dict[str, 
     return {"grant_ways": format_grant_ways(ways), "grant_way_subject_ids": grant_way_subject_ids(ways)}
 
 
-def route_after_select_resource_type(
+def route_after_select_scope(
     state: State,
 ) -> Literal["select_resource_instance", "load_permission_types", "__end__"]:
-    if not state.resource_type:
+    if not state.scope:
         return "__end__"
-    if state.specific_resource_requested:
+    scope = _selected_scope(state)
+    # System permissions have no records to pick.
+    if state.specific_resource_requested and (scope is None or scope.kind != SCOPE_KIND_SYSTEM_PERMISSION):
         return "select_resource_instance"
     return "load_permission_types"
 
@@ -392,17 +414,17 @@ def make_permission_detection_graph():
         output_schema=PermissionDetectionOutput,
         context_schema=Context,
     )
-    builder.add_node("load_resource_types", load_resource_types)
-    builder.add_node("select_resource_type", select_resource_type)
+    builder.add_node("load_scopes", load_scopes)
+    builder.add_node("select_scope", select_scope)
     builder.add_node("select_resource_instance", select_resource_instance)
     builder.add_node("load_permission_types", load_permission_types)
     builder.add_node("select_permission_type", select_permission_type)
     builder.add_node("load_grant_ways", load_grant_ways)
-    builder.add_edge("__start__", "load_resource_types")
-    builder.add_edge("load_resource_types", "select_resource_type")
+    builder.add_edge("__start__", "load_scopes")
+    builder.add_edge("load_scopes", "select_scope")
     builder.add_conditional_edges(
-        "select_resource_type",
-        route_after_select_resource_type,
+        "select_scope",
+        route_after_select_scope,
         ["select_resource_instance", "load_permission_types", "__end__"],
     )
     builder.add_edge("select_resource_instance", "load_permission_types")
@@ -419,14 +441,14 @@ def make_permission_detection_node(compiled):
         result = await compiled.ainvoke(state, context=runtime.context)
         requested_objects = result["requested_objects"]
         payload = {
-            "resource_type": result.get("resource_type"),
+            "scope": result.get("scope"),
             "specific_resource_requested": bool(result.get("specific_resource_requested")),
             "requested_objects": [dataclasses.asdict(obj) for obj in requested_objects],
             "permission_type": result.get("permission_type"),
         }
         return {
-            "resource_type": payload["resource_type"],
-            "resource_type_external_id": result.get("resource_type_external_id"),
+            "scope": payload["scope"],
+            "scope_external_id": result.get("scope_external_id"),
             "requested_objects": requested_objects,
             "permission_type": payload["permission_type"],
             "grant_ways": result.get("grant_ways") or "",

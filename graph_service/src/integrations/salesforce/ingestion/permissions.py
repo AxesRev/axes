@@ -1,4 +1,4 @@
-"""Salesforce type-level permissions → Profile HAS_PERMISSION ResourceType edges."""
+"""Salesforce type-level permissions → Profile HAS_PERMISSION Scope edges."""
 
 from __future__ import annotations
 
@@ -67,7 +67,7 @@ def permission_effect(profile_id: str, muting_profile_ids: set[str]) -> str:
 def build_object_permission_edges(
     record: dict[str, Any],
     *,
-    resource_type_external_id: str,
+    scope_external_id: str,
     muting_profile_ids: set[str],
 ) -> list[ProfilePermissionEdgeRow]:
     profile_id = str(record["ParentId"])
@@ -80,7 +80,7 @@ def build_object_permission_edges(
                 ProfilePermissionEdgeRow(
                     profile_external_id=profile_id,
                     profile_app=SALESFORCE_APP,
-                    resource_external_id=resource_type_external_id,
+                    resource_external_id=scope_external_id,
                     permission=permission_name,
                     effect=effect,
                     extra=extra,
@@ -92,34 +92,34 @@ def build_object_permission_edges(
 def build_field_permission_edges(
     records: list[dict[str, Any]],
     *,
-    resource_types_by_name: dict[str, str],
+    scopes_by_name: dict[str, str],
     muting_profile_ids: set[str],
 ) -> list[ProfilePermissionEdgeRow]:
     grouped: dict[tuple[str, str, str, str], list[str]] = {}
     for record in records:
         profile_id = str(record["ParentId"])
         sobject_type = str(record["SobjectType"])
-        resource_type_id = resource_types_by_name.get(sobject_type)
-        if resource_type_id is None:
+        scope_id = scopes_by_name.get(sobject_type)
+        if scope_id is None:
             continue
         field_name = str(record.get("Field") or "")
         if not field_name:
             continue
         if record.get("PermissionsRead"):
-            key = (profile_id, resource_type_id, PERMISSION_READ, permission_effect(profile_id, muting_profile_ids))
+            key = (profile_id, scope_id, PERMISSION_READ, permission_effect(profile_id, muting_profile_ids))
             grouped.setdefault(key, []).append(field_name)
         if record.get("PermissionsEdit"):
-            key = (profile_id, resource_type_id, PERMISSION_EDIT, permission_effect(profile_id, muting_profile_ids))
+            key = (profile_id, scope_id, PERMISSION_EDIT, permission_effect(profile_id, muting_profile_ids))
             grouped.setdefault(key, []).append(field_name)
 
     edges: list[ProfilePermissionEdgeRow] = []
-    for (profile_id, resource_type_id, permission_name, effect), fields in grouped.items():
+    for (profile_id, scope_id, permission_name, effect), fields in grouped.items():
         unique_fields = sorted(set(fields))
         edges.append(
             ProfilePermissionEdgeRow(
                 profile_external_id=profile_id,
                 profile_app=SALESFORCE_APP,
-                resource_external_id=resource_type_id,
+                resource_external_id=scope_id,
                 permission=permission_name,
                 effect=effect,
                 extra=build_field_permission_extra(*unique_fields),
@@ -157,7 +157,7 @@ async def ingest_permissions(
     sf: Salesforce,
     *,
     connection: ConnectionRef,  # noqa: ARG001
-    resource_types_by_name: dict[str, str],
+    scopes_by_name: dict[str, str],
 ) -> None:
     muting_profile_ids = fetch_muting_profile_ids(sf)
     profile_id_by_owned_permission_set = fetch_profile_id_by_owned_permission_set(sf)
@@ -166,20 +166,20 @@ async def ingest_permissions(
     edges: list[ProfilePermissionEdgeRow] = []
     for record in object_records:
         sobject_type = str(record["SobjectType"])
-        resource_type_id = resource_types_by_name.get(sobject_type)
-        if resource_type_id is None:
+        scope_id = scopes_by_name.get(sobject_type)
+        if scope_id is None:
             continue
         edges.extend(
             build_object_permission_edges(
                 record,
-                resource_type_external_id=resource_type_id,
+                scope_external_id=scope_id,
                 muting_profile_ids=muting_profile_ids,
             )
         )
     edges.extend(
         build_field_permission_edges(
             field_records,
-            resource_types_by_name=resource_types_by_name,
+            scopes_by_name=scopes_by_name,
             muting_profile_ids=muting_profile_ids,
         )
     )

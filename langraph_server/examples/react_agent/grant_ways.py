@@ -1,4 +1,4 @@
-"""Existing graph grant paths for the detected resource type or instance."""
+"""Existing graph grant paths for the detected scope or instance."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from examples.react_agent.graph_db import read_graph
 logger = logging.getLogger(__name__)
 
 _GRANT_WAYS_QUERY = """
-MATCH (rt:ResourceType {external_id: $resource_type_external_id})
+MATCH (rt:Scope {external_id: $scope_external_id})
 OPTIONAL MATCH (r:Resource)
 WHERE r.external_id IN $resource_external_ids
 WITH rt, collect(r) AS resources
@@ -36,7 +36,7 @@ WITH target, hp, subject,
          external_id: g.external_id
      }] AS assigned_groups
 RETURN
-  CASE WHEN target:ResourceType THEN 'resource_type' ELSE 'resource' END AS target_kind,
+  CASE WHEN target:Scope THEN 'scope' ELSE 'resource' END AS target_kind,
   target.name AS target_name,
   target.external_id AS target_external_id,
   hp.permission AS permission,
@@ -178,7 +178,7 @@ def format_grant_ways(ways: list[GrantWay]) -> str:
     current_target = ""
     current_permission = ""
     for way in ways:
-        target_label = "resource type" if way.target_kind == "resource_type" else "resource"
+        target_label = "scope" if way.target_kind == "scope" else "resource"
         target_key = f"{target_label} {way.target_name} ({way.target_external_id})"
         if target_key != current_target:
             current_target = target_key
@@ -203,11 +203,11 @@ def build_grant_ways_block(catalog: str) -> str:
 async def fetch_grant_ways(
     *,
     tenant_id: str,
-    resource_type_external_id: str,
+    scope_external_id: str,
     resource_external_ids: list[str],
     permissions: list[str] | None = None,
 ) -> list[GrantWay]:
-    type_id = resource_type_external_id.strip()
+    type_id = scope_external_id.strip()
     if not type_id:
         return []
 
@@ -215,7 +215,7 @@ async def fetch_grant_ways(
         tenant_id,
         _GRANT_WAYS_QUERY,
         {
-            "resource_type_external_id": type_id,
+            "scope_external_id": type_id,
             "resource_external_ids": resource_external_ids,
             "permissions": [name for name in (permissions or []) if name.strip()],
         },

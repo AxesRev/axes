@@ -46,7 +46,7 @@ class AccessGrantInput:
     selected_apps: list[str] = field(default_factory=list)
     doc_corpus_context: str = field(default="")
     graph_schema: str = field(default="")
-    resource_type: str | None = field(default=None)
+    scope: str | None = field(default=None)
     requested_objects: list[ResourceInstanceOption] = field(default_factory=list)
     grant_ways: str = field(default="")
 
@@ -74,8 +74,8 @@ def _seed_grant_message(state: State) -> HumanMessage:
     return HumanMessage(
         content=ACCESS_GRANT_EXECUTION_TASK_TEMPLATE.format(
             user_request=state.user_request,
-            resource_type=state.resource_type or "(none)",
-            requested_objects=format_requested_objects(state.requested_objects) or "  (none — resource type only)",
+            scope=state.scope or "(none)",
+            requested_objects=format_requested_objects(state.requested_objects) or "  (none — scope only)",
             permission_type=state.permission_type or "(none detected — use the grant-ways catalog)",
             evaluation_justification=evaluation.justification,
         )
@@ -87,7 +87,7 @@ async def seed_grant(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
     evaluation = cast(AccessRequestEvaluation, state.access_evaluation)
     logger.info(
         "seed_grant: type=%s requested_objects=%s should_grant=%s",
-        state.resource_type,
+        state.scope,
         [obj.external_id for obj in state.requested_objects],
         evaluation.should_grant,
     )

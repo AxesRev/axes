@@ -45,7 +45,7 @@ class AccessEvaluationInput:
     selected_apps: list[str] = field(default_factory=list)
     doc_corpus_context: str = field(default="")
     graph_schema: str = field(default="")
-    resource_type: str | None = field(default=None)
+    scope: str | None = field(default=None)
     requested_objects: list[ResourceInstanceOption] = field(default_factory=list)
     grant_way_subject_ids: list[str] = field(default_factory=list)
 
@@ -62,10 +62,9 @@ def _seed_evaluation_message(state: State) -> HumanMessage:
     return HumanMessage(
         content=ACCESS_EVALUATION_TASK_TEMPLATE.format(
             user_request=state.user_request,
-            resource_type=state.resource_type or "(none)",
-            requested_objects=format_requested_objects(state.requested_objects)
-            or "  (none — evaluate the resource type)",
-            permission_type=state.permission_type or "(none detected — evaluate the resource/resource type)",
+            scope=state.scope or "(none)",
+            requested_objects=format_requested_objects(state.requested_objects) or "  (none — evaluate the scope)",
+            permission_type=state.permission_type or "(none detected — evaluate the resource/scope)",
             peer_analysis=build_peer_analysis_block(state.peer_analysis),
         )
     )
@@ -87,7 +86,7 @@ async def seed_evaluation(state: State, runtime: Runtime[Context]) -> dict[str, 
     """Seed the evaluation task from the detected target and original user request."""
     logger.info(
         "seed_evaluation: type=%s requested_objects=%s permission_type=%s",
-        state.resource_type,
+        state.scope,
         [obj.external_id for obj in state.requested_objects],
         state.permission_type,
     )

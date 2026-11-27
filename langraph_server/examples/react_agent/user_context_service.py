@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 _USER_CONTEXT_GRAPH_TAIL = """
 OPTIONAL MATCH (u)-[:MEMBER_OF]->(g:Group)
 OPTIONAL MATCH (u)-[p:HAS_PERMISSION]->(target)
-WHERE target:Resource OR target:ResourceType OR target:Group
+WHERE target:Resource OR target:Scope OR target:Group
 OPTIONAL MATCH (target)-[:BELONGS_TO]->(owner:AppConnection)
 OPTIONAL MATCH (u)-[:ASSIGNED_PROFILE]->(pr:Profile)
 RETURN u.app AS app,
@@ -27,15 +27,15 @@ RETURN u.app AS app,
        collect(DISTINCT {
            permission: p.permission,
            target_kind: CASE
-               WHEN target:ResourceType THEN 'resource_type'
+               WHEN target:Scope THEN 'scope'
                WHEN target:Resource THEN 'resource'
                WHEN target:Group THEN 'group'
                ELSE null
            END,
            target_name: target.name,
            target_external_id: target.external_id,
-           owner_name: CASE WHEN target:Resource OR target:ResourceType THEN owner.name ELSE null END,
-           owner_external_id: CASE WHEN target:Resource OR target:ResourceType THEN owner.external_id ELSE null END
+           owner_name: CASE WHEN target:Resource OR target:Scope THEN owner.name ELSE null END,
+           owner_external_id: CASE WHEN target:Resource OR target:Scope THEN owner.external_id ELSE null END
        }) AS permissions,
        collect(DISTINCT {
            external_id: pr.external_id,

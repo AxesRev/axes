@@ -18,12 +18,14 @@ class SalesforcePermissionExtra(BaseModel):
     """Shape stored on HAS_PERMISSION.extra for Salesforce profile permissions.
 
     Object and field access to the same SObject are modeled as separate
-    HAS_PERMISSION edges from a Profile to one ResourceType.
+    HAS_PERMISSION edges from a Profile to one Scope.
     Field-scoped edges list the affected field API names in ``fields``.
     """
 
-    access_type: Literal["object", "field"]
+    access_type: Literal["object", "field", "system"]
     fields: list[str] | None = None
+    api_name: str | None = None
+    """Salesforce permission field for ``system`` access (e.g. PermissionsApiEnabled)."""
 
     @model_validator(mode="after")
     def validate_fields_for_access_type(self) -> SalesforcePermissionExtra:
@@ -34,7 +36,7 @@ class SalesforcePermissionExtra(BaseModel):
             return self
 
         if self.fields:
-            msg = "fields must be omitted when access_type is 'object'"
+            msg = f"fields must be omitted when access_type is '{self.access_type}'"
             raise ValueError(msg)
         return self
 
@@ -59,6 +61,11 @@ def build_field_permission_extra(*fields: str) -> dict[str, object]:
         access_type="field",
         fields=list(fields),
     ).model_dump()
+
+
+def build_system_permission_extra(api_name: str) -> dict[str, object]:
+    """Return serialized extra payload for an org-wide system permission (API Enabled, …)."""
+    return SalesforcePermissionExtra(access_type="system", api_name=api_name).model_dump()
 
 
 def build_owner_permission_extra(*, record_id: str) -> dict[str, object]:

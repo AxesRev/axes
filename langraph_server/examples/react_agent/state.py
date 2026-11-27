@@ -15,12 +15,13 @@ from examples.react_agent.user_context_models import UserContextData
 
 
 @dataclass(frozen=True, slots=True)
-class ResourceTypeOption:
-    """One catalog type for the tenant, from a ResourceType graph node."""
+class ScopeOption:
+    """One catalog scope for the tenant, from a Scope graph node (an object type or a system permission)."""
 
     app: str
     name: str
     external_id: str
+    kind: str = "object"
 
 
 @dataclass(frozen=True, slots=True)
@@ -114,14 +115,14 @@ class State(InputState):
     user_request: str = field(default="")
     """Original Slack request text. Subgraphs seed from this instead of inheriting parent messages."""
 
-    resource_types: list[ResourceTypeOption] = field(default_factory=list)
-    """Tenant catalog of ResourceType nodes for the selected apps."""
+    scopes: list[ScopeOption] = field(default_factory=list)
+    """Tenant catalog of Scope nodes for the selected apps."""
 
-    resource_type: str | None = field(default=None)
-    """Resource type Jev picked from the catalog (Campaign, repository, …)."""
+    scope: str | None = field(default=None)
+    """Scope Jev picked from the catalog (Campaign, repository, …)."""
 
-    resource_type_external_id: str | None = field(default=None)
-    """Graph ResourceType.external_id for the picked type."""
+    scope_external_id: str | None = field(default=None)
+    """Graph Scope.external_id for the picked type."""
 
     specific_resource_requested: bool = field(default=False)
     """True when Jev judged that the user named a specific resource instance."""

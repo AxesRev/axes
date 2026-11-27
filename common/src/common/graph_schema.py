@@ -24,10 +24,20 @@ class EdgeType:
     properties: tuple[str, ...] = field(default=())
 
 
+# Scope.kind values.
+SCOPE_KIND_OBJECT = "object"
+SCOPE_KIND_SYSTEM_PERMISSION = "system_permission"
+
 VERTEX_TYPES: tuple[VertexType, ...] = (
     VertexType("Tenant", "The customer tenant; every AppConnection belongs to it"),
     VertexType("AppConnection", "One connected app instance (a Salesforce org, a GitHub org)", ("extra",)),
-    VertexType("ResourceType", "A catalog type (Salesforce object like Account, GitHub repository)"),
+    VertexType(
+        "Scope",
+        "Something access is granted on as a whole, not one record. kind 'object': a record type "
+        "(Salesforce object like Account, GitHub repository); kind 'system_permission': an org-wide "
+        "ability with no records (Salesforce 'API Enabled', 'Export Reports')",
+        ("kind",),
+    ),
     VertexType("Resource", "A concrete record or repository", ("uri", "kind")),
     VertexType("Profile", "Salesforce profile, permission set or permission set group", ("description", "extra")),
     VertexType("Group", "Salesforce role/public group/queue or GitHub team", ("description", "extra")),
@@ -40,7 +50,7 @@ EDGE_TYPES: tuple[EdgeType, ...] = (
         "BELONGS_TO",
         (
             ("AppConnection", "Tenant"),
-            ("ResourceType", "AppConnection"),
+            ("Scope", "AppConnection"),
             ("Resource", "AppConnection"),
             ("Profile", "AppConnection"),
             ("Group", "AppConnection"),
@@ -48,11 +58,11 @@ EDGE_TYPES: tuple[EdgeType, ...] = (
         ),
         "Ownership: node belongs to its app connection, connection to its tenant",
     ),
-    EdgeType("INSTANCE_OF", (("Resource", "ResourceType"),), "A record is an instance of its type"),
+    EdgeType("IN_SCOPE", (("Resource", "Scope"),), "A record belongs to its object-kind scope (its type)"),
     EdgeType(
         "HAS_PERMISSION",
         (
-            ("Profile", "ResourceType"),
+            ("Profile", "Scope"),
             ("Group", "Resource"),
             ("AppIdentity", "Resource"),
         ),

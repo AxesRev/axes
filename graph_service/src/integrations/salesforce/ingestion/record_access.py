@@ -53,7 +53,7 @@ async def ingest_record_access(
     sf: Salesforce,
     *,
     connection: ConnectionRef,
-    resource_types_by_name: dict[str, str],
+    scopes_by_name: dict[str, str],
     known_identity_ids: set[str],
     known_group_ids: set[str],
 ) -> None:
@@ -68,7 +68,7 @@ async def ingest_record_access(
     referenced_group_ids: set[str] = set()
 
     for share_object_name, target_sobject in share_pairs:
-        if target_sobject not in resource_types_by_name:
+        if target_sobject not in scopes_by_name:
             continue
         shape = describe_share_table(
             sf,

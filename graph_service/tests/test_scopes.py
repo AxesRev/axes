@@ -5,9 +5,9 @@ from types import SimpleNamespace
 import pytest
 
 from integrations.github.ingestion.repos import resource_row_from_github
-from integrations.github.ingestion.resource_types import resource_type_rows_for_connection
+from integrations.github.ingestion.scopes import scope_rows_for_connection
 from integrations.github.ingestion.shared import ConnectionRef as GithubConnectionRef
-from integrations.github.ingestion.shared import resource_type_external_id as github_type_id
+from integrations.github.ingestion.shared import scope_external_id as github_type_id
 from integrations.salesforce.ids import GraphSubjectRef
 from integrations.salesforce.ingestion.ownership import resource_row_from_owned_record
 from integrations.salesforce.ingestion.permissions import (
@@ -18,10 +18,10 @@ from integrations.salesforce.ingestion.record_access import record_permission_ed
 from integrations.salesforce.ingestion.resources import (
     catalog_sobject_types,
     resource_row_from_record,
-    resource_type_row_from_sobject,
+    scope_row_from_sobject,
 )
 from integrations.salesforce.ingestion.shared import ConnectionRef as SalesforceConnectionRef
-from integrations.salesforce.ingestion.shared import resource_type_external_id as salesforce_type_id
+from integrations.salesforce.ingestion.shared import scope_external_id as salesforce_type_id
 from integrations.salesforce.share_objects import NormalizedShareAccess
 
 
@@ -46,10 +46,10 @@ def test_salesforce_catalog_includes_types_without_instances() -> None:
 
 
 @pytest.mark.unit
-def test_salesforce_resource_type_ids_are_connection_scoped() -> None:
+def test_salesforce_scope_ids_are_connection_scoped() -> None:
     first: SalesforceConnectionRef = {"app": "salesforce", "external_id": "00Daaa"}
     second: SalesforceConnectionRef = {"app": "salesforce", "external_id": "00Dbbb"}
-    row = resource_type_row_from_sobject("Campaign", connection=first)
+    row = scope_row_from_sobject("Campaign", connection=first)
 
     assert row["name"] == "Campaign"
     assert row["external_id"] == salesforce_type_id(first, "Campaign")
@@ -57,7 +57,7 @@ def test_salesforce_resource_type_ids_are_connection_scoped() -> None:
 
 
 @pytest.mark.unit
-def test_salesforce_object_permissions_target_resource_type() -> None:
+def test_salesforce_object_permissions_target_scope() -> None:
     type_id = "salesforce:00Daaa:Campaign"
     edges = build_object_permission_edges(
         {
@@ -70,7 +70,7 @@ def test_salesforce_object_permissions_target_resource_type() -> None:
             "PermissionsViewAllRecords": False,
             "PermissionsModifyAllRecords": False,
         },
-        resource_type_external_id=type_id,
+        scope_external_id=type_id,
         muting_profile_ids=set(),
     )
 
@@ -79,7 +79,7 @@ def test_salesforce_object_permissions_target_resource_type() -> None:
 
 
 @pytest.mark.unit
-def test_salesforce_field_permissions_target_resource_type() -> None:
+def test_salesforce_field_permissions_target_scope() -> None:
     type_id = "salesforce:00Daaa:Campaign"
     edges = build_field_permission_edges(
         [
@@ -91,7 +91,7 @@ def test_salesforce_field_permissions_target_resource_type() -> None:
                 "PermissionsEdit": False,
             }
         ],
-        resource_types_by_name={"Campaign": type_id},
+        scopes_by_name={"Campaign": type_id},
         muting_profile_ids=set(),
     )
 
@@ -116,9 +116,9 @@ def test_salesforce_record_share_creates_instance_of_type() -> None:
 
     assert resource["external_id"] == record_id
     assert resource["kind"] == "Campaign"
-    assert resource["resource_type_external_id"] == salesforce_type_id(connection, "Campaign")
+    assert resource["scope_external_id"] == salesforce_type_id(connection, "Campaign")
     assert edge["resource_external_id"] == record_id
-    assert edge["resource_external_id"] != resource["resource_type_external_id"]
+    assert edge["resource_external_id"] != resource["scope_external_id"]
 
 
 @pytest.mark.unit
@@ -132,17 +132,17 @@ def test_owned_record_is_instance_of_sobject_type() -> None:
 
     assert resource["name"] == "Q1 Push"
     assert resource["kind"] == "Campaign"
-    assert resource["resource_type_external_id"] == salesforce_type_id(connection, "Campaign")
+    assert resource["scope_external_id"] == salesforce_type_id(connection, "Campaign")
 
 
 @pytest.mark.unit
 def test_github_repo_instances_point_at_catalog_type() -> None:
     connection: GithubConnectionRef = {"app": "github", "external_id": "42"}
-    type_rows = resource_type_rows_for_connection(connection)
+    type_rows = scope_rows_for_connection(connection)
     repo = SimpleNamespace(id=99, name="axes", full_name="acme/axes")
     resource = resource_row_from_github(repo, connection=connection)
 
     assert type_rows
-    assert resource["resource_type_external_id"] in {row["external_id"] for row in type_rows}
-    assert resource["resource_type_external_id"] == github_type_id(connection, resource["kind"])
+    assert resource["scope_external_id"] in {row["external_id"] for row in type_rows}
+    assert resource["scope_external_id"] == github_type_id(connection, resource["kind"])
     assert all(row["connection_external_id"] == "42" for row in type_rows)

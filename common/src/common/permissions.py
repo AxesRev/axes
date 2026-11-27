@@ -7,7 +7,7 @@ value added to ingestion must be added here too.
 
 from __future__ import annotations
 
-# Salesforce object permissions (Profile / PermissionSet → ResourceType).
+# Salesforce object permissions (Profile / PermissionSet → Scope).
 PERMISSION_READ = "read"
 PERMISSION_CREATE = "create"
 PERMISSION_EDIT = "edit"
@@ -16,6 +16,8 @@ PERMISSION_VIEW_ALL = "view_all"
 PERMISSION_MODIFY_ALL = "modify_all"
 # Salesforce record shares (__Share AccessLevel Read / Edit / All → Resource).
 PERMISSION_ALL = "all"
+# Salesforce system permissions (Profile / PermissionSet → Scope of kind system_permission).
+PERMISSION_ENABLED = "enabled"
 # Record ownership. Not ingested yet, so not offered in PERMISSION_TYPES_BY_APP.
 PERMISSION_OWNER = "owner"
 
@@ -39,6 +41,7 @@ PERMISSION_TYPES_BY_APP: dict[str, dict[str, str]] = {
         PERMISSION_VIEW_ALL: "view every record of the object regardless of sharing",
         PERMISSION_MODIFY_ALL: "edit and delete every record of the object regardless of sharing",
         PERMISSION_ALL: "full access to a specific record, like its owner (read, edit, delete, share)",
+        PERMISSION_ENABLED: "have an org-wide system permission such as API Enabled or Export Reports",
     },
     "github": {
         GITHUB_PERMISSION_READ: "read and clone the repository",

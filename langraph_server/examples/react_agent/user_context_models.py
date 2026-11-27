@@ -32,7 +32,7 @@ class UserContextProfile(BaseModel):
 
 class UserContextPermission(BaseModel):
     permission: str
-    target_kind: Literal["resource", "resource_type", "group"]
+    target_kind: Literal["resource", "scope", "group"]
     target_name: str
     target_external_id: str
     owner: str | None = None
@@ -79,8 +79,8 @@ class UserContextData(BaseModel):
         if perm.target_kind == "resource":
             owner_suffix = f", owner: {perm.owner}" if perm.owner else ""
             return f"  - resource {perm.target_name}{owner_suffix}: {perm.permission}"
-        if perm.target_kind == "resource_type":
-            return f"  - resource type {perm.target_name}: {perm.permission}"
+        if perm.target_kind == "scope":
+            return f"  - scope {perm.target_name}: {perm.permission}"
         return f"  - group {perm.target_name}: {perm.permission}"
 
 
@@ -129,7 +129,7 @@ def parse_permission_rows(rows: list[dict[str, Any]]) -> list[UserContextPermiss
         if not permission or not target_kind or not target_name or not target_external_id:
             continue
         normalized_kind = str(target_kind).lower()
-        if normalized_kind not in {"resource", "resource_type", "group"}:
+        if normalized_kind not in {"resource", "scope", "group"}:
             continue
         permissions.append(
             UserContextPermission(

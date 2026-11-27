@@ -13,8 +13,9 @@ from integrations.salesforce.ingestion.org_connection import upsert_connection
 from integrations.salesforce.ingestion.permissions import ingest_permissions
 from integrations.salesforce.ingestion.profiles import ingest_profiles
 from integrations.salesforce.ingestion.record_access import ingest_record_access
-from integrations.salesforce.ingestion.resources import ingest_resource_types
+from integrations.salesforce.ingestion.resources import ingest_scopes
 from integrations.salesforce.ingestion.roles import ingest_roles
+from integrations.salesforce.ingestion.system_permissions import ingest_system_permissions
 from integrations.salesforce.ingestion.tenant import upsert_tenant
 from integrations.salesforce.ingestion.users import ingest_users
 from integrations.salesforce.settings import get_salesforce_settings
@@ -65,18 +66,21 @@ async def fetch_org(
     logger.info("ingest_assignments tenant_id=%s", tenant_id)
     await ingest_assignments(sf, connection=connection)
 
-    logger.info("ingest_resource_types tenant_id=%s", tenant_id)
-    resource_types_by_name = await ingest_resource_types(sf, connection=connection)
+    logger.info("ingest_scopes tenant_id=%s", tenant_id)
+    scopes_by_name = await ingest_scopes(sf, connection=connection)
 
     logger.info("ingest_permissions tenant_id=%s", tenant_id)
-    await ingest_permissions(sf, connection=connection, resource_types_by_name=resource_types_by_name)
+    await ingest_permissions(sf, connection=connection, scopes_by_name=scopes_by_name)
+
+    logger.info("ingest_system_permissions tenant_id=%s", tenant_id)
+    await ingest_system_permissions(sf, connection=connection)
 
     if not skip_record_access:
         logger.info("ingest_record_access tenant_id=%s", tenant_id)
         await ingest_record_access(
             sf,
             connection=connection,
-            resource_types_by_name=resource_types_by_name,
+            scopes_by_name=scopes_by_name,
             known_identity_ids=set(identity_external_ids.values()),
             known_group_ids=set(groups_by_name.values()),
         )

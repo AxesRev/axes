@@ -1,19 +1,20 @@
-"""Salesforce SObject catalog → ResourceType nodes, plus instance Resource rows."""
+"""Salesforce SObject catalog → Scope nodes, plus instance Resource rows."""
 
 from __future__ import annotations
 
 import logging
 from typing import Any
 
+from common.graph_schema import SCOPE_KIND_OBJECT
 from simple_salesforce import Salesforce
 
 from integrations.salesforce.client import describe_global, query_all
 from integrations.salesforce.ingestion.shared import (
     ConnectionRef,
     ResourceRow,
-    ResourceTypeRow,
-    merge_resource_types,
-    resource_type_external_id,
+    ScopeRow,
+    merge_scopes,
+    scope_external_id,
 )
 
 logger = logging.getLogger(__name__)
@@ -50,14 +51,15 @@ def catalog_sobject_types(
     return types
 
 
-def resource_type_row_from_sobject(
+def scope_row_from_sobject(
     sobject_type: str,
     *,
     connection: ConnectionRef,
-) -> ResourceTypeRow:
-    return ResourceTypeRow(
-        external_id=resource_type_external_id(connection, sobject_type),
+) -> ScopeRow:
+    return ScopeRow(
+        external_id=scope_external_id(connection, sobject_type),
         name=sobject_type,
+        kind=SCOPE_KIND_OBJECT,
         connection_app=connection["app"],
         connection_external_id=connection["external_id"],
     )
@@ -76,7 +78,7 @@ def resource_row_from_record(
         name=display_name,
         uri=f"{sobject_type}/{record_id}",
         kind=sobject_type,
-        resource_type_external_id=resource_type_external_id(connection, sobject_type),
+        scope_external_id=scope_external_id(connection, sobject_type),
         connection_app=connection["app"],
         connection_external_id=connection["external_id"],
     )
@@ -88,7 +90,7 @@ def _permission_sobject_types(sf: Salesforce) -> set[str]:
     return object_types | field_types
 
 
-async def ingest_resource_types(
+async def ingest_scopes(
     sf: Salesforce,
     *,
     connection: ConnectionRef,
@@ -98,8 +100,8 @@ async def ingest_resource_types(
     if extra_sobject_types:
         extras |= extra_sobject_types
     catalog = catalog_sobject_types(describe_global(sf), extra_sobject_types=extras)
-    rows = [resource_type_row_from_sobject(name, connection=connection) for name in sorted(catalog)]
-    await merge_resource_types(rows)
+    rows = [scope_row_from_sobject(name, connection=connection) for name in sorted(catalog)]
+    await merge_scopes(rows)
     types_by_name = {row["name"]: row["external_id"] for row in rows}
-    logger.info("merged_resource_types count=%s", len(rows))
+    logger.info("merged_scopes count=%s", len(rows))
     return types_by_name
