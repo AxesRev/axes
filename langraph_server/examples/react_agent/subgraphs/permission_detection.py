@@ -439,7 +439,8 @@ def make_permission_detection_node(compiled):
 
     async def run_permission_detection(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
         result = await compiled.ainvoke(state, context=runtime.context)
-        requested_objects = result["requested_objects"]
+        # Absent when select_resource_instance didn't run (scope-only requests such as a system permission).
+        requested_objects = result.get("requested_objects") or []
         payload = {
             "scope": result.get("scope"),
             "specific_resource_requested": bool(result.get("specific_resource_requested")),
