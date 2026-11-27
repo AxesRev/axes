@@ -24,11 +24,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 COPY langraph_server/pyproject.toml langraph_server/README.md ./
 COPY langraph_server/uv.lock ./
-COPY common /common
+# Only common's metadata here, so editing common's code keeps the cached package install below.
+COPY common/pyproject.toml /common/pyproject.toml
 
-RUN uv export --frozen --no-emit-project --no-editable --format=requirements-txt > requirements.txt && \
+RUN uv export --frozen --no-emit-project --no-editable --no-emit-package axes-common --format=requirements-txt > requirements.txt && \
     uv pip install --system --compile-bytecode -r requirements.txt && \
     rm requirements.txt
+
+COPY common /common
+RUN uv pip install --system --compile-bytecode --no-deps /common
 
 COPY langraph_server/src/ ./src/
 COPY langraph_server/alembic.ini ./alembic.ini

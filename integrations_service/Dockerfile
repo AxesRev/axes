@@ -8,11 +8,15 @@ WORKDIR /build
 
 COPY integrations_service/pyproject.toml ./pyproject.toml
 COPY integrations_service/uv.lock ./
-COPY common /common
+# Only common's metadata here, so editing common's code keeps the cached package install below.
+COPY common/pyproject.toml /common/pyproject.toml
 
-RUN uv export --frozen --no-emit-project --no-editable --no-dev --format=requirements-txt > requirements.txt && \
+RUN uv export --frozen --no-emit-project --no-editable --no-emit-package axes-common --no-dev --format=requirements-txt > requirements.txt && \
     uv pip install --system --compile-bytecode -r requirements.txt && \
     rm requirements.txt
+
+COPY common /common
+RUN uv pip install --system --compile-bytecode --no-deps /common
 
 FROM public.ecr.aws/lambda/python:${PY_VERSION}
 ARG PY_VERSION

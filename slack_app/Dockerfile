@@ -24,11 +24,15 @@ WORKDIR /build
 
 COPY slack_app/pyproject.toml ./pyproject.toml
 COPY slack_app/uv.lock ./
-COPY common /common
+# Only common's metadata here, so editing common's code keeps the cached package install below.
+COPY common/pyproject.toml /common/pyproject.toml
 
-RUN uv export --frozen --no-emit-project --no-editable --no-dev --format=requirements-txt > requirements.txt && \
+RUN uv export --frozen --no-emit-project --no-editable --no-emit-package axes-common --no-dev --format=requirements-txt > requirements.txt && \
     uv pip install --system --compile-bytecode -r requirements.txt && \
     rm requirements.txt
+
+COPY common /common
+RUN uv pip install --system --compile-bytecode --no-deps /common
 
 FROM base AS final
 ARG PY_VERSION
