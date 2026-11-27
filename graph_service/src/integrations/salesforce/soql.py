@@ -8,6 +8,7 @@ from integrations.salesforce.ids import validate_salesforce_id
 from integrations.salesforce.share_objects import (
     validate_field_name,
     validate_share_object_api_name,
+    validate_sobject_api_name,
 )
 
 _USER_BASE_FIELDS = (
@@ -52,6 +53,20 @@ def build_user_by_ids_soql(ids: Iterable[str], permission_fields: Iterable[str] 
 def build_group_by_ids_soql(ids: Iterable[str]) -> str:
     id_clause = format_id_in_clause(ids)
     return "SELECT Id, Name, DeveloperName, Type FROM Group WHERE Id IN (" + id_clause + ")"  # nosec B608
+
+
+def build_record_names_soql(*, sobject: str, name_field: str, ids: Iterable[str]) -> str:
+    validated_sobject = validate_sobject_api_name(sobject)
+    validated_field = validate_field_name(name_field)
+    return (
+        "SELECT Id, "  # nosec B608
+        + validated_field
+        + " FROM "
+        + validated_sobject
+        + " WHERE Id IN ("
+        + format_id_in_clause(ids)
+        + ")"
+    )
 
 
 def build_share_table_soql(

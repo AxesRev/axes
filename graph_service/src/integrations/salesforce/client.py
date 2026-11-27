@@ -107,6 +107,19 @@ def describe_sobject_field_names(sf: Salesforce, api_name: str) -> set[str] | No
     return names
 
 
+def describe_name_field(sf: Salesforce, api_name: str) -> str | None:
+    """Return the sObject's display-name field (Name, CaseNumber, Subject, ...), or None."""
+    try:
+        payload = getattr(sf, api_name).describe()
+    except Exception as exc:
+        logger.debug("sobject_describe_failed name=%s error=%s", api_name, exc)
+        return None
+    for field in payload.get("fields", []) if isinstance(payload, dict) else []:
+        if isinstance(field, dict) and field.get("nameField") and isinstance(field.get("name"), str):
+            return str(field["name"])
+    return None
+
+
 def describe_global(sf: Salesforce) -> list[dict[str, Any]]:
     """Return sobject describe summaries from the org."""
     payload = sf.describe()

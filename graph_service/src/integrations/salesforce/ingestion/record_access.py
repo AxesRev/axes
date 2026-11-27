@@ -8,7 +8,7 @@ from common.permissions import PERMISSION_EFFECT_GRANT
 from simple_salesforce import Salesforce
 from simple_salesforce.exceptions import SalesforceMalformedRequest
 
-from integrations.salesforce.client import query_all
+from integrations.salesforce.client import describe_name_field, query_all
 from integrations.salesforce.ingestion.groups import ensure_groups_for_ids
 from integrations.salesforce.ingestion.resources import resource_row_from_record
 from integrations.salesforce.ingestion.shared import (
@@ -28,9 +28,30 @@ from integrations.salesforce.share_objects import (
     discover_share_pairs,
     normalize_share_access,
 )
-from integrations.salesforce.soql import build_share_table_soql
+from integrations.salesforce.soql import build_record_names_soql, build_share_table_soql
 
 logger = logging.getLogger(__name__)
+
+_NAME_LOOKUP_BATCH = 200
+
+
+def fetch_record_names(sf: Salesforce, sobject: str, record_ids: list[str]) -> dict[str, str]:
+    """Record Id -> display name (the sObject's name field), so the agent can match requests by name."""
+    name_field = describe_name_field(sf, sobject)
+    if not name_field:
+        return {}
+    names: dict[str, str] = {}
+    for start in range(0, len(record_ids), _NAME_LOOKUP_BATCH):
+        batch = record_ids[start : start + _NAME_LOOKUP_BATCH]
+        try:
+            rows = query_all(sf, build_record_names_soql(sobject=sobject, name_field=name_field, ids=batch))
+        except SalesforceMalformedRequest as exc:
+            logger.warning("record_names_skip sobject=%s error=%s", sobject, exc)
+            return names
+        for row in rows:
+            if row.get(name_field):
+                names[str(row["Id"])] = str(row[name_field])
+    return names
 
 
 def record_permission_edge_from_share_access(access: NormalizedShareAccess) -> RecordPermissionEdgeRow:
@@ -113,6 +134,20 @@ async def ingest_record_access(
                 referenced_user_ids.add(access.subject.external_id)
             else:
                 referenced_group_ids.add(access.subject.external_id)
+
+    ids_by_sobject: dict[str, list[str]] = {}
+    for record_id, row in instance_rows.items():
+        ids_by_sobject.setdefault(row["kind"], []).append(record_id)
+    for sobject, record_ids in ids_by_sobject.items():
+        names = fetch_record_names(sf, sobject, record_ids)
+        for record_id, name in names.items():
+            instance_rows[record_id] = resource_row_from_record(
+                record_id,
+                sobject_type=sobject,
+                connection=connection,
+                name=name,
+            )
+        logger.info("record_names sobject=%s records=%s named=%s", sobject, len(record_ids), len(names))
 
     await merge_resources(list(instance_rows.values()))
     await ensure_identities_for_ids(
