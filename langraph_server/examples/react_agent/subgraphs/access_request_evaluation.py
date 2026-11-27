@@ -17,6 +17,7 @@ from examples.react_agent.edges.end import route_model_output
 from examples.react_agent.nodes.llm_call import call_model
 from examples.react_agent.nodes.tenant_agent_context import load_tenant_agent_context
 from examples.react_agent.nodes.tools import execute_tools
+from examples.react_agent.peer_analysis import build_peer_analysis_block, fetch_peer_analysis
 from examples.react_agent.prompts import (
     ACCESS_EVALUATION_BASE_PROMPT,
     ACCESS_EVALUATION_EXTRACTOR_PROMPT,
@@ -46,6 +47,7 @@ class AccessEvaluationInput:
     graph_schema: str = field(default="")
     resource_type: str | None = field(default=None)
     requested_objects: list[ResourceInstanceOption] = field(default_factory=list)
+    grant_way_subject_ids: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -64,8 +66,21 @@ def _seed_evaluation_message(state: State) -> HumanMessage:
             requested_objects=format_requested_objects(state.requested_objects)
             or "  (none — evaluate the resource type)",
             permission_type=state.permission_type or "(none detected — evaluate the resource/resource type)",
+            peer_analysis=build_peer_analysis_block(state.peer_analysis),
         )
     )
+
+
+async def load_peer_analysis(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
+    """Share of the requester's team peers that already hold the requested access."""
+    stats = await fetch_peer_analysis(
+        tenant_id=runtime.context.tenant_id,
+        user_contexts=state.user_contexts,
+        subject_ids=state.grant_way_subject_ids,
+        resource_ids=[obj.external_id for obj in state.requested_objects],
+        permission=state.permission_type,
+    )
+    return {"peer_analysis": stats}
 
 
 async def seed_evaluation(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
@@ -111,13 +126,15 @@ builder = StateGraph(
 )
 
 builder.add_node("load_tenant_agent_context", load_tenant_agent_context)
+builder.add_node("load_peer_analysis", load_peer_analysis)
 builder.add_node("seed_evaluation", seed_evaluation)
 builder.add_node("call_model", call_evaluation_model)
 builder.add_node("tools", execute_tools)
 builder.add_node("extract_evaluation", extract_evaluation)
 
 builder.add_edge("__start__", "load_tenant_agent_context")
-builder.add_edge("load_tenant_agent_context", "seed_evaluation")
+builder.add_edge("__start__", "load_peer_analysis")
+builder.add_edge(["load_tenant_agent_context", "load_peer_analysis"], "seed_evaluation")
 builder.add_edge("seed_evaluation", "call_model")
 builder.add_conditional_edges(
     "call_model",

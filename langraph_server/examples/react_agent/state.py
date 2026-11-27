@@ -146,3 +146,9 @@ class State(InputState):
 
     grant_ways: str = field(default="")
     """Existing profile/group HAS_PERMISSION paths for the detected type or instance."""
+
+    grant_way_subject_ids: list[str] = field(default_factory=list)
+    """Profile/group external ids from grant_ways; holding any of them confers the permission."""
+
+    peer_analysis: dict[str, str] = field(default_factory=dict)
+    """Team name -> "peers with access/peers checked", only for teams passing the peer thresholds."""

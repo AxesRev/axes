@@ -86,7 +86,7 @@ Detected target:
 Requested permission type:
   {permission_type}
 
-Use tools as needed to get additional information about that identity (role, org, related records for its User ID)
+{peer_analysis}Use tools as needed to get additional information about that identity (role, org, related records for its User ID)
 and any guidelines about who should have this access. Do not identify a different user.
 When you are confident, stop calling tools and write a final message: grant or deny this access, and why.
 """

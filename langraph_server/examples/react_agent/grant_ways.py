@@ -206,10 +206,10 @@ async def fetch_grant_ways(
     resource_type_external_id: str,
     resource_external_ids: list[str],
     permissions: list[str] | None = None,
-) -> str:
+) -> list[GrantWay]:
     type_id = resource_type_external_id.strip()
     if not type_id:
-        return format_grant_ways([])
+        return []
 
     rows = await read_graph(
         tenant_id,
@@ -228,4 +228,9 @@ async def fetch_grant_ways(
         len(rows),
         len(ways),
     )
-    return format_grant_ways(ways)
+    return ways
+
+
+def grant_way_subject_ids(ways: list[GrantWay]) -> list[str]:
+    """Distinct profile/group external ids a user can hold to get the permission."""
+    return sorted({way.subject_external_id for way in ways})

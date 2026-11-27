@@ -17,7 +17,7 @@ from typesafe_sdk import AsyncTypeSafeClient, Noul
 
 from common.permissions import PERMISSION_TYPES_BY_APP
 from examples.react_agent.context import Context
-from examples.react_agent.grant_ways import fetch_grant_ways
+from examples.react_agent.grant_ways import fetch_grant_ways, format_grant_ways, grant_way_subject_ids
 from examples.react_agent.graph_db import read_graph
 from examples.react_agent.graph_schema_prompt import build_graph_schema_block
 from examples.react_agent.jev_tournament import TournamentOption, jev_choice_tournament
@@ -87,6 +87,7 @@ class PermissionDetectionOutput:
     requested_objects: list[ResourceInstanceOption] = field(default_factory=list)
     permission_type: str | None = None
     grant_ways: str = ""
+    grant_way_subject_ids: list[str] = field(default_factory=list)
 
 
 def _jev_api_key() -> str:
@@ -358,20 +359,20 @@ async def select_permission_type(state: State, runtime: Runtime[Context]) -> dic
 
 async def load_grant_ways(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
     """Load existing profile/group grant paths for the detected type or instance and permission."""
-    catalog = await fetch_grant_ways(
+    ways = await fetch_grant_ways(
         tenant_id=runtime.context.tenant_id,
         resource_type_external_id=state.resource_type_external_id or "",
         resource_external_ids=[obj.external_id for obj in state.requested_objects],
         permissions=[state.permission_type] if state.permission_type else [],
     )
     logger.info(
-        "load_grant_ways: type=%s requested_objects=%s permission_type=%s chars=%s",
+        "load_grant_ways: type=%s requested_objects=%s permission_type=%s ways=%s",
         state.resource_type_external_id,
         [obj.external_id for obj in state.requested_objects],
         state.permission_type,
-        len(catalog),
+        len(ways),
     )
-    return {"grant_ways": catalog}
+    return {"grant_ways": format_grant_ways(ways), "grant_way_subject_ids": grant_way_subject_ids(ways)}
 
 
 def route_after_select_resource_type(
@@ -429,6 +430,7 @@ def make_permission_detection_node(compiled):
             "requested_objects": requested_objects,
             "permission_type": payload["permission_type"],
             "grant_ways": result.get("grant_ways") or "",
+            "grant_way_subject_ids": result.get("grant_way_subject_ids") or [],
             "messages": [AIMessage(content=json.dumps(payload, separators=(",", ":")))],
         }
 
