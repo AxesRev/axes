@@ -40,6 +40,10 @@ SELECT ParentId, SobjectType, Field, PermissionsRead, PermissionsEdit
 FROM FieldPermissions
 """
 
+# A profile's object/field permissions hang off a hidden permission set the profile owns, so
+# ObjectPermissions/FieldPermissions.ParentId is that 0PS id, while Profile nodes use the 00e profile id.
+_PROFILE_OWNED_PERMISSION_SET_SOQL = "SELECT Id, ProfileId FROM PermissionSet WHERE IsOwnedByProfile = true"
+
 _OBJECT_FLAG_MAP: tuple[tuple[str, str], ...] = (
     ("PermissionsRead", PERMISSION_READ),
     ("PermissionsCreate", PERMISSION_CREATE),
@@ -129,6 +133,26 @@ def fetch_muting_profile_ids(sf: Salesforce) -> set[str]:
     return {str(row["PermissionSetId"]) for row in rows}
 
 
+def fetch_profile_id_by_owned_permission_set(sf: Salesforce) -> dict[str, str]:
+    return {
+        str(row["Id"]): str(row["ProfileId"])
+        for row in query_all(sf, _PROFILE_OWNED_PERMISSION_SET_SOQL)
+        if row.get("ProfileId")
+    }
+
+
+def remap_parent_to_profile(
+    records: list[dict[str, Any]],
+    profile_id_by_owned_permission_set: dict[str, str],
+) -> list[dict[str, Any]]:
+    """Point rows owned by a profile's hidden permission set at the Profile id the graph uses."""
+    remapped: list[dict[str, Any]] = []
+    for record in records:
+        profile_id = profile_id_by_owned_permission_set.get(str(record["ParentId"]))
+        remapped.append({**record, "ParentId": profile_id} if profile_id else record)
+    return remapped
+
+
 async def ingest_permissions(
     sf: Salesforce,
     *,
@@ -136,8 +160,9 @@ async def ingest_permissions(
     resource_types_by_name: dict[str, str],
 ) -> None:
     muting_profile_ids = fetch_muting_profile_ids(sf)
-    object_records = query_all(sf, _OBJECT_PERM_SOQL)
-    field_records = query_all(sf, _FIELD_PERM_SOQL)
+    profile_id_by_owned_permission_set = fetch_profile_id_by_owned_permission_set(sf)
+    object_records = remap_parent_to_profile(query_all(sf, _OBJECT_PERM_SOQL), profile_id_by_owned_permission_set)
+    field_records = remap_parent_to_profile(query_all(sf, _FIELD_PERM_SOQL), profile_id_by_owned_permission_set)
     edges: list[ProfilePermissionEdgeRow] = []
     for record in object_records:
         sobject_type = str(record["SobjectType"])
