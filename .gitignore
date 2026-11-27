@@ -53,4 +53,3 @@ graph_service/certs/salesforce/AxesRev.key
 *.tfplan
 crash.log
 crash.*.log
-.terraform.lock.hcl

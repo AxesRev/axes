@@ -25,6 +25,9 @@ env:
   TF_LOG: ""
   TERRAFORM_VERSION: "1.15.9"
   TERRAGRUNT_VERSION: "1.1.1"
+  # Download each provider once per run and keep it between runs (see the cache steps below).
+  TG_PROVIDER_CACHE: "1"
+  TG_PROVIDER_CACHE_DIR: /home/runner/.cache/terragrunt/providers
   DEPLOY_DIR: infra/products/dev
   IMAGE_TAG: ${{ github.sha }}
 
@@ -119,6 +122,13 @@ jobs:
         uses: autero1/action-terragrunt@v3
         with:
           terragrunt-version: ${{ env.TERRAGRUNT_VERSION }}
+
+      - name: Cache Terraform providers
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.TG_PROVIDER_CACHE_DIR }}
+          key: tg-providers-${{ runner.os }}-${{ hashFiles('infra/products/**/.terraform.lock.hcl') }}
+          restore-keys: tg-providers-${{ runner.os }}-
 
       - name: Select RDS restore snapshot
         run: |
@@ -598,6 +608,13 @@ jobs:
         uses: autero1/action-terragrunt@v3
         with:
           terragrunt-version: ${{ env.TERRAGRUNT_VERSION }}
+
+      - name: Cache Terraform providers
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.TG_PROVIDER_CACHE_DIR }}
+          key: tg-providers-${{ runner.os }}-${{ hashFiles('infra/products/**/.terraform.lock.hcl') }}
+          restore-keys: tg-providers-${{ runner.os }}-
 
       - name: Apply apps
         working-directory: ${{ env.DEPLOY_DIR }}
