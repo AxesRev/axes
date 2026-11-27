@@ -1,4 +1,4 @@
-"""Permission detection subgraph (Jev): resource type, instance flag, optional instance, permission type."""
+"""Permission detection subgraph (Jev): resource type, instance flag, optional instance, permission type, grant ways."""
 
 from __future__ import annotations
 
@@ -17,6 +17,7 @@ from typesafe_sdk import AsyncTypeSafeClient, Noul
 
 from common.permissions import PERMISSION_TYPES_BY_APP
 from examples.react_agent.context import Context
+from examples.react_agent.grant_ways import fetch_grant_ways
 from examples.react_agent.graph_db import read_graph
 from examples.react_agent.graph_schema_prompt import build_graph_schema_block
 from examples.react_agent.jev_tournament import TournamentOption, jev_choice_tournament
@@ -85,6 +86,7 @@ class PermissionDetectionOutput:
     specific_resource_requested: bool = False
     requested_objects: list[ResourceInstanceOption] = field(default_factory=list)
     permission_type: str | None = None
+    grant_ways: str = ""
 
 
 def _jev_api_key() -> str:
@@ -354,6 +356,24 @@ async def select_permission_type(state: State, runtime: Runtime[Context]) -> dic
     return {"permission_type": permission_type}
 
 
+async def load_grant_ways(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
+    """Load existing profile/group grant paths for the detected type or instance and permission."""
+    catalog = await fetch_grant_ways(
+        tenant_id=runtime.context.tenant_id,
+        resource_type_external_id=state.resource_type_external_id or "",
+        resource_external_ids=[obj.external_id for obj in state.requested_objects],
+        permissions=[state.permission_type] if state.permission_type else [],
+    )
+    logger.info(
+        "load_grant_ways: type=%s requested_objects=%s permission_type=%s chars=%s",
+        state.resource_type_external_id,
+        [obj.external_id for obj in state.requested_objects],
+        state.permission_type,
+        len(catalog),
+    )
+    return {"grant_ways": catalog}
+
+
 def route_after_select_resource_type(
     state: State,
 ) -> Literal["select_resource_instance", "load_permission_types", "__end__"]:
@@ -376,6 +396,7 @@ def make_permission_detection_graph():
     builder.add_node("select_resource_instance", select_resource_instance)
     builder.add_node("load_permission_types", load_permission_types)
     builder.add_node("select_permission_type", select_permission_type)
+    builder.add_node("load_grant_ways", load_grant_ways)
     builder.add_edge("__start__", "load_resource_types")
     builder.add_edge("load_resource_types", "select_resource_type")
     builder.add_conditional_edges(
@@ -385,7 +406,8 @@ def make_permission_detection_graph():
     )
     builder.add_edge("select_resource_instance", "load_permission_types")
     builder.add_edge("load_permission_types", "select_permission_type")
-    builder.add_edge("select_permission_type", "__end__")
+    builder.add_edge("select_permission_type", "load_grant_ways")
+    builder.add_edge("load_grant_ways", "__end__")
     return builder.compile(name="Required Permission Agent")
 
 
@@ -406,6 +428,7 @@ def make_permission_detection_node(compiled):
             "resource_type_external_id": result.get("resource_type_external_id"),
             "requested_objects": requested_objects,
             "permission_type": payload["permission_type"],
+            "grant_ways": result.get("grant_ways") or "",
             "messages": [AIMessage(content=json.dumps(payload, separators=(",", ":")))],
         }
 

@@ -15,7 +15,6 @@ from langgraph.runtime import Runtime
 from examples.react_agent.context import Context
 from examples.react_agent.edges.end import route_model_output
 from examples.react_agent.grant_execution_tools import load_grant_execution_tools
-from examples.react_agent.grant_ways import fetch_grant_ways
 from examples.react_agent.nodes.llm_call import call_model
 from examples.react_agent.nodes.tools import execute_tools
 from examples.react_agent.prompts import (
@@ -48,8 +47,8 @@ class AccessGrantInput:
     doc_corpus_context: str = field(default="")
     graph_schema: str = field(default="")
     resource_type: str | None = field(default=None)
-    resource_type_external_id: str | None = field(default=None)
     requested_objects: list[ResourceInstanceOption] = field(default_factory=list)
+    grant_ways: str = field(default="")
 
 
 @dataclass
@@ -81,23 +80,6 @@ def _seed_grant_message(state: State) -> HumanMessage:
             evaluation_justification=evaluation.justification,
         )
     )
-
-
-async def load_grant_ways(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
-    """Load existing profile/group grant paths for the detected type or instance."""
-    catalog = await fetch_grant_ways(
-        tenant_id=runtime.context.tenant_id,
-        resource_type_external_id=state.resource_type_external_id or "",
-        resource_external_ids=[obj.external_id for obj in state.requested_objects],
-        permissions=[state.permission_type] if state.permission_type else [],
-    )
-    logger.info(
-        "load_grant_ways: type=%s requested_objects=%s chars=%s",
-        state.resource_type_external_id,
-        [obj.external_id for obj in state.requested_objects],
-        len(catalog),
-    )
-    return {"grant_ways": catalog}
 
 
 async def seed_grant(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
@@ -133,13 +115,11 @@ builder = StateGraph(
     context_schema=Context,
 )
 
-builder.add_node("load_grant_ways", load_grant_ways)
 builder.add_node("seed_grant", seed_grant)
 builder.add_node("call_model", call_grant_model)
 builder.add_node("tools", run_grant_tools)
 
-builder.add_edge("__start__", "load_grant_ways")
-builder.add_edge("load_grant_ways", "seed_grant")
+builder.add_edge("__start__", "seed_grant")
 builder.add_edge("seed_grant", "call_model")
 builder.add_conditional_edges(
     "call_model",
