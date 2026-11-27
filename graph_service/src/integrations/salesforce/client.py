@@ -4,6 +4,7 @@ import logging
 from collections.abc import Iterator
 from typing import Any
 
+from common.salesforce_api import with_latest_api_version
 from simple_salesforce import Salesforce
 from simple_salesforce.exceptions import SalesforceMalformedRequest
 
@@ -24,14 +25,17 @@ def make_salesforce_client(
     username: str,
     settings: SalesforceAppSettings | None = None,
 ) -> Salesforce:
-    """Create a JWT-authenticated Salesforce REST client."""
+    """Create a JWT-authenticated Salesforce REST client on the org's newest API version."""
     config = settings or get_salesforce_settings()
-    return Salesforce(
+    sf = Salesforce(
         consumer_key=config.SALESFORCE_CLIENT_ID,
         privatekey=config.private_key,
         username=username,
         domain=config.jwt_domain,
     )
+    sf = with_latest_api_version(sf)
+    logger.info("salesforce_api_version version=%s", sf.sf_version)
+    return sf
 
 
 def query_all(sf: Salesforce, soql: str) -> list[dict[str, Any]]:
