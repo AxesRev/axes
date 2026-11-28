@@ -8,7 +8,7 @@ from pydantic import computed_field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from simple_salesforce import Salesforce
 
-from common.salesforce_api import with_latest_api_version
+from common.salesforce_api import SALESFORCE_API_VERSION
 
 _ENV_FILE = str(Path(__file__).resolve().parents[3] / ".env")
 _REPO_ROOT = Path(_ENV_FILE).parent
@@ -64,15 +64,15 @@ salesforce_settings = SalesforceJwtSettings()
 
 
 def make_salesforce_client(*, username: str, settings: SalesforceJwtSettings | None = None) -> Salesforce:
-    """Create a JWT-authenticated Salesforce REST client on the org's newest API version."""
+    """Create a JWT-authenticated Salesforce REST client on the pinned API version."""
     config = settings or salesforce_settings
     private_key = config.private_key
     if not config.SALESFORCE_CLIENT_ID or not private_key:
         raise ValueError("SALESFORCE_CLIENT_ID and SALESFORCE_PRIVATE_KEY are required")
-    sf = Salesforce(
+    return Salesforce(
         consumer_key=config.SALESFORCE_CLIENT_ID,
         privatekey=private_key,
         username=username,
         domain=config.jwt_domain,
+        version=SALESFORCE_API_VERSION,
     )
-    return with_latest_api_version(sf)

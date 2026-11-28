@@ -12,7 +12,7 @@ import jwt as pyjwt
 from simple_salesforce import Salesforce
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from common.salesforce_api import with_latest_api_version
+from common.salesforce_api import SALESFORCE_API_VERSION
 from integrations.config import settings
 from integrations.errors import HttpError
 from integrations.http import form_body, html_response, public_base_url, query_params, redirect, require_tenant_id
@@ -126,13 +126,13 @@ def _make_salesforce_client(*, username: str) -> Salesforce:
     private_key = settings.salesforce_private_key
     if not settings.SALESFORCE_CLIENT_ID or not private_key:
         raise ValueError("SALESFORCE_CLIENT_ID and SALESFORCE_PRIVATE_KEY are required")
-    sf = Salesforce(
+    return Salesforce(
         consumer_key=settings.SALESFORCE_CLIENT_ID,
         privatekey=private_key,
         username=username,
         domain=settings.jwt_domain,
+        version=SALESFORCE_API_VERSION,
     )
-    return with_latest_api_version(sf)
 
 
 def _fetch_organization_id(sf: Salesforce) -> str:
