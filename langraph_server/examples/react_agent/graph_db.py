@@ -19,6 +19,7 @@ from fastmcp.client.transports import StreamableHttpTransport
 from langchain.mcp import MCPAdapter
 from langchain_core.tools import BaseTool, StructuredTool
 from neo4j import READ_ACCESS, AsyncDriver, AsyncGraphDatabase
+from neo4j.exceptions import AuthError, Neo4jError, ServiceUnavailable, SessionExpired
 from pydantic import BaseModel, Field
 
 from aegra_api.settings import settings
@@ -61,12 +62,42 @@ def _driver(tenant_id: str) -> tuple[AsyncDriver, str]:
     return driver, database
 
 
+def _is_stale_connection(exc: Exception) -> bool:
+    """Ingestion drops and recreates the tenant database and reader user, which kills open connections."""
+    if isinstance(exc, (AuthError, ServiceUnavailable, SessionExpired)):
+        return True
+    if isinstance(exc, Neo4jError):
+        code = exc.code or ""
+        return code.startswith("Neo.ClientError.Security") or "AUTHENTICATION" in (exc.message or "")
+    return False
+
+
+async def _reset_driver(database: str) -> None:
+    driver = _drivers.pop(database, None)
+    if driver is not None:
+        try:
+            await driver.close()
+        except Exception as exc:  # noqa: BLE001 - the old driver is already broken
+            logger.debug("graph_driver_close_failed database=%s error=%s", database, exc)
+
+
 async def read_graph(tenant_id: str, query: str, params: dict[str, Any] | None = None) -> list[dict[str, Any]]:
-    """Run a read-only Cypher query on the tenant's graph and return its rows."""
-    driver, database = _driver(tenant_id)
-    async with driver.session(database=database, default_access_mode=READ_ACCESS) as session:
-        result = await session.run(query, params or {})
-        return [record.data() async for record in result]
+    """Run a read-only Cypher query on the tenant's graph and return its rows.
+
+    Reconnects once when the cached connection went stale (for example after the graph was re-ingested).
+    """
+    for attempt in (1, 2):
+        driver, database = _driver(tenant_id)
+        try:
+            async with driver.session(database=database, default_access_mode=READ_ACCESS) as session:
+                result = await session.run(query, params or {})
+                return [record.data() async for record in result]
+        except Exception as exc:
+            if attempt == 2 or not _is_stale_connection(exc):
+                raise
+            logger.warning("graph_driver_stale database=%s error=%s; reconnecting", database, exc)
+            await _reset_driver(database)
+    raise AssertionError("unreachable")
 
 
 def _mcp_client(tenant_id: str) -> Client[Any]:
